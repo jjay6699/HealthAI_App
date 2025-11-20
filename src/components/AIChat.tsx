@@ -1,8 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useTheme } from "../theme";
 import OpenAI from "openai";
-import { shouldShowPaywall, incrementChatInteractions } from "../services/usageTracker";
-import PaywallModal from "./PaywallModal";
 
 interface Message {
   role: "user" | "assistant";
@@ -29,7 +27,6 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [showPaywall, setShowPaywall] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -97,11 +94,6 @@ What would you prefer?`
   const handleSend = async () => {
     if ((!input.trim() && !uploadedFile) || isLoading) return;
 
-    if (shouldShowPaywall()) {
-      setShowPaywall(true);
-      return;
-    }
-
     const userMessage: Message = { role: "user", content: input };
     setMessages(prev => [...prev, userMessage]);
     const currentInput = input;
@@ -110,8 +102,6 @@ What would you prefer?`
 
     try {
       console.log("Sending message to OpenAI:", currentInput);
-
-      incrementChatInteractions();
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -184,7 +174,6 @@ If users mention bloodwork values or health concerns, provide specific advice. A
       }}
       onClick={onClose}
     >
-      {showPaywall && <PaywallModal onClose={() => setShowPaywall(false)} />}
       <div
         style={{
           width: "100%",
