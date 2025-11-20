@@ -2,6 +2,8 @@ import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { ThemeProvider } from "./theme";
 import ScrollToTop from "./components/ScrollToTop";
+import DesktopPrompt from "./components/DesktopPrompt";
+import useMediaQuery from "./hooks/useMediaQuery";
 import AppLayout from "./layout/AppLayout";
 import AuthLayout from "./layout/AuthLayout";
 import HomeScreen from "./screens/home/HomeScreen";
@@ -21,8 +23,11 @@ import PaymentScreen from "./screens/order/PaymentScreen";
 import OrderConfirmationScreen from "./screens/order/OrderConfirmationScreen";
 
 const App = () => {
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+
   return (
     <ThemeProvider>
+      {isDesktop && <DesktopPrompt />}
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<SplashScreen />} />
