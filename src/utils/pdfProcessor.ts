@@ -1,6 +1,9 @@
 import * as pdfjsLib from 'pdfjs-dist';
+// @ts-ignore - Vite will replace this with the URL string to the worker at build time
+import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
-// Use the default pdfjs-dist worker setup bundled by Vite (no external CDN).
+// Configure pdf.js worker so it can run in the browser bundle
+(pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
 /**
  * Converts a PDF file to images (one per page)
