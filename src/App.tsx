@@ -1,6 +1,7 @@
 import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { ThemeProvider } from "./theme";
+import ScrollToTop from "./components/ScrollToTop";
 import AppLayout from "./layout/AppLayout";
 import AuthLayout from "./layout/AuthLayout";
 import HomeScreen from "./screens/home/HomeScreen";
@@ -22,6 +23,7 @@ import OrderConfirmationScreen from "./screens/order/OrderConfirmationScreen";
 const App = () => {
   return (
     <ThemeProvider>
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={<SplashScreen />} />
         <Route element={<AuthLayout />}>
