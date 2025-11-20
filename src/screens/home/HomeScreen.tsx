@@ -31,7 +31,7 @@ const HomeScreen = () => {
   return (
     <div style={styles.page}>
       <section style={styles.hero}>
-        <div style={styles.heroPill}>Last upload • Jul 12</div>
+        <div style={styles.heroPill}>Last upload ï¿½ Jul 12</div>
         <h1 style={styles.heroTitle}>Upload bloodwork or DNA</h1>
         <p style={styles.heroCopy}>
           Get personalised ranges, supplement suggestions, and lifestyle nudges based on your biomarkers.
@@ -82,7 +82,7 @@ const HomeScreen = () => {
       </Card>
 
       <StickyFooter width={width}>
-        <Button title="Upload labs" fullWidth onClick={() => navigate("/upload")} style={{ flex: 1 }} />
+        <Button title="Upload" fullWidth onClick={() => navigate("/upload")} style={{ flex: 1 }} />
         <Button title="View history" variant="secondary" onClick={() => navigate("/history")} style={{ minWidth: 140 }} />
       </StickyFooter>
     </div>
