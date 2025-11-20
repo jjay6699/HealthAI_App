@@ -192,12 +192,6 @@ const UploadScreen = () => {
           <span style={styles.optionDescription}>Supports PDF, JPG, PNG, WEBP. Upload your bloodwork report or take a clear photo.</span>
         </label>
         <button type="button" style={{ ...styles.optionButton, ...styles.disabled }} disabled>
-          <span style={{ ...styles.optionTitle, ...styles.disabledText }}>Upload CSV (coming soon)</span>
-          <span style={{ ...styles.optionDescription, ...styles.disabledText }}>
-            Perfect for wearable exports or provider spreadsheets.
-          </span>
-        </button>
-        <button type="button" style={{ ...styles.optionButton, ...styles.disabled }} disabled>
           <span style={{ ...styles.optionTitle, ...styles.disabledText }}>Connect provider (coming soon)</span>
           <span style={{ ...styles.optionDescription, ...styles.disabledText }}>
             Quest, Labcorp, and more integrations on the roadmap.

@@ -1,7 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Set up the worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Use the default pdfjs-dist worker setup bundled by Vite (no external CDN).
 
 /**
  * Converts a PDF file to images (one per page)
