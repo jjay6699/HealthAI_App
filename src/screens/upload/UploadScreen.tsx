@@ -52,8 +52,6 @@ const UploadScreen = () => {
     try {
       console.log("Analyzing file:", file.name);
 
-      incrementAnalysesRun();
-
       let analysis;
 
       // Check if it's a PDF or image
