@@ -216,6 +216,19 @@ const ProfileScreen = () => {
     setIsEditingMeasurements(false);
   };
 
+  const handleLogout = () => {
+    // Clear all user-related data from local storage
+    localStorage.removeItem("userProfile");
+    localStorage.removeItem("paymentMethods");
+    localStorage.removeItem("shippingAddresses");
+    localStorage.removeItem("orderHistory");
+    localStorage.removeItem("bloodworkAnalysis");
+    localStorage.removeItem("lastOrder");
+
+    // Navigate to the login screen
+    navigate("/login");
+  };
+
   return (
     <div style={styles.page}>
       <header style={styles.hero}>
@@ -365,7 +378,7 @@ const ProfileScreen = () => {
       </Card>
 
       <div style={styles.logoutStack}>
-        <Button title="Log out" variant="secondary" fullWidth />
+        <Button title="Log out" variant="secondary" fullWidth onClick={handleLogout} />
         <button type="button" style={styles.dangerButton}>Delete my account</button>
       </div>
 
