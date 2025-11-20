@@ -64,12 +64,6 @@ const InsightsScreen = () => {
           </Link>
         </Card>
 
-        <Card style={styles.noticeCard} shadow={false}>
-          <h3 style={styles.noticeTitle}>Educational use only</h3>
-          <p style={styles.noticeBody}>
-            This experience is for education and coaching support. It does not diagnose or replace medical advice. Always review lab concerns with your clinician.
-          </p>
-        </Card>
       </div>
     );
   }
@@ -144,10 +138,6 @@ const InsightsScreen = () => {
         </Card>
       )}
 
-      <Card style={styles.noticeCard} shadow={false}>
-        <h3 style={styles.noticeTitle}>Educational use only</h3>
-        <p style={styles.noticeBody}>This experience is for education and coaching support. It does not diagnose or replace medical advice. Always review lab concerns with your clinician.</p>
-      </Card>
     </div>
   );
 };

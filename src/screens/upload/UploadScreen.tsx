@@ -192,9 +192,9 @@ const UploadScreen = () => {
           <span style={styles.optionDescription}>Supports PDF, JPG, PNG, WEBP. Upload your bloodwork report or take a clear photo.</span>
         </label>
         <button type="button" style={{ ...styles.optionButton, ...styles.disabled }} disabled>
-          <span style={{ ...styles.optionTitle, ...styles.disabledText }}>Connect provider (coming soon)</span>
+          <span style={{ ...styles.optionTitle, ...styles.disabledText }}>Connect with our doctors and pharmacists (coming soon)</span>
           <span style={{ ...styles.optionDescription, ...styles.disabledText }}>
-            Quest, Labcorp, and more integrations on the roadmap.
+            Chat with trusted medical professionals for tailored advice, treatment insights, and support—right when you need it.
           </span>
         </button>
       </Card>
