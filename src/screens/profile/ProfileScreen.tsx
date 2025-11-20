@@ -71,7 +71,7 @@ const ProfileScreen = () => {
         const parsed = JSON.parse(saved);
         // Migration for old `measurements` string
         if (typeof parsed.measurements === 'string') {
-          const [heightStr, weightStr] = parsed.measurements.split('•').map(s => s.trim());
+          const [heightStr, weightStr] = parsed.measurements.split('•').map((s: string) => s.trim());
           parsed.height = parseInt(heightStr, 10) || 175;
           parsed.weight = parseInt(weightStr, 10) || 70;
           delete parsed.measurements; // Remove old key
