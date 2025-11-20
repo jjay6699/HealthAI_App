@@ -111,9 +111,9 @@ const UploadScreen = () => {
                   style={{
                     ...styles.step,
                     ...(isActive ? styles.stepActive : {}),
-                    ...(isCompleted ? styles.stepCompleted : {}),
                     ...(isPending ? styles.stepPending : {}),
-                    borderColor: isActive ? step.color : styles.step.borderColor,
+                    background: isCompleted ? "#F0FDF4" : isActive ? "#FEFEFE" : styles.step.background,
+                    borderColor: isCompleted ? "#10B981" : isActive ? step.color : theme.colors.divider,
                     transform: isActive ? 'scale(1.02)' : 'scale(1)',
                     transition: 'all 0.3s ease'
                   }}
@@ -400,16 +400,14 @@ const createStyles = (theme: AppTheme) => ({
     padding: theme.spacing.md,
     background: theme.colors.surface,
     borderRadius: theme.radii.lg,
-    border: `2px solid ${theme.colors.divider}`,
+    borderWidth: 2,
+    borderStyle: "solid",
+    borderColor: theme.colors.divider,
     position: "relative" as const
   },
   stepActive: {
     background: "#FEFEFE",
     boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)"
-  },
-  stepCompleted: {
-    background: "#F0FDF4",
-    borderColor: "#10B981"
   },
   stepPending: {
     opacity: 0.5

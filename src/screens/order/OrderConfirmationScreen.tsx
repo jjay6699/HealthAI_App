@@ -150,6 +150,13 @@ const createStyles = (theme: AppTheme) => ({
     paddingBottom: 80,
     position: "relative" as const
   },
+  heading: {
+    fontSize: 24,
+    fontWeight: 700,
+    color: theme.colors.text,
+    textAlign: "center" as const,
+    marginBottom: theme.spacing.lg
+  },
   successContainer: {
     textAlign: "center" as const,
     padding: `${theme.spacing.xl}px 0`,
