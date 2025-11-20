@@ -11,7 +11,8 @@ type ProfileState = {
   name: string;
   email: string;
   dob: string;
-  measurements: string;
+  height: number;
+  weight: number;
   activityLevel: string;
   dataProcessing: string;
   dataStorage: string;
@@ -67,17 +68,26 @@ const ProfileScreen = () => {
     const saved = localStorage.getItem("userProfile");
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        // Migration for old `measurements` string
+        if (typeof parsed.measurements === 'string') {
+          const [heightStr, weightStr] = parsed.measurements.split('•').map(s => s.trim());
+          parsed.height = parseInt(heightStr, 10) || 175;
+          parsed.weight = parseInt(weightStr, 10) || 70;
+          delete parsed.measurements; // Remove old key
+        }
+        return parsed;
       } catch {
         // Fall through to default
       }
     }
     return {
       avatarImage: null,
-      name: "Maya Patel",
-      email: "maya@example.com",
-      dob: "1991-07-18",
-      measurements: "168 cm • 65 kg",
+      name: "JJAY TECH",
+      email: "contact@jjay.info",
+      dob: "1986-07-28",
+      height: 175, // Default height in cm
+      weight: 70, // Default weight in kg
       activityLevel: "Moderate",
       dataProcessing: "Allowed",
       dataStorage: "Opted in",
@@ -131,6 +141,11 @@ const ProfileScreen = () => {
   }>(null);
   const [editValue, setEditValue] = useState("");
   const [showImageUpload, setShowImageUpload] = useState(false);
+  const [isEditingMeasurements, setIsEditingMeasurements] = useState(false);
+
+  // Temporary state for measurement editor
+  const [tempHeight, setTempHeight] = useState(profile.height);
+  const [tempWeight, setTempWeight] = useState(profile.weight);
 
   // Auto-generate initials from name
   const avatarInitials = useMemo(() => getInitials(profile.name), [profile.name]);
@@ -188,6 +203,19 @@ const ProfileScreen = () => {
     setShowImageUpload(false);
   };
 
+  // When measurement editor opens, sync temp state
+  useEffect(() => {
+    if (isEditingMeasurements) {
+      setTempHeight(profile.height);
+      setTempWeight(profile.weight);
+    }
+  }, [isEditingMeasurements, profile.height, profile.weight]);
+
+  const handleConfirmMeasurements = () => {
+    setProfile((prev) => ({ ...prev, height: tempHeight, weight: tempWeight }));
+    setIsEditingMeasurements(false);
+  };
+
   return (
     <div style={styles.page}>
       <header style={styles.hero}>
@@ -223,12 +251,12 @@ const ProfileScreen = () => {
         <SectionHeader title="Personal info" />
         <ProfileRow label="Full name" value={profile.name} action="Edit" onEdit={() => openEdit("name", "Full name")} />
         <ProfileRow label="Email" value={profile.email} action="Edit" onEdit={() => openEdit("email", "Email address")} />
-        <ProfileRow label="Date of birth" value={profile.dob} action="Edit" onEdit={() => openEdit("dob", "Date of birth", "Format: YYYY-MM-DD")} />
+        <ProfileRow label="Date of birth" value={profile.dob} action="Edit" onEdit={() => openEdit("dob", "Date of birth")} />
       </Card>
 
       <Card style={styles.card}>
         <SectionHeader title="Health data" />
-        <ProfileRow label="Measurements" value={profile.measurements} action="Update" onEdit={() => openEdit("measurements", "Measurements", "e.g., 168 cm • 65 kg")} />
+        <ProfileRow label="Measurements" value={`${profile.height} cm • ${profile.weight} kg`} action="Update" onEdit={() => setIsEditingMeasurements(true)} />
         <ProfileRow label="Activity level" value={profile.activityLevel} action="Update" onEdit={() => openEdit("activityLevel", "Activity level")} />
       </Card>
 
@@ -349,6 +377,7 @@ const ProfileScreen = () => {
           onConfirm={handleConfirm}
         >
           <input
+            type={editState.key === "dob" ? "date" : "text"}
             value={editValue}
             onChange={(event) => setEditValue(event.target.value)}
             autoFocus
@@ -387,6 +416,44 @@ const ProfileScreen = () => {
                 Remove Image
               </button>
             )}
+          </div>
+        </Dialog>
+      ) : null}
+
+      {isEditingMeasurements ? (
+        <Dialog
+          title="Edit Measurements"
+          description="Update your height and weight."
+          onClose={() => setIsEditingMeasurements(false)}
+          onConfirm={handleConfirmMeasurements}
+        >
+          <div style={styles.measurementEditor}>
+            <div style={styles.measurementInput}>
+              <label htmlFor="height-select" style={styles.measurementLabel}>Height</label>
+              <select
+                id="height-select"
+                value={tempHeight}
+                onChange={(e) => setTempHeight(Number(e.target.value))}
+                style={styles.measurementSelect}
+              >
+                {Array.from({ length: 101 }, (_, i) => 120 + i).map(h => (
+                  <option key={h} value={h}>{h} cm</option>
+                ))}
+              </select>
+            </div>
+            <div style={styles.measurementInput}>
+              <label htmlFor="weight-select" style={styles.measurementLabel}>Weight</label>
+              <select
+                id="weight-select"
+                value={tempWeight}
+                onChange={(e) => setTempWeight(Number(e.target.value))}
+                style={styles.measurementSelect}
+              >
+                {Array.from({ length: 171 }, (_, i) => 30 + i).map(w => (
+                  <option key={w} value={w}>{w} kg</option>
+                ))}
+              </select>
+            </div>
           </div>
         </Dialog>
       ) : null}
@@ -724,6 +791,32 @@ const createStyles = (theme: AppTheme) => ({
     cursor: "pointer",
     fontSize: 14,
     fontFamily: "inherit"
+  },
+  measurementEditor: {
+    display: "flex",
+    gap: theme.spacing.lg,
+    marginTop: theme.spacing.md
+  },
+  measurementInput: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: theme.spacing.sm
+  },
+  measurementLabel: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: theme.colors.textSecondary
+  },
+  measurementSelect: {
+    width: "100%",
+    borderRadius: theme.radii.lg,
+    border: `1px solid ${theme.colors.divider}`,
+    padding: `${theme.spacing.lg}px`,
+    fontSize: 16,
+    background: theme.colors.surface,
+    fontFamily: "inherit",
+    color: theme.colors.text
   }
 });
 
