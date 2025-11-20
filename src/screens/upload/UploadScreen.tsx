@@ -6,6 +6,8 @@ import Button from "../../components/Button";
 import AIChat from "../../components/AIChat";
 import { AppTheme, useTheme } from "../../theme";
 import { analyzeBloodworkFile } from "../../services/openai";
+import { shouldShowPaywall, incrementAnalysesRun } from "../../services/usageTracker";
+import PaywallModal from "../../components/PaywallModal";
 
 const UploadScreen = () => {
   const theme = useTheme();
@@ -15,6 +17,7 @@ const UploadScreen = () => {
   const [error, setError] = useState<string | null>(null);
   const [showAIChat, setShowAIChat] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   const analysisSteps = [
     { icon: "📄", text: "Reading document", color: "#8B5CF6" },
@@ -46,11 +49,18 @@ const UploadScreen = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    if (shouldShowPaywall()) {
+      setShowPaywall(true);
+      return;
+    }
+
     setIsAnalyzing(true);
     setError(null);
 
     try {
       console.log("Analyzing file:", file.name);
+
+      incrementAnalysesRun();
 
       // Convert file to base64
       const base64 = await fileToBase64(file);
@@ -149,6 +159,7 @@ const UploadScreen = () => {
 
   return (
     <div style={styles.page}>
+      {showPaywall && <PaywallModal onClose={() => setShowPaywall(false)} />}
       <h1 style={styles.heading}>Upload your labs</h1>
       <p style={styles.subheading}>Choose a file or snap a photo. We parse, normalise, and confirm with you.</p>
 
