@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
+import { pdfToImages, extractTextFromPdf } from "../utils/pdfProcessor";
 
 const openai = new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
@@ -145,7 +146,129 @@ Respond in JSON format with this structure:
 }
 
 /**
- * Analyzes bloodwork from an uploaded file (image or PDF) using OpenAI Vision
+ * Analyzes bloodwork from a PDF file by converting it to images
+ */
+export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis> {
+  const supplementsList = AVAILABLE_SUPPLEMENTS.map(
+    (s) => `${s.id}: ${s.name} - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
+  ).join("\n");
+
+  try {
+    // Convert PDF to images
+    const images = await pdfToImages(file);
+
+    if (images.length === 0) {
+      throw new Error("No pages found in PDF");
+    }
+
+    // For now, analyze only the first page (most bloodwork reports have results on first page)
+    // In the future, we could analyze all pages and combine results
+    const firstPageImage = images[0];
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized supplement recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Always respond with valid JSON."
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Analyze this bloodwork report (converted from PDF) and extract all biomarker values with their units and reference ranges.
+
+AVAILABLE SUPPLEMENTS:
+${supplementsList}
+
+Please provide:
+1. A brief summary of the overall health status
+2. Key concerns or areas that need attention (values outside reference ranges)
+3. Positive findings or strengths (values within healthy ranges)
+4. Specific supplement recommendations from our list that would address any deficiencies or support optimal health
+5. Detailed insights by health category
+
+IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency:
+- Spirulina: 3-5g per day (1 teaspoon = ~3g)
+- Chlorella: 2-3g per day
+- Wheatgrass: 3-5g per day (1 teaspoon)
+- Moringa: 2-3g per day
+- Turmeric: 1-3g per day (500mg-1g for mild support, 2-3g for significant inflammation)
+- Ashwagandha: 300-600mg per day (0.3-0.6g)
+- Maca Root: 3-5g per day
+- Beetroot: 5-10g per day
+- Matcha: 1-2g per day (1/2 to 1 teaspoon)
+- Cacao: 5-10g per day (1-2 teaspoons)
+- Chia Seeds: 1-2 tablespoons per day (15-30g)
+- Flax Seeds: 1-2 tablespoons per day (ground)
+- Hemp Seeds: 2-3 tablespoons per day (30-45g)
+- Goji Berries: 10-30g per day (1-3 tablespoons)
+- Acai: 5-10g per day (powder)
+- Mushroom blends: 1-3g per day depending on type
+- Collagen: 10-20g per day
+- Protein powders: 20-30g per day
+
+ADJUST dosages based on:
+- Severity of deficiency (higher for severe deficiencies)
+- Multiple deficiencies (may need higher amounts)
+- Age, weight, and health status
+- Specific biomarker levels
+
+Do NOT use generic "5g per day" for everything - be specific and evidence-based!
+
+Respond in JSON format with this structure:
+{
+  "summary": "Brief overall health summary",
+  "concerns": ["concern 1", "concern 2"],
+  "strengths": ["strength 1", "strength 2"],
+  "recommendations": [
+    {
+      "supplementId": "supplement-id",
+      "supplementName": "Supplement Name",
+      "reason": "Why this supplement is recommended based on the bloodwork",
+      "priority": "high|medium|low",
+      "dosage": "Daily intake amount (e.g., '5g per day' or '1 tablespoon per day' for chia seeds)"
+    }
+  ],
+  "detailedInsights": [
+    {
+      "category": "Category name (e.g., Cardiovascular, Immune System)",
+      "findings": "What the bloodwork shows",
+      "impact": "What this means for health"
+    }
+  ]
+}`
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:image/jpeg;base64,${firstPageImage}`
+              }
+            }
+          ]
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.7,
+      max_tokens: 2000
+    });
+
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error("No response from OpenAI");
+    }
+
+    const analysis: BloodworkAnalysis = JSON.parse(content);
+    return analysis;
+  } catch (error) {
+    console.error("Error analyzing PDF bloodwork file:", error);
+    throw new Error("Failed to analyze PDF file. Please ensure the PDF contains clear bloodwork data.");
+  }
+}
+
+/**
+ * Analyzes bloodwork from an uploaded image file using OpenAI Vision
  */
 export async function analyzeBloodworkFile(
   base64Image: string,
@@ -155,8 +278,20 @@ export async function analyzeBloodworkFile(
     (s) => `${s.id}: ${s.name} - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
   ).join("\n");
 
-  // Determine the image format
-  const imageFormat = fileType.includes('pdf') ? 'image/jpeg' : fileType;
+  // Determine the image format - ensure it's a supported format
+  let imageFormat = fileType;
+  if (fileType.includes('jpeg') || fileType.includes('jpg')) {
+    imageFormat = 'image/jpeg';
+  } else if (fileType.includes('png')) {
+    imageFormat = 'image/png';
+  } else if (fileType.includes('gif')) {
+    imageFormat = 'image/gif';
+  } else if (fileType.includes('webp')) {
+    imageFormat = 'image/webp';
+  } else {
+    // Default to jpeg if unknown
+    imageFormat = 'image/jpeg';
+  }
 
   try {
     const response = await openai.chat.completions.create({
@@ -171,7 +306,7 @@ export async function analyzeBloodworkFile(
           content: [
             {
               type: "text",
-              text: `Analyze this bloodwork report and extract all biomarker values with their units and reference ranges.
+              text: `Analyze this bloodwork report image and extract all biomarker values with their units and reference ranges.
 
 AVAILABLE SUPPLEMENTS:
 ${supplementsList}

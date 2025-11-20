@@ -62,9 +62,10 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
     try {
       // For demo purposes, we'll simulate file analysis
       // In production, you would use OCR or file parsing
+      const fileTypeText = file.type.includes('pdf') ? 'PDF' : 'image';
       const analysisMessage: Message = {
         role: "assistant",
-        content: `I've received your ${file.type.includes('pdf') ? 'PDF' : 'image'} file "${file.name}".
+        content: `I've received your ${fileTypeText} file "${file.name}".
 
 For a complete analysis, I would need to extract the bloodwork data from this file. In a production environment, this would involve:
 - OCR (Optical Character Recognition) to read the document
@@ -306,7 +307,7 @@ If users mention bloodwork values or health concerns, provide specific advice. A
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
               onChange={handleFileUpload}
               style={{ display: "none" }}
             />

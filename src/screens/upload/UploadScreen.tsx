@@ -5,7 +5,7 @@ import SectionHeader from "../../components/SectionHeader";
 import Button from "../../components/Button";
 import AIChat from "../../components/AIChat";
 import { AppTheme, useTheme } from "../../theme";
-import { analyzeBloodworkFile } from "../../services/openai";
+import { analyzeBloodworkFile, analyzeBloodworkPdf } from "../../services/openai";
 import { shouldShowPaywall, incrementAnalysesRun } from "../../services/usageTracker";
 import PaywallModal from "../../components/PaywallModal";
 
@@ -62,14 +62,25 @@ const UploadScreen = () => {
 
       incrementAnalysesRun();
 
-      // Convert file to base64
-      const base64 = await fileToBase64(file);
+      let analysis;
 
-      // Add minimum delay to show all animation steps (better UX)
-      const [analysis] = await Promise.all([
-        analyzeBloodworkFile(base64, file.type),
-        new Promise(resolve => setTimeout(resolve, 6000)) // Minimum 6 seconds (1.5s per step × 4 steps)
-      ]);
+      // Check if it's a PDF or image
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        // Handle PDF files
+        const [result] = await Promise.all([
+          analyzeBloodworkPdf(file),
+          new Promise(resolve => setTimeout(resolve, 6000)) // Minimum 6 seconds for UX
+        ]);
+        analysis = result;
+      } else {
+        // Handle image files
+        const base64 = await fileToBase64(file);
+        const [result] = await Promise.all([
+          analyzeBloodworkFile(base64, file.type),
+          new Promise(resolve => setTimeout(resolve, 6000)) // Minimum 6 seconds for UX
+        ]);
+        analysis = result;
+      }
 
       // Save to localStorage
       localStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
@@ -183,25 +194,20 @@ const UploadScreen = () => {
         <label style={styles.optionButton}>
           <input
             type="file"
-            accept=".pdf,.jpg,.jpeg,.png,.csv"
+            accept=".pdf,.jpg,.jpeg,.png,.webp"
             onChange={handleFileUpload}
             style={{ display: "none" }}
             disabled={isAnalyzing}
           />
           <span style={styles.optionTitle}>Upload PDF or image</span>
-          <span style={styles.optionDescription}>Supports most major lab providers and clear photos.</span>
+          <span style={styles.optionDescription}>Supports PDF, JPG, PNG, WEBP. Upload your bloodwork report or take a clear photo.</span>
         </label>
-        <label style={styles.optionButton}>
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleFileUpload}
-            style={{ display: "none" }}
-            disabled={isAnalyzing}
-          />
-          <span style={styles.optionTitle}>Upload CSV</span>
-          <span style={styles.optionDescription}>Perfect for wearable exports or provider spreadsheets.</span>
-        </label>
+        <button type="button" style={{ ...styles.optionButton, ...styles.disabled }} disabled>
+          <span style={{ ...styles.optionTitle, ...styles.disabledText }}>Upload CSV (coming soon)</span>
+          <span style={{ ...styles.optionDescription, ...styles.disabledText }}>
+            Perfect for wearable exports or provider spreadsheets.
+          </span>
+        </button>
         <button type="button" style={{ ...styles.optionButton, ...styles.disabled }} disabled>
           <span style={{ ...styles.optionTitle, ...styles.disabledText }}>Connect provider (coming soon)</span>
           <span style={{ ...styles.optionDescription, ...styles.disabledText }}>
