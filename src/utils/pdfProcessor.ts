@@ -28,16 +28,17 @@ export async function pdfToImages(file: File): Promise<string[]> {
     if (!context) {
       throw new Error('Failed to get canvas context');
     }
-    
+
     canvas.height = viewport.height;
     canvas.width = viewport.width;
-    
+
     // Render PDF page to canvas
     await page.render({
       canvasContext: context,
-      viewport: viewport
-    }).promise;
-    
+      viewport: viewport,
+      canvas: canvas
+    } as any).promise;
+
     // Convert canvas to base64 image
     const imageData = canvas.toDataURL('image/jpeg', 0.95);
     // Remove the data URL prefix
