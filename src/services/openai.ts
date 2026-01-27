@@ -449,7 +449,7 @@ Respond in JSON format with this structure:
 }`
             },
             ...allPages.map((pageImage) => ({
-              type: "image_url",
+              type: "image_url" as const,
               image_url: {
                 url: `data:image/jpeg;base64,${pageImage}`
               }
