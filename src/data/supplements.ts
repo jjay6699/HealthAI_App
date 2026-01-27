@@ -160,5 +160,33 @@ export const AVAILABLE_SUPPLEMENTS: Supplement[] = [
     size: "100g",
     benefits: ["Vitamin C boost", "Alkalizing", "Digestive support"],
     keyNutrients: ["Vitamin C", "Citric acid", "Flavonoids", "Potassium"]
+  },
+  {
+    id: "pea-protein-original",
+    name: "Pea Protein Original",
+    size: "500g",
+    benefits: ["Supports muscle maintenance", "Satiety support", "Plant-based protein"],
+    keyNutrients: ["Protein", "BCAAs", "Iron"]
+  },
+  {
+    id: "pea-protein-cacao",
+    name: "Pea Protein Cacao",
+    size: "500g",
+    benefits: ["Supports muscle recovery", "Energy support", "Plant-based protein"],
+    keyNutrients: ["Protein", "BCAAs", "Iron", "Cocoa polyphenols"]
+  },
+  {
+    id: "australian-instant-oats",
+    name: "Australian Instant Oats",
+    size: "1kg",
+    benefits: ["Supports steady energy", "Digestive health", "Heart health"],
+    keyNutrients: ["Beta-glucan fiber", "Complex carbs", "Magnesium"]
+  },
+  {
+    id: "organic-psyllium-husk",
+    name: "Organic Psyllium Husk",
+    size: "200g",
+    benefits: ["Digestive regularity", "Supports gut health", "Satiety support"],
+    keyNutrients: ["Soluble fiber"]
   }
 ];

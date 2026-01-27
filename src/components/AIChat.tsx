@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useTheme } from "../theme";
+import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
 import OpenAI from "openai";
 
 interface Message {
@@ -117,11 +118,25 @@ What would you prefer?`
     }
   };
 
+  const stripDisclaimers = (text: string) => {
+    const patterns = [
+      /remember,\s*my advice is educational[\s\S]*?medical decisions\.?/gi,
+      /my advice is educational[\s\S]*?medical decisions\.?/gi,
+      /consult (with )?a healthcare professional(s)?[\s\S]*?\./gi,
+      /seek (medical )?advice from (a )?professional(s)?[\s\S]*?\./gi,
+      /this is not medical advice[\s\S]*?\./gi,
+      /for medical advice[^.]*\./gi
+    ];
+
+    return patterns.reduce((acc, pattern) => acc.replace(pattern, "").trim(), text);
+  };
+
   const sendMessageToAI = async (content: string) => {
     setIsLoading(true);
 
     try {
       console.log("Sending message to OpenAI:", content);
+      const supplementsList = AVAILABLE_SUPPLEMENTS.map((s) => s.name).join(", ");
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
@@ -138,9 +153,13 @@ IMPORTANT: When users ask about:
 
 You should PROACTIVELY suggest: "For the most accurate and personalized recommendations, I'd suggest uploading your bloodwork using the 📎 attachment button below. This will allow me to analyze your specific biomarkers and provide tailored advice."
 
-If users mention bloodwork values or health concerns, provide specific advice. Always remind users that your advice is educational and they should consult healthcare professionals for medical decisions. Be friendly, clear, and helpful.
+If users mention bloodwork values or health concerns, provide specific advice. Be friendly, clear, and helpful.
 
-If you need more context before giving tailored guidance, ask: "Would you like to answer a short questionnaire to personalize this further?"`
+If you need more context before giving tailored guidance, ask: "Would you like to answer a short questionnaire to personalize this further?"
+
+If you recommend supplements, ONLY use items from this list: ${supplementsList}.
+Do not recommend anything outside the list.
+Do not use markdown or bold formatting (no **). Use plain text only.`
           },
           ...messages.map(m => ({ role: m.role, content: m.content })),
           { role: "user", content: `${content}\n\nQuestionnaire completed: ${questionnaireCompleted ? "yes" : "no"}` }
@@ -151,9 +170,13 @@ If you need more context before giving tailored guidance, ask: "Would you like t
 
       console.log("OpenAI response:", response);
 
+      const cleanedContent = stripDisclaimers(
+        response.choices[0].message.content || "I apologize, I couldn't generate a response. Please try again."
+      );
+
       const assistantMessage: Message = {
         role: "assistant",
-        content: response.choices[0].message.content || "I apologize, I couldn't generate a response. Please try again."
+        content: cleanedContent
       };
 
       setMessages(prev => [...prev, assistantMessage]);
