@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Badge from "../../components/Badge";
 import Button from "../../components/Button";
@@ -6,32 +6,67 @@ import Card from "../../components/Card";
 import SectionHeader from "../../components/SectionHeader";
 import StickyFooter from "../../components/StickyFooter";
 import { AppTheme, useTheme } from "../../theme";
+import { BloodworkAnalysis } from "../../services/openai";
 
-const mockInsights = [
-  {
-    id: "insight-1",
-    title: "Iron stores trending low",
-    summary: "Ferritin at 22 ng/mL. Consider iron-rich foods and schedule a retest in 12 weeks.",
-    domain: "Energy"
-  },
-  {
-    id: "insight-2",
-    title: "Sleep opportunity",
-    summary: "Average duration 6.2 hrs. Aim for 7.5 hrs with wind-down routine.",
-    domain: "Sleep"
-  }
-];
+type AnalysisMeta = {
+  uploadedAt?: string;
+  fileName?: string;
+  fileType?: string;
+};
 
 const HomeScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const navigate = useNavigate();
   const width = `min(440px, calc(100% - ${theme.spacing.xl * 2}px))`;
+  const [analysis, setAnalysis] = useState<BloodworkAnalysis | null>(null);
+  const [meta, setMeta] = useState<AnalysisMeta | null>(null);
+
+  useEffect(() => {
+    const storedAnalysis = localStorage.getItem("bloodworkAnalysis");
+    if (storedAnalysis) {
+      try {
+        setAnalysis(JSON.parse(storedAnalysis));
+      } catch (error) {
+        console.error("Failed to parse bloodwork analysis:", error);
+      }
+    }
+
+    const storedMeta = localStorage.getItem("bloodworkAnalysisMeta");
+    if (storedMeta) {
+      try {
+        setMeta(JSON.parse(storedMeta));
+      } catch (error) {
+        console.error("Failed to parse bloodwork metadata:", error);
+      }
+    }
+  }, []);
+
+  const formatDate = (iso?: string) => {
+    if (!iso) return "No uploads yet";
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return "No uploads yet";
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  };
+
+  const latestInsights = (analysis?.detailedInsights || [])
+    .slice(0, 2)
+    .map((insight, index) => ({
+      id: `insight-${index}`,
+      title: insight.findings,
+      summary: insight.impact,
+      domain: insight.category
+    }));
+
+  const concernCount = analysis?.concerns?.length || 0;
+  const recommendationCount = analysis?.recommendations?.length || 0;
+  const statusTone = concernCount > 0 ? "warning" : "success";
+  const statusLabel = concernCount > 0 ? "Needs review" : "In range";
 
   return (
     <div style={styles.page}>
       <section style={styles.hero}>
-        <div style={styles.heroPill}>Last upload � Jul 12</div>
+        <div style={styles.heroPill}>Last upload - {formatDate(meta?.uploadedAt)}</div>
         <h1 style={styles.heroTitle}>Upload bloodwork or DNA</h1>
         <p style={styles.heroCopy}>
           Get personalised ranges, supplement suggestions, and lifestyle nudges based on your biomarkers.
@@ -49,36 +84,51 @@ const HomeScreen = () => {
       />
 
       <div style={styles.insightList}>
-        {mockInsights.map((insight) => (
-          <Card key={insight.id} style={styles.insightCard}>
-            <Badge label={insight.domain} tone="info" />
-            <h3 style={styles.cardTitle}>{insight.title}</h3>
-            <p style={styles.cardBody}>{insight.summary}</p>
-            <Link to="/insights" style={styles.cardLink}>
-              See details
+        {latestInsights.length > 0 ? (
+          latestInsights.map((insight) => (
+            <Card key={insight.id} style={styles.insightCard}>
+              <Badge label={insight.domain} tone="info" />
+              <h3 style={styles.cardTitle}>{insight.title}</h3>
+              <p style={styles.cardBody}>{insight.summary}</p>
+              <Link to="/insights" style={styles.cardLink}>
+                See details
+              </Link>
+            </Card>
+          ))
+        ) : (
+          <Card style={styles.insightCard}>
+            <h3 style={styles.cardTitle}>No insights yet</h3>
+            <p style={styles.cardBody}>Upload your bloodwork to see personalized insights here.</p>
+            <Link to="/upload" style={styles.cardLink}>
+              Upload now
             </Link>
           </Card>
-        ))}
+        )}
       </div>
 
       <Card style={styles.statusCard} shadow={false}>
         <div style={styles.statusHeader}>
           <div>
             <h3 style={styles.statusTitle}>Last analysis</h3>
-            <p style={styles.statusSub}>Based on panels uploaded 12 Jul 2025</p>
+            <p style={styles.statusSub}>
+              {meta?.uploadedAt ? `Based on panels uploaded ${formatDate(meta.uploadedAt)}` : "No uploads yet"}
+            </p>
           </div>
-          <Badge label="Needs review" tone="warning" />
+          <Badge label={statusLabel} tone={statusTone} />
         </div>
         <div style={styles.statusGrid}>
           <div>
-            <span style={styles.statusLabel}>Ferritin</span>
-            <p style={styles.statusValue}>22 ng/mL</p>
+            <span style={styles.statusLabel}>Concerns</span>
+            <p style={styles.statusValue}>{concernCount}</p>
           </div>
           <div>
-            <span style={styles.statusLabel}>Trend</span>
-            <p style={styles.statusValue}>-2.1 over 6 mo</p>
+            <span style={styles.statusLabel}>Recommendations</span>
+            <p style={styles.statusValue}>{recommendationCount}</p>
           </div>
         </div>
+        {analysis?.summary && (
+          <p style={styles.statusSummary}>{analysis.summary}</p>
+        )}
       </Card>
 
       <StickyFooter width={width}>
@@ -97,7 +147,7 @@ const createStyles = (theme: AppTheme) => ({
     paddingBottom: theme.spacing.xxl
   },
   hero: {
-    background: "linear-gradient(135deg, #FFF1F4 0%, #F4F7FF 100%)",
+    background: `linear-gradient(135deg, ${theme.colors.accentPeach} 0%, ${theme.colors.accentBlue} 100%)`,
     borderRadius: theme.radii.xl,
     padding: `${theme.spacing.xxl}px ${theme.spacing.xl}px`,
     display: "flex",
@@ -107,7 +157,7 @@ const createStyles = (theme: AppTheme) => ({
   heroPill: {
     alignSelf: "flex-start" as const,
     borderRadius: theme.radii.pill,
-    background: "rgba(255,56,92,0.15)",
+    background: `${theme.colors.primary}22`,
     color: theme.colors.primary,
     fontSize: 12,
     fontWeight: 600,
@@ -196,6 +246,12 @@ const createStyles = (theme: AppTheme) => ({
     fontSize: 16,
     fontWeight: 700,
     margin: `${theme.spacing.xs}px 0 0`
+  },
+  statusSummary: {
+    marginTop: theme.spacing.md,
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    lineHeight: "20px"
   }
 });
 

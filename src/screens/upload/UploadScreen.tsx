@@ -74,6 +74,14 @@ const UploadScreen = () => {
 
       // Save to localStorage
       localStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
+      localStorage.setItem(
+        "bloodworkAnalysisMeta",
+        JSON.stringify({
+          uploadedAt: new Date().toISOString(),
+          fileName: file.name,
+          fileType: file.type || "unknown"
+        })
+      );
 
       // Navigate to insights
       navigate("/insights");
