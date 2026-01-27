@@ -46,7 +46,7 @@ const supplementByName = new Map(
 );
 
 const normalizeRecommendations = (analysis: BloodworkAnalysis): BloodworkAnalysis => {
-  const normalized = (analysis.recommendations || [])
+  let normalized = (analysis.recommendations || [])
     .map((rec) => {
       const nameKey = rec.supplementName?.toLowerCase().trim();
       if (nameKey?.startsWith("just ")) {
@@ -74,6 +74,10 @@ const normalizeRecommendations = (analysis: BloodworkAnalysis): BloodworkAnalysi
       return null;
     })
     .filter((rec): rec is SupplementRecommendation => Boolean(rec));
+
+  if (normalized.length > 8) {
+    normalized = normalized.slice(0, 8);
+  }
 
   return { ...analysis, recommendations: normalized };
 };
@@ -171,9 +175,10 @@ Please analyze the bloodwork and provide:
 5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
 
 Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
-Recommendations must be non-empty (at least 3 items). Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
+Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
+Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default supplements.
 
-IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency:
+IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements:
 - Spirulina: 3-5g per day (1 teaspoon = ~3g)
 - Chlorella: 2-3g per day
 - Wheatgrass: 3-5g per day (1 teaspoon)
@@ -315,9 +320,10 @@ Please provide:
 Use layman-friendly language (avoid medical jargon, define any necessary terms).
 
 Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
-Recommendations must be non-empty (at least 3 items). Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
+Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
+Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default supplements.
 
-IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency:
+IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements:
 - Spirulina: 3-5g per day (1 teaspoon = ~3g)
 - Chlorella: 2-3g per day
 - Wheatgrass: 3-5g per day (1 teaspoon)
@@ -461,9 +467,10 @@ Please provide:
 Use layman-friendly language (avoid medical jargon, define any necessary terms).
 
 Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
-Recommendations must be non-empty (at least 3 items). Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
+Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
+Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default supplements.
 
-IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency:
+IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements:
 - Spirulina: 3-5g per day (1 teaspoon = ~3g)
 - Chlorella: 2-3g per day
 - Wheatgrass: 3-5g per day (1 teaspoon)

@@ -74,14 +74,42 @@ const UploadScreen = () => {
 
       // Save to localStorage
       localStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
+      const uploadedAt = new Date().toISOString();
+      const fileType = file.type || "unknown";
+      const fileSize = file.size;
+
       localStorage.setItem(
         "bloodworkAnalysisMeta",
         JSON.stringify({
-          uploadedAt: new Date().toISOString(),
+          uploadedAt,
           fileName: file.name,
-          fileType: file.type || "unknown"
+          fileType,
+          fileSize
         })
       );
+
+      const historyRaw = localStorage.getItem("bloodworkHistory");
+      let history: any[] = [];
+      if (historyRaw) {
+        try {
+          history = JSON.parse(historyRaw);
+        } catch {
+          history = [];
+        }
+      }
+      history.unshift({
+        id: `${uploadedAt}:${file.name}:${fileSize}`,
+        uploadedAt,
+        fileName: file.name,
+        fileType,
+        fileSize,
+        summary: analysis.summary,
+        concerns: analysis.concerns || [],
+        strengths: analysis.strengths || [],
+        recommendations: analysis.recommendations || [],
+        detailedInsights: analysis.detailedInsights || []
+      });
+      localStorage.setItem("bloodworkHistory", JSON.stringify(history.slice(0, 20)));
 
       // Navigate to insights
       navigate("/insights");
