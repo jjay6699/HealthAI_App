@@ -92,26 +92,43 @@ const SupplementsScreen = () => {
     return sum / matches.length;
   };
 
+  const servingGrams = 10;
+  const servingsPerBottle = 14;
+  const servingsPerMonth = 28;
+  const bottlesPerMonth = 2;
+  const bottlePrice = 29;
+  const monthPrice = 49;
+
   const totalGrams = recommendations.reduce((sum, rec) => {
     const grams = rec.dosageGramsPerDay ?? parseDosageGrams(rec.dosage);
     return grams ? sum + grams : sum;
   }, 0);
 
-  const totalPills = recommendations.reduce((sum, rec) => {
-    return rec.pillsPerDay ? sum + rec.pillsPerDay : sum;
-  }, 0);
+  const scaledGrams = recommendations.map((rec) => {
+    const grams = rec.dosageGramsPerDay ?? parseDosageGrams(rec.dosage);
+    if (!grams || totalGrams === 0) {
+      return { id: rec.supplementId, grams: undefined };
+    }
+    const scaled = (grams / totalGrams) * servingGrams;
+    return { id: rec.supplementId, grams: Number(scaled.toFixed(2)) };
+  });
 
-  const pillSizeMg = recommendations.find((rec) => rec.pillSizeMg)?.pillSizeMg;
 
   // Generate combined summary
+  const getBaseSelections = () => {
+    const proteinBases = ["Pea Protein Original", "Pea Protein Cacao"];
+    const fiberBases = ["Australian Instant Oats", "Organic Psyllium Husk"];
+    const protein = recommendations.find((rec) => proteinBases.includes(rec.supplementName))?.supplementName;
+    const fiber = recommendations.find((rec) => fiberBases.includes(rec.supplementName))?.supplementName;
+    return { protein, fiber };
+  };
+
   const generateSummary = () => {
     const supplementNames = recommendations.map(rec => rec.supplementName).join(", ");
-    const gramsText = totalGrams > 0 ? `Total daily blend: ${totalGrams.toFixed(1)} g` : "";
-    const pillsText = totalPills > 0 ? `Pills per day: ${totalPills}` : "";
-    const pillSizeText = pillSizeMg ? `Pill size: ${pillSizeMg} mg` : "";
-    const summaryParts = [gramsText, pillsText, pillSizeText].filter(Boolean).join(" • ");
-    const summaryTail = summaryParts ? ` ${summaryParts}.` : "";
-    return `Your personalized blend includes ${supplementNames}. This combination is specifically formulated based on your bloodwork analysis to address your unique nutritional needs.${summaryTail}`;
+    const base = getBaseSelections();
+    const baseText = base.protein && base.fiber ? ` Base blend: ${base.protein} + ${base.fiber}.` : "";
+    const gramsText = `Total daily blend: ${servingGrams.toFixed(1)} g.`;
+    return `Your personalized blend includes ${supplementNames}.${baseText} ${gramsText}`.trim();
   };
 
   return (
@@ -125,10 +142,18 @@ const SupplementsScreen = () => {
       <Card style={styles.summaryCard}>
         <SectionHeader title="Your Custom Blend" />
         <p style={styles.summaryText}>{generateSummary()}</p>
+        <div style={styles.blendMeta}>
+          <span>Serving size: {servingGrams} g (2 tbsp)</span>
+          <span>{servingsPerBottle} servings per bottle • {servingsPerMonth} servings per month</span>
+          <span>{bottlesPerMonth} bottles/month</span>
+        </div>
         <div style={styles.pricingRow}>
           <div>
             <p style={styles.priceLabel}>Monthly Supply</p>
-            <p style={styles.priceAmount}>RM49</p>
+            <p style={styles.priceAmount}>RM{monthPrice}</p>
+            <p style={styles.priceSub}>
+              {bottlesPerMonth} bottles/month • RM{bottlePrice} per bottle
+            </p>
           </div>
           <Button
             title="Order Now"
@@ -162,19 +187,15 @@ const SupplementsScreen = () => {
                 <p style={styles.body}>{rec.reason}</p>
               </div>
 
-              {rec.dosage && (
+              {(rec.dosageGramsPerDay || parseDosageGrams(rec.dosage)) && (
                 <div style={styles.section}>
-                  <span style={styles.label}>Daily dosage</span>
-                  <p style={styles.body}>{rec.dosage}</p>
-                </div>
-              )}
-              {(rec.dosageGramsPerDay || rec.pillsPerDay) && (
-                <div style={styles.section}>
-                  <span style={styles.label}>Pill plan</span>
+                  <span style={styles.label}>Daily grams</span>
                   <p style={styles.body}>
-                    {rec.dosageGramsPerDay ? `${rec.dosageGramsPerDay} g/day` : "Grams per day: N/A"}
-                    {rec.pillsPerDay ? ` • ${rec.pillsPerDay} pills/day` : ""}
-                    {rec.pillSizeMg ? ` • ${rec.pillSizeMg} mg per pill` : ""}
+                    {(
+                      scaledGrams.find((item) => item.id === rec.supplementId)?.grams ??
+                      rec.dosageGramsPerDay ??
+                      parseDosageGrams(rec.dosage)
+                    )} g/day
                   </p>
                 </div>
               )}
@@ -271,6 +292,18 @@ const createStyles = (theme: AppTheme) => ({
     fontWeight: 700,
     color: theme.colors.primary,
     margin: 0
+  },
+  priceSub: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    margin: 0,
+    marginTop: 4
+  },
+  blendMeta: {
+    display: "grid",
+    gap: theme.spacing.xs,
+    fontSize: 13,
+    color: theme.colors.textSecondary
   },
   cardList: {
     display: "flex",

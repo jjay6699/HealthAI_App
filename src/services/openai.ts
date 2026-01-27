@@ -7,7 +7,7 @@ const openai = new OpenAI({
   dangerouslyAllowBrowser: true // Note: In production, API calls should go through a backend
 });
 
-const ANALYSIS_CACHE_VERSION = "v1";
+const ANALYSIS_CACHE_VERSION = "v4";
 const ANALYSIS_TEMPERATURE = 0;
 
 const ANALYSIS_MODEL = "gpt-4o";
@@ -27,8 +27,6 @@ export interface SupplementRecommendation {
   priority: "high" | "medium" | "low";
   dosage?: string;
   dosageGramsPerDay?: number;
-  pillsPerDay?: number;
-  pillSizeMg?: number;
 }
 
 export interface BloodworkAnalysis {
@@ -77,6 +75,61 @@ const normalizeRecommendations = (analysis: BloodworkAnalysis): BloodworkAnalysi
       return null;
     })
     .filter((rec): rec is SupplementRecommendation => Boolean(rec));
+
+  const proteinBases = ["Pea Protein Original", "Pea Protein Cacao"];
+  const fiberBases = ["Australian Instant Oats", "Organic Psyllium Husk"];
+  const hasProteinBase = normalized.some((rec) => proteinBases.includes(rec.supplementName));
+  const hasFiberBase = normalized.some((rec) => fiberBases.includes(rec.supplementName));
+
+  const analysisText = [
+    analysis.summary,
+    ...(analysis.concerns || []),
+    ...(analysis.strengths || []),
+    ...(analysis.detailedInsights || []).flatMap((insight) => [insight.category, insight.findings, insight.impact])
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const pickProteinBase = () => {
+    if (/(stress|anxiety|mood|sleep|fatigue|energy|cognitive|focus)/i.test(analysisText)) {
+      return "Pea Protein Cacao";
+    }
+    return "Pea Protein Original";
+  };
+
+  const pickFiberBase = () => {
+    if (/(cholesterol|ldl|triglycer|glucose|a1c|insulin|constipation|fiber|gut|digestion)/i.test(analysisText)) {
+      return "Organic Psyllium Husk";
+    }
+    return "Australian Instant Oats";
+  };
+
+  if (!hasProteinBase) {
+    const proteinChoice = pickProteinBase();
+    const proteinSupplement = AVAILABLE_SUPPLEMENTS.find((s) => s.name === proteinChoice);
+    if (proteinSupplement) {
+      normalized.push({
+        supplementId: proteinSupplement.id,
+        supplementName: proteinSupplement.name,
+        reason: "Base blend protein component selected from your bloodwork insights.",
+        priority: "low"
+      });
+    }
+  }
+
+  if (!hasFiberBase) {
+    const fiberChoice = pickFiberBase();
+    const fiberSupplement = AVAILABLE_SUPPLEMENTS.find((s) => s.name === fiberChoice);
+    if (fiberSupplement) {
+      normalized.push({
+        supplementId: fiberSupplement.id,
+        supplementName: fiberSupplement.name,
+        reason: "Base blend fiber component selected from your bloodwork insights.",
+        priority: "low"
+      });
+    }
+  }
 
   if (normalized.length > 8) {
     normalized = normalized.slice(0, 8);
@@ -180,10 +233,13 @@ Please analyze the bloodwork and provide:
 Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
 Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
 Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default supplements.
+Base blend rule: include exactly one protein base (Pea Protein Original OR Pea Protein Cacao) and exactly one fiber base (Australian Instant Oats OR Organic Psyllium Husk) as part of the recommendations, unless contraindicated by the bloodwork or user sensitivities.
+Base blend rule: include exactly one protein base (Pea Protein Original OR Pea Protein Cacao) and exactly one fiber base (Australian Instant Oats OR Organic Psyllium Husk) as part of the recommendations, unless contraindicated by the bloodwork or user sensitivities.
 
 IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements.
 Use grams only (e.g., "3 g per day"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
-Also include numeric fields: dosageGramsPerDay (number of grams per day), pillSizeMg (number, assume 500), and pillsPerDay (number, calculated as dosageGramsPerDay * 1000 / pillSizeMg).
+Also include numeric field dosageGramsPerDay (number of grams per day).
+Ensure the total daily grams across all recommended supplements sums to 10 g per day (2 tbsp total blend).
 - Spirulina: 3-5g per day (1 teaspoon = ~3g)
 - Chlorella: 2-3g per day
 - Wheatgrass: 3-5g per day (1 teaspoon)
@@ -223,9 +279,7 @@ Respond in JSON format with this structure:
       "reason": "Why this supplement is recommended based on specific bloodwork values",
       "priority": "high|medium|low",
       "dosage": "Accurate daily intake amount in grams (e.g., '3 g per day')",
-      "dosageGramsPerDay": 3,
-      "pillSizeMg": 500,
-      "pillsPerDay": 6
+      "dosageGramsPerDay": 3
     }
   ],
   "detailedInsights": [
@@ -330,10 +384,12 @@ Use layman-friendly language (avoid medical jargon, define any necessary terms).
 Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
 Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
 Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default supplements.
+Base blend rule: include exactly one protein base (Pea Protein Original OR Pea Protein Cacao) and exactly one fiber base (Australian Instant Oats OR Organic Psyllium Husk) as part of the recommendations, unless contraindicated by the bloodwork or user sensitivities.
 
 IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements.
 Use grams only (e.g., "3 g per day"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
-Also include numeric fields: dosageGramsPerDay (number of grams per day), pillSizeMg (number, assume 500), and pillsPerDay (number, calculated as dosageGramsPerDay * 1000 / pillSizeMg).
+Also include numeric field dosageGramsPerDay (number of grams per day).
+Ensure the total daily grams across all recommended supplements sums to 10 g per day (2 tbsp total blend).
 - Spirulina: 3-5g per day (1 teaspoon = ~3g)
 - Chlorella: 2-3g per day
 - Wheatgrass: 3-5g per day (1 teaspoon)
@@ -373,9 +429,7 @@ Respond in JSON format with this structure:
       "reason": "Why this supplement is recommended based on the bloodwork",
       "priority": "high|medium|low",
       "dosage": "Daily intake amount in grams (e.g., '5 g per day')",
-      "dosageGramsPerDay": 5,
-      "pillSizeMg": 500,
-      "pillsPerDay": 10
+      "dosageGramsPerDay": 5
     }
   ],
   "detailedInsights": [
@@ -485,7 +539,8 @@ Each recommendation MUST cite the specific abnormal biomarker(s) and their value
 
 IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements.
 Use grams only (e.g., "3 g per day"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
-Also include numeric fields: dosageGramsPerDay (number of grams per day), pillSizeMg (number, assume 500), and pillsPerDay (number, calculated as dosageGramsPerDay * 1000 / pillSizeMg).
+Also include numeric field dosageGramsPerDay (number of grams per day).
+Ensure the total daily grams across all recommended supplements sums to 10 g per day (2 tbsp total blend).
 - Spirulina: 3-5g per day (1 teaspoon = ~3g)
 - Chlorella: 2-3g per day
 - Wheatgrass: 3-5g per day (1 teaspoon)
@@ -525,9 +580,7 @@ Respond in JSON format with this structure:
       "reason": "Why this supplement is recommended based on the bloodwork",
       "priority": "high|medium|low",
       "dosage": "Daily intake amount in grams (e.g., '5 g per day')",
-      "dosageGramsPerDay": 5,
-      "pillSizeMg": 500,
-      "pillsPerDay": 10
+      "dosageGramsPerDay": 5
     }
   ],
   "detailedInsights": [
