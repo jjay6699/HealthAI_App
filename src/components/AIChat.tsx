@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTheme } from "../theme";
 import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
 import OpenAI from "openai";
+import { analyzeBloodworkFile, analyzeBloodworkPdf, analyzeBloodworkImages } from "../services/openai";
 
 interface Message {
   role: "user" | "assistant";
@@ -19,6 +21,7 @@ const openai = new OpenAI({
 
 const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -28,6 +31,8 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [pendingUploads, setPendingUploads] = useState<File[]>([]);
+  const [showUploadPrompt, setShowUploadPrompt] = useState(false);
   const [showQuestionnairePrompt, setShowQuestionnairePrompt] = useState(false);
   const [questionnaireActive, setQuestionnaireActive] = useState(false);
   const [questionnaireStep, setQuestionnaireStep] = useState(0);
@@ -66,56 +71,35 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
 
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setUploadedFile(file);
-      const fileMessage: Message = {
-        role: "user",
-        content: `📎 Uploaded: ${file.name}`
-      };
-      setMessages(prev => [...prev, fileMessage]);
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+    setUploadedFile(files[0]);
+    setPendingUploads(files);
+    const fileNames = files.map((file) => file.name).join(", ");
+    const fileMessage: Message = {
+      role: "user",
+      content: `📎 Uploaded ${files.length} file(s): ${fileNames}`
+    };
+    setMessages(prev => [...prev, fileMessage]);
 
-      // Automatically analyze the file
-      analyzeUploadedFile(file);
-    }
+    setMessages(prev => [
+      ...prev,
+      { role: "assistant", content: "Is this a blood report you want analyzed?" }
+    ]);
+    setShowUploadPrompt(true);
   };
 
-  const analyzeUploadedFile = async (file: File) => {
-    setIsLoading(true);
-
-    try {
-      // For demo purposes, we'll simulate file analysis
-      // In production, you would use OCR or file parsing
-      const fileTypeText = file.type.includes('pdf') ? 'PDF' : 'image';
-      const analysisMessage: Message = {
-        role: "assistant",
-        content: `I've received your ${fileTypeText} file "${file.name}".
-
-For a complete analysis, I would need to extract the bloodwork data from this file. In a production environment, this would involve:
-- OCR (Optical Character Recognition) to read the document
-- Parsing the biomarker values
-- Comparing against reference ranges
-
-For now, would you like to:
-1. Tell me specific values from your bloodwork that concern you
-2. Use our demo analysis feature to see how the AI analyzes bloodwork
-3. Ask me general health questions
-
-What would you prefer?`
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.split(",")[1];
+        resolve(base64);
       };
-
-      setMessages(prev => [...prev, analysisMessage]);
-    } catch (error) {
-      console.error("Error analyzing file:", error);
-      const errorMessage: Message = {
-        role: "assistant",
-        content: "I encountered an error processing your file. Please try again or describe your bloodwork results to me."
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-      setUploadedFile(null);
-    }
+      reader.onerror = reject;
+    });
   };
 
   const stripDisclaimers = (text: string) => {
@@ -129,6 +113,91 @@ What would you prefer?`
     ];
 
     return patterns.reduce((acc, pattern) => acc.replace(pattern, "").trim(), text);
+  };
+
+  const analyzeImageInChat = async (file: File) => {
+    setIsLoading(true);
+
+    try {
+      const base64 = await fileToBase64(file);
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful health assistant. Describe visible details precisely, mention plausible non-diagnostic possibilities, and suggest safe next steps. Be concise but complete (4-7 sentences). Avoid markdown/bold and do not end mid-sentence."
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Analyze this image and explain what it shows in plain language." },
+              {
+                type: "image_url",
+                image_url: { url: `data:${file.type || "image/jpeg"};base64,${base64}` }
+              }
+            ]
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 800
+      });
+
+      const assistantMessage: Message = {
+        role: "assistant",
+        content: stripDisclaimers(
+          response.choices[0].message.content || "I couldn't analyze that image. Please try another one."
+        )
+      };
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error("Error analyzing image:", error);
+      setMessages(prev => [
+        ...prev,
+        { role: "assistant", content: "I ran into an error analyzing that image. Please try again." }
+      ]);
+    } finally {
+      setIsLoading(false);
+      setUploadedFile(null);
+      setPendingUploads([]);
+    }
+  };
+
+  const analyzeUploadedFile = async (file: File) => {
+    setIsLoading(true);
+
+    try {
+      let analysis;
+      if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+        analysis = await analyzeBloodworkPdf(file);
+      } else {
+        const base64 = await fileToBase64(file);
+        analysis = await analyzeBloodworkFile(base64, file.type);
+      }
+
+      localStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
+      localStorage.setItem(
+        "bloodworkAnalysisMeta",
+        JSON.stringify({
+          uploadedAt: new Date().toISOString(),
+          fileName: file.name,
+          fileType: file.type || "unknown",
+          fileSize: file.size
+        })
+      );
+
+      navigate("/insights");
+    } catch (error) {
+      console.error("Error analyzing file:", error);
+      const errorMessage: Message = {
+        role: "assistant",
+        content: "I encountered an error processing your file. Please try again or describe your bloodwork results to me."
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+      setUploadedFile(null);
+      setPendingUploads([]);
+    }
   };
 
   const sendMessageToAI = async (content: string) => {
@@ -660,6 +729,90 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
     ]);
   };
 
+  const handleUploadYes = () => {
+    setShowUploadPrompt(false);
+    if (pendingUploads.length === 0) return;
+    const hasPdf = pendingUploads.some((file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
+    if (hasPdf && pendingUploads.length > 1) {
+      setMessages(prev => [
+        ...prev,
+        { role: "assistant", content: "Please upload either a single PDF or multiple images, not a mix of files." }
+      ]);
+      setPendingUploads([]);
+      return;
+    }
+    if (hasPdf) {
+      analyzeUploadedFile(pendingUploads[0]);
+      return;
+    }
+    if (pendingUploads.length === 1) {
+      analyzeUploadedFile(pendingUploads[0]);
+      return;
+    }
+    analyzeUploadedImages(pendingUploads);
+  };
+
+  const handleUploadNo = () => {
+    setShowUploadPrompt(false);
+    if (pendingUploads.length === 0) return;
+    const hasPdf = pendingUploads.some((file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
+    if (hasPdf) {
+      setMessages(prev => [
+        ...prev,
+        { role: "assistant", content: "I can analyze images here, but PDFs need the blood report analyzer. Please upload a clear image instead." }
+      ]);
+      setPendingUploads([]);
+      setUploadedFile(null);
+      return;
+    }
+    if (pendingUploads.length === 1) {
+      analyzeImageInChat(pendingUploads[0]);
+      return;
+    }
+    analyzeImagesInChat(pendingUploads);
+  };
+
+  const analyzeUploadedImages = async (files: File[]) => {
+    setIsLoading(true);
+    try {
+      const images = await Promise.all(
+        files.map(async (file) => ({
+          base64: await fileToBase64(file),
+          fileType: file.type || "image/jpeg"
+        }))
+      );
+      const analysis = await analyzeBloodworkImages(images);
+      localStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
+      localStorage.setItem(
+        "bloodworkAnalysisMeta",
+        JSON.stringify({
+          uploadedAt: new Date().toISOString(),
+          fileName: files.map((file) => file.name).join(", "),
+          fileType: "images",
+          fileSize: files.reduce((sum, file) => sum + file.size, 0)
+        })
+      );
+      navigate("/insights");
+    } catch (error) {
+      console.error("Error analyzing images:", error);
+      setMessages(prev => [
+        ...prev,
+        { role: "assistant", content: "I encountered an error processing those images. Please try again." }
+      ]);
+    } finally {
+      setIsLoading(false);
+      setUploadedFile(null);
+      setPendingUploads([]);
+    }
+  };
+
+  const analyzeImagesInChat = async (files: File[]) => {
+    for (const file of files) {
+      // eslint-disable-next-line no-await-in-loop
+      await analyzeImageInChat(file);
+    }
+  };
+
   return (
     <div
       style={{
@@ -760,6 +913,17 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
               </div>
             </div>
           ))}
+          {showUploadPrompt && (
+            <div style={{ display: "flex", justifyContent: "flex-start" }}>
+              <div style={styles.questionnaireCard}>
+                <p style={styles.questionnaireTitle}>Is this a blood report?</p>
+                <div style={styles.questionnaireActions}>
+                  <button onClick={handleUploadYes} style={styles.primaryButton}>Yes, analyze</button>
+                  <button onClick={handleUploadNo} style={styles.secondaryButton}>No, it's not</button>
+                </div>
+              </div>
+            </div>
+          )}
           {showQuestionnairePrompt && !questionnaireActive && (
             <div style={{ display: "flex", justifyContent: "flex-start" }}>
               <div style={styles.questionnaireCard}>
@@ -834,6 +998,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
               ref={fileInputRef}
               type="file"
               accept=".pdf,.jpg,.jpeg,.png,.webp"
+              multiple
               onChange={handleFileUpload}
               style={{ display: "none" }}
             />

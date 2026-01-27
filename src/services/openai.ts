@@ -230,6 +230,8 @@ Please analyze the bloodwork and provide:
 4. Specific supplement recommendations from our list that would address any deficiencies or support optimal health
 5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
 
+Before giving recommendations, confirm you checked common lipid/metabolic markers if present: LDL, HDL, total cholesterol, triglycerides (TG), non-HDL, ApoB, glucose, HbA1c. If any of these are missing from the report, explicitly note them as "missing/unreported".
+
 Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
 Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
 Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default supplements.
@@ -341,13 +343,12 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
       throw new Error("No pages found in PDF");
     }
 
-    // For now, analyze only the first page (most bloodwork reports have results on first page)
-    // In the future, we could analyze all pages and combine results
-    const firstPageImage = images[0];
+  // Analyze all pages for full coverage
+  const allPages = images;
 
     const cacheKey = buildAnalysisCacheKey("pdf", {
       pdfFingerprint,
-      firstPageImageHash: hashString(firstPageImage),
+      pageImageHashes: allPages.map((img) => hashString(img)),
       supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id)
     });
     const cached = getCachedAnalysis(cacheKey);
@@ -367,7 +368,7 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
           content: [
             {
               type: "text",
-              text: `Analyze this bloodwork report (converted from PDF) and extract all biomarker values with their units and reference ranges.
+              text: `Analyze this multi-page bloodwork report (converted from PDF) and extract all biomarker values with their units and reference ranges across ALL pages.
 
 AVAILABLE SUPPLEMENTS:
 ${supplementsList}
@@ -378,6 +379,12 @@ Please provide:
 3. Positive findings or strengths (ONLY values clearly within healthy ranges)
 4. Specific supplement recommendations from our list that would address any deficiencies or support optimal health
 5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
+
+Before giving recommendations, confirm you checked common lipid/metabolic markers if present: LDL, HDL, total cholesterol, triglycerides (TG), non-HDL, ApoB, glucose, HbA1c. If any of these are missing from the report, explicitly note them as "missing/unreported".
+
+Before giving recommendations, confirm you checked common lipid/metabolic markers if present: LDL, HDL, total cholesterol, triglycerides (TG), non-HDL, ApoB, glucose, HbA1c. If any of these are missing from the report, explicitly note them as "missing/unreported".
+
+Before giving recommendations, confirm you checked common lipid/metabolic markers if present: LDL, HDL, total cholesterol, triglycerides (TG), non-HDL, ApoB, glucose, HbA1c. If any of these are missing from the report, explicitly note them as "missing/unreported".
 
 Use layman-friendly language (avoid medical jargon, define any necessary terms).
 
@@ -441,12 +448,12 @@ Respond in JSON format with this structure:
   ]
 }`
             },
-            {
+            ...allPages.map((pageImage) => ({
               type: "image_url",
               image_url: {
-                url: `data:image/jpeg;base64,${firstPageImage}`
+                url: `data:image/jpeg;base64,${pageImage}`
               }
-            }
+            }))
           ]
         }
       ],
@@ -618,6 +625,138 @@ Respond in JSON format with this structure:
   } catch (error) {
     console.error("Error analyzing bloodwork file:", error);
     throw new Error("Failed to analyze bloodwork file. Please ensure the image is clear and contains bloodwork data.");
+  }
+}
+
+/**
+ * Analyzes bloodwork from multiple uploaded image files using OpenAI Vision
+ */
+export async function analyzeBloodworkImages(
+  images: { base64: string; fileType: string }[]
+): Promise<BloodworkAnalysis> {
+  const cacheKey = buildAnalysisCacheKey("images", {
+    imageHashes: images.map((img) => hashString(img.base64)),
+    fileTypes: images.map((img) => img.fileType),
+    supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id)
+  });
+  const cached = getCachedAnalysis(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const supplementsList = AVAILABLE_SUPPLEMENTS.map(
+    (s) => `${s.id}: ${s.name} - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
+  ).join("\n");
+
+  const imageParts = images.map((img) => {
+    let imageFormat = img.fileType;
+    if (imageFormat.includes("jpeg") || imageFormat.includes("jpg")) {
+      imageFormat = "image/jpeg";
+    } else if (imageFormat.includes("png")) {
+      imageFormat = "image/png";
+    } else if (imageFormat.includes("gif")) {
+      imageFormat = "image/gif";
+    } else if (imageFormat.includes("webp")) {
+      imageFormat = "image/webp";
+    } else {
+      imageFormat = "image/jpeg";
+    }
+    return {
+      type: "image_url" as const,
+      image_url: { url: `data:${imageFormat};base64,${img.base64}` }
+    };
+  });
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: ANALYSIS_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized supplement recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Analyze these bloodwork report images and extract all biomarker values with their units and reference ranges.
+
+AVAILABLE SUPPLEMENTS:
+${supplementsList}
+
+Please provide:
+1. A brief summary of the overall health status
+2. Key concerns or areas that need attention (ONLY values outside reference ranges)
+3. Positive findings or strengths (ONLY values clearly within healthy ranges)
+4. Specific supplement recommendations from our list that would address any deficiencies or support optimal health
+5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
+
+Use layman-friendly language (avoid medical jargon, define any necessary terms).
+
+Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
+Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
+Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default supplements.
+Base blend rule: include exactly one protein base (Pea Protein Original OR Pea Protein Cacao) and exactly one fiber base (Australian Instant Oats OR Organic Psyllium Husk) as part of the recommendations, unless contraindicated by the bloodwork or user sensitivities.
+
+IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements.
+Use grams only (e.g., "3 g per day"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
+Also include numeric field dosageGramsPerDay (number of grams per day).
+Ensure the total daily grams across all recommended supplements sums to 10 g per day (2 tbsp total blend).
+
+ADJUST dosages based on:
+- Severity of deficiency (higher for severe deficiencies)
+- Multiple deficiencies (may need higher amounts)
+- Age, weight, and health status
+- Specific biomarker levels
+
+Do NOT use generic "5g per day" for everything - be specific and evidence-based!
+
+Respond in JSON format with this structure:
+{
+  "summary": "Brief overall health summary",
+  "concerns": ["concern 1", "concern 2"],
+  "strengths": ["strength 1", "strength 2"],
+  "recommendations": [
+    {
+      "supplementId": "supplement-id",
+      "supplementName": "Supplement Name",
+      "reason": "Why this supplement is recommended based on the bloodwork",
+      "priority": "high|medium|low",
+      "dosage": "Daily intake amount in grams (e.g., '5 g per day')",
+      "dosageGramsPerDay": 5
+    }
+  ],
+  "detailedInsights": [
+    {
+      "category": "Category name (e.g., Cardiovascular, Immune System)",
+      "findings": "What the bloodwork shows",
+      "impact": "What this means for health"
+    }
+  ]
+}`
+            },
+            ...imageParts
+          ]
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: ANALYSIS_TEMPERATURE,
+      max_tokens: 2000
+    });
+
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error("No response from OpenAI");
+    }
+
+    const analysis: BloodworkAnalysis = JSON.parse(content);
+    const normalized = normalizeRecommendations(analysis);
+    setCachedAnalysis(cacheKey, normalized);
+    return normalized;
+  } catch (error) {
+    console.error("Error analyzing bloodwork images:", error);
+    throw new Error("Failed to analyze bloodwork images. Please ensure the images are clear and contain bloodwork data.");
   }
 }
 
