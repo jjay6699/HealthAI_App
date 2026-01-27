@@ -7,6 +7,11 @@ const openai = new OpenAI({
   dangerouslyAllowBrowser: true // Note: In production, API calls should go through a backend
 });
 
+const ANALYSIS_CACHE_VERSION = "v1";
+const ANALYSIS_TEMPERATURE = 0;
+
+const ANALYSIS_MODEL = "gpt-4o";
+
 export interface BloodworkData {
   [key: string]: {
     value: number;
@@ -35,12 +40,113 @@ export interface BloodworkAnalysis {
   }[];
 }
 
+const supplementById = new Map(AVAILABLE_SUPPLEMENTS.map((s) => [s.id, s]));
+const supplementByName = new Map(
+  AVAILABLE_SUPPLEMENTS.map((s) => [s.name.toLowerCase(), s])
+);
+
+const normalizeRecommendations = (analysis: BloodworkAnalysis): BloodworkAnalysis => {
+  const normalized = (analysis.recommendations || [])
+    .map((rec) => {
+      const nameKey = rec.supplementName?.toLowerCase().trim();
+      if (nameKey?.startsWith("just ")) {
+        return null;
+      }
+
+      const byId = supplementById.get(rec.supplementId);
+      if (byId) {
+        return {
+          ...rec,
+          supplementId: byId.id,
+          supplementName: byId.name
+        };
+      }
+
+      const byName = nameKey ? supplementByName.get(nameKey) : undefined;
+      if (byName) {
+        return {
+          ...rec,
+          supplementId: byName.id,
+          supplementName: byName.name
+        };
+      }
+
+      return null;
+    })
+    .filter((rec): rec is SupplementRecommendation => Boolean(rec));
+
+  return { ...analysis, recommendations: normalized };
+};
+
+const stableStringify = (value: unknown): string => {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  return `{${keys
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+    .join(",")}}`;
+};
+
+const hashString = (input: string): string => {
+  let hash = 5381;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = ((hash << 5) + hash) ^ input.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(36);
+};
+
+const getCachedAnalysis = (cacheKey: string): BloodworkAnalysis | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(cacheKey);
+    if (!raw) return null;
+    return JSON.parse(raw) as BloodworkAnalysis;
+  } catch {
+    return null;
+  }
+};
+
+const setCachedAnalysis = (cacheKey: string, analysis: BloodworkAnalysis) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(cacheKey, JSON.stringify(analysis));
+  } catch {
+    // Ignore storage errors (quota, privacy mode).
+  }
+};
+
+const buildAnalysisCacheKey = (kind: string, payload: unknown): string => {
+  const base = stableStringify({
+    version: ANALYSIS_CACHE_VERSION,
+    kind,
+    model: ANALYSIS_MODEL,
+    payload
+  });
+  return `analysis:${hashString(base)}`;
+};
+
 /**
  * Analyzes bloodwork data using OpenAI and recommends supplements
  */
 export async function analyzeBloodwork(
   bloodworkData: BloodworkData
 ): Promise<BloodworkAnalysis> {
+  const cacheKey = buildAnalysisCacheKey("bloodwork", {
+    bloodworkData,
+    supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id)
+  });
+  const cached = getCachedAnalysis(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const supplementsList = AVAILABLE_SUPPLEMENTS.map(
     (s) => `${s.name} (${s.size}) - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
   ).join("\n");
@@ -63,6 +169,9 @@ Please analyze the bloodwork and provide:
 3. Positive findings or strengths
 4. Specific supplement recommendations from our list that would address any deficiencies or support optimal health
 5. Detailed insights by health category (e.g., cardiovascular, immune system, energy levels, etc.)
+
+Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
+Recommendations must be non-empty (at least 3 items). Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
 
 IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency:
 - Spirulina: 3-5g per day (1 teaspoon = ~3g)
@@ -121,7 +230,7 @@ Respond in JSON format with this structure:
       messages: [
         {
           role: "system",
-          content: "You are a knowledgeable health and nutrition expert who analyzes bloodwork and provides evidence-based supplement recommendations with ACCURATE dosages that vary based on the specific supplement and severity of deficiencies. Always respond with valid JSON."
+          content: "You are a knowledgeable health and nutrition expert who analyzes bloodwork and provides evidence-based supplement recommendations with ACCURATE dosages that vary based on the specific supplement and severity of deficiencies. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
         },
         {
           role: "user",
@@ -129,7 +238,7 @@ Respond in JSON format with this structure:
         }
       ],
       response_format: { type: "json_object" },
-      temperature: 0.7
+      temperature: ANALYSIS_TEMPERATURE
     });
 
     const content = response.choices[0].message.content;
@@ -138,7 +247,9 @@ Respond in JSON format with this structure:
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    return analysis;
+    const normalized = normalizeRecommendations(analysis);
+    setCachedAnalysis(cacheKey, normalized);
+    return normalized;
   } catch (error) {
     console.error("Error analyzing bloodwork:", error);
     throw new Error("Failed to analyze bloodwork. Please try again.");
@@ -149,6 +260,8 @@ Respond in JSON format with this structure:
  * Analyzes bloodwork from a PDF file by converting it to images
  */
 export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis> {
+  const pdfFingerprint = `${file.name}:${file.size}:${file.lastModified}`;
+
   const supplementsList = AVAILABLE_SUPPLEMENTS.map(
     (s) => `${s.id}: ${s.name} - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
   ).join("\n");
@@ -165,12 +278,22 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
     // In the future, we could analyze all pages and combine results
     const firstPageImage = images[0];
 
+    const cacheKey = buildAnalysisCacheKey("pdf", {
+      pdfFingerprint,
+      firstPageImageHash: hashString(firstPageImage),
+      supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id)
+    });
+    const cached = getCachedAnalysis(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: ANALYSIS_MODEL,
       messages: [
         {
           role: "system",
-          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized supplement recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Always respond with valid JSON."
+          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized supplement recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
         },
         {
           role: "user",
@@ -188,6 +311,11 @@ Please provide:
 3. Positive findings or strengths (values within healthy ranges)
 4. Specific supplement recommendations from our list that would address any deficiencies or support optimal health
 5. Detailed insights by health category
+
+Use layman-friendly language (avoid medical jargon, define any necessary terms).
+
+Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
+Recommendations must be non-empty (at least 3 items). Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
 
 IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency:
 - Spirulina: 3-5g per day (1 teaspoon = ~3g)
@@ -250,7 +378,7 @@ Respond in JSON format with this structure:
         }
       ],
       response_format: { type: "json_object" },
-      temperature: 0.7,
+      temperature: ANALYSIS_TEMPERATURE,
       max_tokens: 2000
     });
 
@@ -260,7 +388,9 @@ Respond in JSON format with this structure:
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    return analysis;
+    const normalized = normalizeRecommendations(analysis);
+    setCachedAnalysis(cacheKey, normalized);
+    return normalized;
   } catch (error) {
     console.error("Error analyzing PDF bloodwork file:", error);
     throw new Error("Failed to analyze PDF file. Please ensure the PDF contains clear bloodwork data.");
@@ -274,6 +404,16 @@ export async function analyzeBloodworkFile(
   base64Image: string,
   fileType: string
 ): Promise<BloodworkAnalysis> {
+  const cacheKey = buildAnalysisCacheKey("image", {
+    imageHash: hashString(base64Image),
+    fileType,
+    supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id)
+  });
+  const cached = getCachedAnalysis(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const supplementsList = AVAILABLE_SUPPLEMENTS.map(
     (s) => `${s.id}: ${s.name} - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
   ).join("\n");
@@ -295,11 +435,11 @@ export async function analyzeBloodworkFile(
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: ANALYSIS_MODEL,
       messages: [
         {
           role: "system",
-          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized supplement recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Always respond with valid JSON."
+          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized supplement recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
         },
         {
           role: "user",
@@ -317,6 +457,11 @@ Please provide:
 3. Positive findings or strengths (values within healthy ranges)
 4. Specific supplement recommendations from our list that would address any deficiencies or support optimal health
 5. Detailed insights by health category
+
+Use layman-friendly language (avoid medical jargon, define any necessary terms).
+
+Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
+Recommendations must be non-empty (at least 3 items). Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
 
 IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency:
 - Spirulina: 3-5g per day (1 teaspoon = ~3g)
@@ -379,7 +524,7 @@ Respond in JSON format with this structure:
         }
       ],
       response_format: { type: "json_object" },
-      temperature: 0.7,
+      temperature: ANALYSIS_TEMPERATURE,
       max_tokens: 2000
     });
 
@@ -389,7 +534,9 @@ Respond in JSON format with this structure:
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    return analysis;
+    const normalized = normalizeRecommendations(analysis);
+    setCachedAnalysis(cacheKey, normalized);
+    return normalized;
   } catch (error) {
     console.error("Error analyzing bloodwork file:", error);
     throw new Error("Failed to analyze bloodwork file. Please ensure the image is clear and contains bloodwork data.");
@@ -427,7 +574,7 @@ Provide clear, actionable insights that are easy to understand.`;
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: ANALYSIS_MODEL,
       messages: [
         {
           role: "system",
@@ -448,4 +595,3 @@ Provide clear, actionable insights that are easy to understand.`;
     throw new Error("Failed to generate health insights.");
   }
 }
-

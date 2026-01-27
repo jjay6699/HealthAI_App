@@ -36,20 +36,6 @@ export const AVAILABLE_SUPPLEMENTS: Supplement[] = [
     keyNutrients: ["Magnesium", "Iron", "Flavonoids", "Theobromine"]
   },
   {
-    id: "just-green",
-    name: "Just Green",
-    size: "225g",
-    benefits: ["Alkalizing blend", "Nutrient-dense", "Supports immunity"],
-    keyNutrients: ["Chlorophyll", "Vitamins", "Minerals", "Antioxidants"]
-  },
-  {
-    id: "just-berries",
-    name: "Just Berries",
-    size: "180g",
-    benefits: ["Antioxidant powerhouse", "Supports brain health", "Anti-inflammatory"],
-    keyNutrients: ["Anthocyanins", "Vitamin C", "Fiber", "Polyphenols"]
-  },
-  {
     id: "superfood-collagen",
     name: "Superfood Collagen Tripeptide",
     size: "180g",
@@ -127,25 +113,11 @@ export const AVAILABLE_SUPPLEMENTS: Supplement[] = [
     keyNutrients: ["Chlorophyll", "Vitamin C", "Iron", "Calcium"]
   },
   {
-    id: "just-slim",
-    name: "Just Slim",
-    size: "180g",
-    benefits: ["Weight management", "Metabolism support", "Appetite control"],
-    keyNutrients: ["Fiber", "Green tea extract", "Chromium", "B vitamins"]
-  },
-  {
     id: "maqui-berry-powder",
     name: "Maqui Berry Powder",
     size: "120g",
     benefits: ["Highest antioxidant content", "Anti-aging", "Blood sugar support"],
     keyNutrients: ["Anthocyanins", "Vitamin C", "Iron", "Potassium"]
-  },
-  {
-    id: "just-mushroom",
-    name: "Just Mushroom",
-    size: "180g",
-    benefits: ["Immune support", "Adaptogenic", "Cognitive function"],
-    keyNutrients: ["Beta-glucans", "Vitamin D", "B vitamins", "Selenium"]
   },
   {
     id: "ceylon-cinnamon-powder",
@@ -190,4 +162,3 @@ export const AVAILABLE_SUPPLEMENTS: Supplement[] = [
     keyNutrients: ["Vitamin C", "Citric acid", "Flavonoids", "Potassium"]
   }
 ];
-
