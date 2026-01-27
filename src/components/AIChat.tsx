@@ -34,7 +34,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const [questionnaire, setQuestionnaire] = useState({
     eligibility18Plus: "",
     ageRange: "",
-    sexAtBirth: "",
+    gender: "",
     heightRange: "",
     weightRange: "",
     primaryGoals: [] as string[],
@@ -48,7 +48,6 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
     allergies: "",
     pregnantOrBreastfeeding: "",
     takingMedications: "",
-    preferredFormat: "",
     confirmDisclaimer: false,
     confirmAccuracy: false
   });
@@ -256,16 +255,16 @@ If you need more context before giving tailored guidance, ask: "Would you like t
             ))}
           </div>
 
-          <label style={styles.fieldLabel}>Sex at birth</label>
+          <label style={styles.fieldLabel}>Gender</label>
           <div style={styles.optionGrid}>
             {["Male", "Female", "Prefer not to say"].map((value) => (
               <label key={value} style={styles.optionLabel}>
                 <input
                   type="radio"
-                  name="sexAtBirth"
+                  name="gender"
                   value={value}
-                  checked={questionnaire.sexAtBirth === value}
-                  onChange={(e) => setQuestionnaire(prev => ({ ...prev, sexAtBirth: e.target.value }))}
+                  checked={questionnaire.gender === value}
+                  onChange={(e) => setQuestionnaire(prev => ({ ...prev, gender: e.target.value }))}
                 />
                 <span>{value}</span>
               </label>
@@ -497,24 +496,28 @@ If you need more context before giving tailored guidance, ask: "Would you like t
     },
     {
       id: "safety",
-      title: "Safety & preferences",
+      title: "Safety",
       body: (
         <div style={styles.fieldGroup}>
-          <label style={styles.fieldLabel}>Are you currently pregnant or breastfeeding?</label>
-          <div style={styles.optionGrid}>
-            {["Yes", "No", "Not applicable"].map((value) => (
-              <label key={value} style={styles.optionLabel}>
-                <input
-                  type="radio"
-                  name="pregnantOrBreastfeeding"
-                  value={value}
-                  checked={questionnaire.pregnantOrBreastfeeding === value}
-                  onChange={(e) => setQuestionnaire(prev => ({ ...prev, pregnantOrBreastfeeding: e.target.value }))}
-                />
-                <span>{value}</span>
-              </label>
-            ))}
-          </div>
+          {questionnaire.gender === "Female" && (
+            <>
+              <label style={styles.fieldLabel}>Are you currently pregnant or breastfeeding?</label>
+              <div style={styles.optionGrid}>
+                {["Yes", "No", "Not applicable"].map((value) => (
+                  <label key={value} style={styles.optionLabel}>
+                    <input
+                      type="radio"
+                      name="pregnantOrBreastfeeding"
+                      value={value}
+                      checked={questionnaire.pregnantOrBreastfeeding === value}
+                      onChange={(e) => setQuestionnaire(prev => ({ ...prev, pregnantOrBreastfeeding: e.target.value }))}
+                    />
+                    <span>{value}</span>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
 
           <label style={styles.fieldLabel}>Are you currently taking prescription medications?</label>
           <div style={styles.optionGrid}>
@@ -534,22 +537,6 @@ If you need more context before giving tailored guidance, ask: "Would you like t
           <p style={styles.helperText}>
             If yes, we will avoid ingredient combinations that may not be suitable.
           </p>
-
-          <label style={styles.fieldLabel}>Preferred supplement format</label>
-          <div style={styles.optionGrid}>
-            {["Powder", "Capsules", "Liquid", "No preference"].map((value) => (
-              <label key={value} style={styles.optionLabel}>
-                <input
-                  type="radio"
-                  name="preferredFormat"
-                  value={value}
-                  checked={questionnaire.preferredFormat === value}
-                  onChange={(e) => setQuestionnaire(prev => ({ ...prev, preferredFormat: e.target.value }))}
-                />
-                <span>{value}</span>
-              </label>
-            ))}
-          </div>
         </div>
       )
     },
@@ -614,7 +601,7 @@ If you need more context before giving tailored guidance, ask: "Would you like t
     const lines = [
       `Eligibility 18+: ${questionnaire.eligibility18Plus || "Not provided"}`,
       `Age range: ${questionnaire.ageRange || "Not provided"}`,
-      `Sex at birth: ${questionnaire.sexAtBirth || "Not provided"}`,
+      `Gender: ${questionnaire.gender || "Not provided"}`,
       `Height: ${questionnaire.heightRange || "Not provided"}`,
       `Weight range: ${questionnaire.weightRange || "Not provided"}`,
       `Primary goals: ${questionnaire.primaryGoals.length ? questionnaire.primaryGoals.join(", ") : "Not provided"}`,
@@ -627,7 +614,6 @@ If you need more context before giving tailored guidance, ask: "Would you like t
       `Sensitivities: ${questionnaire.sensitivities.length ? questionnaire.sensitivities.join(", ") : "Not provided"}`,
       `Allergies: ${questionnaire.allergies || "Not provided"}`,
       `Pregnant or breastfeeding: ${questionnaire.pregnantOrBreastfeeding || "Not provided"}`,
-      `Preferred format: ${questionnaire.preferredFormat || "Not provided"}`,
       `Taking prescription medications: ${questionnaire.takingMedications || "Not provided"}`,
       `Disclaimer confirmed: ${questionnaire.confirmDisclaimer ? "Yes" : "No"}`,
       `Accuracy confirmed: ${questionnaire.confirmAccuracy ? "Yes" : "No"}`
