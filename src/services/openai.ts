@@ -26,6 +26,9 @@ export interface SupplementRecommendation {
   reason: string;
   priority: "high" | "medium" | "low";
   dosage?: string;
+  dosageGramsPerDay?: number;
+  pillsPerDay?: number;
+  pillSizeMg?: number;
 }
 
 export interface BloodworkAnalysis {
@@ -178,7 +181,9 @@ Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends
 Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
 Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default supplements.
 
-IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements:
+IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements.
+Use grams only (e.g., "3 g per day"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
+Also include numeric fields: dosageGramsPerDay (number of grams per day), pillSizeMg (number, assume 500), and pillsPerDay (number, calculated as dosageGramsPerDay * 1000 / pillSizeMg).
 - Spirulina: 3-5g per day (1 teaspoon = ~3g)
 - Chlorella: 2-3g per day
 - Wheatgrass: 3-5g per day (1 teaspoon)
@@ -217,7 +222,10 @@ Respond in JSON format with this structure:
       "supplementName": "Supplement Name",
       "reason": "Why this supplement is recommended based on specific bloodwork values",
       "priority": "high|medium|low",
-      "dosage": "Accurate daily intake amount based on guidelines above"
+      "dosage": "Accurate daily intake amount in grams (e.g., '3 g per day')",
+      "dosageGramsPerDay": 3,
+      "pillSizeMg": 500,
+      "pillsPerDay": 6
     }
   ],
   "detailedInsights": [
@@ -323,7 +331,9 @@ Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends
 Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
 Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default supplements.
 
-IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements:
+IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements.
+Use grams only (e.g., "3 g per day"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
+Also include numeric fields: dosageGramsPerDay (number of grams per day), pillSizeMg (number, assume 500), and pillsPerDay (number, calculated as dosageGramsPerDay * 1000 / pillSizeMg).
 - Spirulina: 3-5g per day (1 teaspoon = ~3g)
 - Chlorella: 2-3g per day
 - Wheatgrass: 3-5g per day (1 teaspoon)
@@ -362,7 +372,10 @@ Respond in JSON format with this structure:
       "supplementName": "Supplement Name",
       "reason": "Why this supplement is recommended based on the bloodwork",
       "priority": "high|medium|low",
-      "dosage": "Daily intake amount (e.g., '5g per day' or '1 tablespoon per day' for chia seeds)"
+      "dosage": "Daily intake amount in grams (e.g., '5 g per day')",
+      "dosageGramsPerDay": 5,
+      "pillSizeMg": 500,
+      "pillsPerDay": 10
     }
   ],
   "detailedInsights": [
@@ -470,7 +483,9 @@ Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends
 Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
 Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default supplements.
 
-IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements:
+IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements.
+Use grams only (e.g., "3 g per day"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
+Also include numeric fields: dosageGramsPerDay (number of grams per day), pillSizeMg (number, assume 500), and pillsPerDay (number, calculated as dosageGramsPerDay * 1000 / pillSizeMg).
 - Spirulina: 3-5g per day (1 teaspoon = ~3g)
 - Chlorella: 2-3g per day
 - Wheatgrass: 3-5g per day (1 teaspoon)
@@ -509,7 +524,10 @@ Respond in JSON format with this structure:
       "supplementName": "Supplement Name",
       "reason": "Why this supplement is recommended based on the bloodwork",
       "priority": "high|medium|low",
-      "dosage": "Daily intake amount (e.g., '5g per day' or '1 tablespoon per day' for chia seeds)"
+      "dosage": "Daily intake amount in grams (e.g., '5 g per day')",
+      "dosageGramsPerDay": 5,
+      "pillSizeMg": 500,
+      "pillsPerDay": 10
     }
   ],
   "detailedInsights": [

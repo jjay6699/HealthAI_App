@@ -83,10 +83,35 @@ const SupplementsScreen = () => {
     );
   }
 
+  const parseDosageGrams = (dosage?: string) => {
+    if (!dosage) return undefined;
+    const matches = [...dosage.matchAll(/(\d+(\.\d+)?)\s*g/gi)].map((m) => Number(m[1]));
+    if (matches.length === 0) return undefined;
+    if (matches.length === 1) return matches[0];
+    const sum = matches.reduce((acc, val) => acc + val, 0);
+    return sum / matches.length;
+  };
+
+  const totalGrams = recommendations.reduce((sum, rec) => {
+    const grams = rec.dosageGramsPerDay ?? parseDosageGrams(rec.dosage);
+    return grams ? sum + grams : sum;
+  }, 0);
+
+  const totalPills = recommendations.reduce((sum, rec) => {
+    return rec.pillsPerDay ? sum + rec.pillsPerDay : sum;
+  }, 0);
+
+  const pillSizeMg = recommendations.find((rec) => rec.pillSizeMg)?.pillSizeMg;
+
   // Generate combined summary
   const generateSummary = () => {
     const supplementNames = recommendations.map(rec => rec.supplementName).join(", ");
-    return `Your personalized blend includes ${supplementNames}. This combination is specifically formulated based on your bloodwork analysis to address your unique nutritional needs.`;
+    const gramsText = totalGrams > 0 ? `Total daily blend: ${totalGrams.toFixed(1)} g` : "";
+    const pillsText = totalPills > 0 ? `Pills per day: ${totalPills}` : "";
+    const pillSizeText = pillSizeMg ? `Pill size: ${pillSizeMg} mg` : "";
+    const summaryParts = [gramsText, pillsText, pillSizeText].filter(Boolean).join(" • ");
+    const summaryTail = summaryParts ? ` ${summaryParts}.` : "";
+    return `Your personalized blend includes ${supplementNames}. This combination is specifically formulated based on your bloodwork analysis to address your unique nutritional needs.${summaryTail}`;
   };
 
   return (
@@ -141,6 +166,16 @@ const SupplementsScreen = () => {
                 <div style={styles.section}>
                   <span style={styles.label}>Daily dosage</span>
                   <p style={styles.body}>{rec.dosage}</p>
+                </div>
+              )}
+              {(rec.dosageGramsPerDay || rec.pillsPerDay) && (
+                <div style={styles.section}>
+                  <span style={styles.label}>Pill plan</span>
+                  <p style={styles.body}>
+                    {rec.dosageGramsPerDay ? `${rec.dosageGramsPerDay} g/day` : "Grams per day: N/A"}
+                    {rec.pillsPerDay ? ` • ${rec.pillsPerDay} pills/day` : ""}
+                    {rec.pillSizeMg ? ` • ${rec.pillSizeMg} mg per pill` : ""}
+                  </p>
                 </div>
               )}
 
