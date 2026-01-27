@@ -165,10 +165,10 @@ ${supplementsList}
 
 Please analyze the bloodwork and provide:
 1. A brief summary of the overall health status
-2. Key concerns or areas that need attention
-3. Positive findings or strengths
+2. Key concerns or areas that need attention (ONLY values outside reference ranges)
+3. Positive findings or strengths (ONLY values clearly within healthy ranges)
 4. Specific supplement recommendations from our list that would address any deficiencies or support optimal health
-5. Detailed insights by health category (e.g., cardiovascular, immune system, energy levels, etc.)
+5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
 
 Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
 Recommendations must be non-empty (at least 3 items). Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
@@ -307,10 +307,10 @@ ${supplementsList}
 
 Please provide:
 1. A brief summary of the overall health status
-2. Key concerns or areas that need attention (values outside reference ranges)
-3. Positive findings or strengths (values within healthy ranges)
+2. Key concerns or areas that need attention (ONLY values outside reference ranges)
+3. Positive findings or strengths (ONLY values clearly within healthy ranges)
 4. Specific supplement recommendations from our list that would address any deficiencies or support optimal health
-5. Detailed insights by health category
+5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
 
 Use layman-friendly language (avoid medical jargon, define any necessary terms).
 
@@ -453,10 +453,10 @@ ${supplementsList}
 
 Please provide:
 1. A brief summary of the overall health status
-2. Key concerns or areas that need attention (values outside reference ranges)
-3. Positive findings or strengths (values within healthy ranges)
+2. Key concerns or areas that need attention (ONLY values outside reference ranges)
+3. Positive findings or strengths (ONLY values clearly within healthy ranges)
 4. Specific supplement recommendations from our list that would address any deficiencies or support optimal health
-5. Detailed insights by health category
+5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
 
 Use layman-friendly language (avoid medical jargon, define any necessary terms).
 
