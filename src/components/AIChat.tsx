@@ -807,9 +807,54 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
   };
 
   const analyzeImagesInChat = async (files: File[]) => {
-    for (const file of files) {
-      // eslint-disable-next-line no-await-in-loop
-      await analyzeImageInChat(file);
+    setIsLoading(true);
+    try {
+      const imageParts = await Promise.all(
+        files.map(async (file) => {
+          const base64 = await fileToBase64(file);
+          return {
+            type: "image_url" as const,
+            image_url: { url: `data:${file.type || "image/jpeg"};base64,${base64}` }
+          };
+        })
+      );
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful health assistant. Analyze all provided images together and provide one overall report. Include: (1) Overview of what you see, (2) Notable findings, (3) Plausible non-diagnostic possibilities, (4) Safe next steps. Be concise but complete (6-10 sentences). Avoid markdown/bold and do not end mid-sentence."
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Analyze all images together and provide one overall report in plain language." },
+              ...imageParts
+            ]
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 900
+      });
+
+      const assistantMessage: Message = {
+        role: "assistant",
+        content: stripDisclaimers(
+          response.choices[0].message.content || "I couldn't analyze those images. Please try another set."
+        )
+      };
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error("Error analyzing images:", error);
+      setMessages(prev => [
+        ...prev,
+        { role: "assistant", content: "I ran into an error analyzing those images. Please try again." }
+      ]);
+    } finally {
+      setIsLoading(false);
+      setUploadedFile(null);
+      setPendingUploads([]);
     }
   };
 
