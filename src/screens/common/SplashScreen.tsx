@@ -22,33 +22,35 @@ const SplashScreen = () => {
             <span style={styles.kickerPill}>Precision nutrition</span>
             <Badge label="We protect your data" tone="success" />
           </div>
+          <p style={styles.proofLine}>Advanced AI trained on 500,000+ peer-reviewed studies</p>
           <h1 style={styles.title}>
-            Clarity for your <span style={styles.titleGradient}>health</span>.
+            Turn lab results into <span style={styles.titleGradient}>clear health guidance</span>.
           </h1>
           <p style={styles.subtitle}>
-            Advanced AI trained on <strong>500,000+ peer-reviewed studies</strong> and clinical journals translates your biomarkers into trustworthy, actionable guidance.
+            Understand what your biomarkers mean, and get personalized actions you can take right away.
           </p>
+          <p style={styles.trustLine}>Built with clinicians and nutrition scientists.</p>
         </div>
 
         <div style={styles.metrics}>
           <div style={styles.metricInline}>
-            <span style={styles.metricValue}>24/7</span>
-            <span style={styles.metricLabel}>Biomarker insights</span>
+            <span style={styles.metricValue}>24/7 insights</span>
+            <span style={styles.metricLabel}>Always-on biomarker analysis</span>
           </div>
           <div style={styles.metricDivider} />
           <div style={styles.metricInline}>
-            <span style={styles.metricValue}>3 min</span>
-            <span style={styles.metricLabel}>Average setup</span>
+            <span style={styles.metricValue}>3-minute setup</span>
+            <span style={styles.metricLabel}>No onboarding friction</span>
           </div>
           <div style={styles.metricDivider} />
           <div style={styles.metricInline}>
-            <span style={styles.metricValue}>Private</span>
-            <span style={styles.metricLabel}>Local-first data</span>
+            <span style={styles.metricValue}>Private by design</span>
+            <span style={styles.metricLabel}>Your data stays on your device</span>
           </div>
         </div>
 
         <div style={styles.ctaShell}>
-          <Button title="Get started" onClick={() => navigate("/login")} style={styles.ctaButton} />
+          <Button title="Analyze my biomarkers" onClick={() => navigate("/login")} style={styles.ctaButton} />
         </div>
       </main>
     </div>
@@ -120,6 +122,12 @@ const createStyles = (theme: AppTheme) => {
       maxWidth: 460,
       alignItems: "center"
     },
+    proofLine: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: theme.colors.textSecondary,
+      margin: 0
+    },
     kickerRow: {
       display: "flex",
       alignItems: "center",
@@ -156,6 +164,11 @@ const createStyles = (theme: AppTheme) => {
       lineHeight: "28px",
       maxWidth: 420
     },
+    trustLine: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      margin: 0
+    },
     ctaShell: {
       display: "flex",
       flexDirection: "column" as const,
@@ -167,7 +180,9 @@ const createStyles = (theme: AppTheme) => {
       minWidth: 220,
       maxWidth: 320,
       width: "70%",
-      borderRadius: 999
+      borderRadius: 999,
+      background: "#B6763B",
+      boxShadow: "0 14px 24px rgba(182,118,59,0.28)"
     },
     metrics: {
       display: "flex",
