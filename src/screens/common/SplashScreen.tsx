@@ -14,13 +14,7 @@ const SplashScreen = () => {
       <div style={styles.gradientBlob} />
       <div style={styles.glowRing} />
       <div style={styles.topHighlight} />
-      <header style={styles.header}>
-        <div style={styles.logoStack}>
-          <span style={styles.logoText}>New Gene</span>
-          <span style={styles.logoCaption}>Personalised lab intelligence</span>
-        </div>
-        <div style={styles.headerRule} />
-      </header>
+      <header style={styles.header} />
 
       <main style={styles.main}>
         <div style={styles.copyBlock}>
@@ -54,7 +48,7 @@ const SplashScreen = () => {
         </div>
 
         <div style={styles.ctaShell}>
-          <Button title="Get started" fullWidth onClick={() => navigate("/login")} />
+          <Button title="Get started" onClick={() => navigate("/login")} style={styles.ctaButton} />
         </div>
       </main>
     </div>
@@ -67,13 +61,15 @@ const createStyles = (theme: AppTheme) => {
   return {
     page: {
       minHeight: "100vh",
+      height: "100vh",
       display: "flex",
       flexDirection: "column" as const,
       alignItems: "center",
       justifyContent: "center",
       background: "radial-gradient(circle at top left, #FFF3E8 0%, #FFF9F4 40%, #FFFFFF 75%)",
       position: "relative" as const,
-      padding: `${theme.spacing.xxl}px ${theme.spacing.xl}px`
+      padding: `${theme.spacing.xl}px ${theme.spacing.xl}px`,
+      overflow: "hidden"
     },
     gradientBlob: {
       position: "absolute" as const,
@@ -104,54 +100,30 @@ const createStyles = (theme: AppTheme) => {
       zIndex: 0
     },
     header: {
-      display: "flex",
-      alignItems: "center",
-      gap: theme.spacing.lg,
-      zIndex: 1,
-      marginBottom: theme.spacing.xl,
-      alignSelf: "center",
-      width: contentWidth
-    },
-    headerRule: {
-      flex: 1,
-      height: 1,
-      background: "linear-gradient(90deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0) 100%)",
-      marginTop: 12
-    },
-    logoStack: {
-      display: "flex",
-      flexDirection: "column" as const,
-      gap: 2
-    },
-    logoText: {
-      fontSize: 18,
-      fontWeight: 700,
-      color: theme.colors.text
-    },
-    logoCaption: {
-      fontSize: 11,
-      letterSpacing: 1.4,
-      textTransform: "uppercase" as const,
-      color: theme.colors.textSecondary
+      height: 24
     },
     main: {
       width: contentWidth,
       display: "flex",
       flexDirection: "column" as const,
-      gap: theme.spacing.xl,
-      textAlign: "left" as const,
-      zIndex: 1
+      gap: theme.spacing.lg,
+      textAlign: "center" as const,
+      zIndex: 1,
+      alignItems: "center",
+      flex: 1,
+      justifyContent: "center"
     },
     copyBlock: {
       display: "flex",
       flexDirection: "column" as const,
       gap: theme.spacing.md,
-      maxWidth: 460
+      maxWidth: 460,
+      alignItems: "center"
     },
     kickerRow: {
       display: "flex",
       alignItems: "center",
-      justifyContent: "flex-start",
+      justifyContent: "center",
       gap: theme.spacing.sm,
       flexWrap: "wrap" as const
     },
@@ -187,7 +159,15 @@ const createStyles = (theme: AppTheme) => {
     ctaShell: {
       display: "flex",
       flexDirection: "column" as const,
-      gap: theme.spacing.sm
+      gap: theme.spacing.sm,
+      width: "100%",
+      alignItems: "center"
+    },
+    ctaButton: {
+      minWidth: 220,
+      maxWidth: 320,
+      width: "70%",
+      borderRadius: 999
     },
     metrics: {
       display: "flex",
@@ -195,7 +175,8 @@ const createStyles = (theme: AppTheme) => {
       gap: theme.spacing.md,
       flexWrap: "wrap" as const,
       paddingTop: theme.spacing.sm,
-      borderTop: "1px solid rgba(0,0,0,0.06)"
+      borderTop: "1px solid rgba(0,0,0,0.06)",
+      justifyContent: "center"
     },
     metricInline: {
       display: "flex",
@@ -215,6 +196,12 @@ const createStyles = (theme: AppTheme) => {
     metricLabel: {
       fontSize: 12,
       color: theme.colors.textSecondary
+    },
+    footer: {
+      display: "none"
+    },
+    footerInner: {
+      display: "none"
     }
   };
 };
