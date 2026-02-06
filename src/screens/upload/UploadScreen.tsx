@@ -224,13 +224,19 @@ const UploadScreen = () => {
             style={{ display: "none" }}
             disabled={isAnalyzing}
           />
-          <span style={styles.optionTitle}>Upload PDF or image</span>
-          <span style={styles.optionDescription}>Supports PDF, JPG, PNG, WEBP. Upload your bloodwork report or take a clear photo.</span>
+          <span style={styles.optionTitle}>Upload blood test report, genetic report, imaging and scans report</span>
+          <span style={styles.optionDescription}>Supports PDF, JPG, PNG, WEBP. Upload your reports or take a clear photo.</span>
         </label>
         <button type="button" style={{ ...styles.optionButton, ...styles.disabled }} disabled>
           <span style={{ ...styles.optionTitle, ...styles.disabledText }}>Connect with our doctors and pharmacists (coming soon)</span>
           <span style={{ ...styles.optionDescription, ...styles.disabledText }}>
             Chat with trusted medical professionals for tailored advice, treatment insights, and support—right when you need it.
+          </span>
+        </button>
+        <button type="button" style={{ ...styles.optionButton, ...styles.disabled }} disabled>
+          <span style={{ ...styles.optionTitle, ...styles.disabledText }}>Connect with your smartwatch (coming soon)</span>
+          <span style={{ ...styles.optionDescription, ...styles.disabledText }}>
+            Sync wearable data to enrich your timeline and personalize recommendations.
           </span>
         </button>
       </Card>

@@ -11,9 +11,31 @@ type ProfileState = {
   name: string;
   email: string;
   dob: string;
+  gender: string;
   height: number;
   weight: number;
   activityLevel: string;
+  exerciseDays: number;
+  minutesPerSession: number;
+  sleepDuration: string;
+  stressLevel: string;
+  bloodPressure: string;
+  fastingGlucose: number;
+  hba1c: number;
+  restingHeartRate: number;
+  waistCircumference: number;
+  bodyFat: number;
+  dietPattern: string;
+  mealsPerDay: number;
+  caffeineIntake: string;
+  waterIntake: number;
+  allergies: string;
+  conditions: string;
+  surgeries: string;
+  medications: string;
+  supplements: string;
+  topPriorities: string;
+  dataProcessingConsent: string;
   dataProcessing: string;
   dataStorage: string;
   research: string;
@@ -86,9 +108,31 @@ const ProfileScreen = () => {
       name: "JJAY TECH",
       email: "contact@jjay.info",
       dob: "1986-07-28",
+      gender: "",
       height: 175, // Default height in cm
       weight: 70, // Default weight in kg
       activityLevel: "Moderate",
+      exerciseDays: 0,
+      minutesPerSession: 0,
+      sleepDuration: "",
+      stressLevel: "",
+      bloodPressure: "",
+      fastingGlucose: 0,
+      hba1c: 0,
+      restingHeartRate: 0,
+      waistCircumference: 0,
+      bodyFat: 0,
+      dietPattern: "",
+      mealsPerDay: 0,
+      caffeineIntake: "",
+      waterIntake: 0,
+      allergies: "",
+      conditions: "",
+      surgeries: "",
+      medications: "",
+      supplements: "",
+      topPriorities: "",
+      dataProcessingConsent: "",
       dataProcessing: "Allowed",
       dataStorage: "Opted in",
       research: "Opted out",
@@ -229,6 +273,10 @@ const ProfileScreen = () => {
     navigate("/login");
   };
 
+  const formatValue = (value: string) => (value && value.trim() ? value : "Not set");
+  const formatNumber = (value: number, unit?: string) =>
+    value && value > 0 ? `${value}${unit ? ` ${unit}` : ""}` : "Not set";
+
   return (
     <div style={styles.page}>
       <header style={styles.hero}>
@@ -259,18 +307,63 @@ const ProfileScreen = () => {
           </button>
         </div>
       </header>
-
       <Card style={styles.card}>
         <SectionHeader title="Personal info" />
         <ProfileRow label="Full name" value={profile.name} action="Edit" onEdit={() => openEdit("name", "Full name")} />
         <ProfileRow label="Email" value={profile.email} action="Edit" onEdit={() => openEdit("email", "Email address")} />
         <ProfileRow label="Date of birth" value={profile.dob} action="Edit" onEdit={() => openEdit("dob", "Date of birth")} />
+        <ProfileRow label="Gender" value={formatValue(profile.gender)} action="Edit" onEdit={() => openEdit("gender", "Gender")} />
       </Card>
 
       <Card style={styles.card}>
         <SectionHeader title="Health data" />
         <ProfileRow label="Measurements" value={`${profile.height} cm • ${profile.weight} kg`} action="Update" onEdit={() => setIsEditingMeasurements(true)} />
-        <ProfileRow label="Activity level" value={profile.activityLevel} action="Update" onEdit={() => openEdit("activityLevel", "Activity level")} />
+        <ProfileRow label="Activity level" value={formatValue(profile.activityLevel)} action="Update" onEdit={() => openEdit("activityLevel", "Activity level")} />
+      </Card>
+
+      <Card style={styles.card}>
+        <SectionHeader title="Vitals & markers" />
+        <div style={styles.infoGrid}>
+          <InfoItem label="Blood pressure" value={formatValue(profile.bloodPressure)} />
+          <InfoItem label="Fasting glucose" value={formatNumber(profile.fastingGlucose, "mg/dL")} />
+          <InfoItem label="HbA1c" value={formatNumber(profile.hba1c, "%")} />
+          <InfoItem label="Resting HR" value={formatNumber(profile.restingHeartRate, "bpm")} />
+          <InfoItem label="Waist circumference" value={formatNumber(profile.waistCircumference, "cm")} />
+          <InfoItem label="Body fat" value={formatNumber(profile.bodyFat, "%")} />
+        </div>
+      </Card>
+
+      <Card style={styles.card}>
+        <SectionHeader title="Lifestyle & diet" />
+        <div style={styles.infoGrid}>
+          <InfoItem label="Exercise days" value={formatNumber(profile.exerciseDays, "days/week")} />
+          <InfoItem label="Minutes per session" value={formatNumber(profile.minutesPerSession, "min")} />
+          <InfoItem label="Sleep duration" value={formatValue(profile.sleepDuration)} />
+          <InfoItem label="Stress level" value={formatValue(profile.stressLevel)} />
+          <InfoItem label="Diet pattern" value={formatValue(profile.dietPattern)} />
+          <InfoItem label="Meals per day" value={formatNumber(profile.mealsPerDay)} />
+          <InfoItem label="Caffeine intake" value={formatValue(profile.caffeineIntake)} />
+          <InfoItem label="Water intake" value={formatNumber(profile.waterIntake, "cups/day")} />
+          <InfoItem label="Allergies" value={formatValue(profile.allergies)} />
+        </div>
+      </Card>
+
+      <Card style={styles.card}>
+        <SectionHeader title="Medical context" />
+        <div style={styles.infoGrid}>
+          <InfoItem label="Conditions" value={formatValue(profile.conditions)} />
+          <InfoItem label="Surgeries" value={formatValue(profile.surgeries)} />
+          <InfoItem label="Medications" value={formatValue(profile.medications)} />
+          <InfoItem label="Supplements" value={formatValue(profile.supplements)} />
+        </div>
+      </Card>
+
+      <Card style={styles.card}>
+        <SectionHeader title="Goals & consent" />
+        <div style={styles.infoGrid}>
+          <InfoItem label="Top priorities" value={formatValue(profile.topPriorities)} />
+          <InfoItem label="Data consent" value={formatValue(profile.dataProcessingConsent)} />
+        </div>
       </Card>
 
       {/* Order History */}
@@ -506,6 +599,17 @@ const ProfileRow = ({ label, value, action, onEdit }: { label: string; value: st
   );
 };
 
+const InfoItem = ({ label, value }: { label: string; value: string }) => {
+  const theme = useTheme();
+
+  return (
+    <div style={infoItemStyles(theme)}>
+      <span style={infoLabelStyles(theme)}>{label}</span>
+      <span style={infoValueStyles(theme)}>{value}</span>
+    </div>
+  );
+};
+
 const rowStyles = (theme: AppTheme) => ({
   display: "flex",
   justifyContent: "space-between",
@@ -517,6 +621,30 @@ const rowStyles = (theme: AppTheme) => ({
   background: theme.colors.surface,
   cursor: "pointer",
   gap: theme.spacing.md
+});
+
+const infoItemStyles = (theme: AppTheme) => ({
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: theme.spacing.xs,
+  padding: `${theme.spacing.md}px ${theme.spacing.lg}px`,
+  borderRadius: theme.radii.lg,
+  border: `1px solid ${theme.colors.divider}`,
+  background: theme.colors.surface
+});
+
+const infoLabelStyles = (theme: AppTheme) => ({
+  fontSize: 11,
+  textTransform: "uppercase" as const,
+  letterSpacing: 0.6,
+  fontWeight: 700,
+  color: theme.colors.textSecondary
+});
+
+const infoValueStyles = (theme: AppTheme) => ({
+  fontSize: 14,
+  fontWeight: 600,
+  color: theme.colors.text
 });
 
 const createStyles = (theme: AppTheme) => ({
@@ -610,6 +738,11 @@ const createStyles = (theme: AppTheme) => ({
     flexDirection: "column" as const,
     gap: theme.spacing.sm,
     width: "100%"
+  },
+  infoGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: theme.spacing.md
   },
   logoutStack: {
     display: "flex",

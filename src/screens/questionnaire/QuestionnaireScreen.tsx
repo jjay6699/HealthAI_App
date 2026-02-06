@@ -10,7 +10,7 @@ import { AppTheme, useTheme } from "../../theme";
 const sections = [
   {
     title: "How have you been feeling?",
-    description: "Past 30 days—rate or note what applies.",
+    description: "Past 30 days-rate or note what applies.",
     items: [
       "Fatigue levels (0-10)",
       "Brain fog or difficulty concentrating (0-10)",
@@ -140,7 +140,7 @@ const QuestionnaireScreen = () => {
         <p style={styles.subheading}>Quick check-in so we can deliver precise, evidence-based guidance.</p>
       </header>
 
-      <Card>
+      <Card style={styles.card} shadow>
         <SectionHeader title={current.title} subtitle={current.description} />
         <div style={styles.fieldGrid}>
           {current.items.map((item) => (
@@ -199,10 +199,15 @@ const createStyles = (theme: AppTheme) => ({
     color: theme.colors.textSecondary,
     margin: 0
   },
+  card: {
+    background: theme.colors.surface,
+    border: `1px solid ${theme.colors.divider}`,
+    boxShadow: theme.shadows.soft
+  },
   fieldGrid: {
     display: "flex",
     flexDirection: "column" as const,
-    gap: theme.spacing.lg
+    gap: theme.spacing.md
   },
   field: {
     display: "flex",
@@ -217,10 +222,12 @@ const createStyles = (theme: AppTheme) => ({
   input: {
     borderRadius: theme.radii.md,
     border: `1px solid ${theme.colors.divider}`,
-    padding: `${theme.spacing.lg}px`,
-    background: theme.colors.surface,
+    padding: `${theme.spacing.md}px ${theme.spacing.lg}px`,
+    background: theme.colors.background,
     fontSize: 15,
-    color: theme.colors.text
+    color: theme.colors.text,
+    fontFamily: "inherit",
+    outline: "none"
   },
   footer: {
     display: "grid",
@@ -229,4 +236,4 @@ const createStyles = (theme: AppTheme) => ({
   }
 });
 
-export default QuestionnaireScreen;
+export default QuestionnaireScreen;
