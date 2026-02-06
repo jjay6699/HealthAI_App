@@ -96,8 +96,8 @@ const SupplementsScreen = () => {
   const servingsPerBottle = 14;
   const servingsPerMonth = 28;
   const bottlesPerMonth = 2;
-  const bottlePrice = 29;
-  const monthPrice = 49;
+  const bottlePrice = 45;
+  const monthPrice = 90;
 
   const totalGrams = recommendations.reduce((sum, rec) => {
     const grams = rec.dosageGramsPerDay ?? parseDosageGrams(rec.dosage);

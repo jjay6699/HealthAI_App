@@ -13,6 +13,8 @@ const OrderReviewScreen = () => {
   const [selectedPlan, setSelectedPlan] = useState<"one-time" | "monthly" | "quarterly" | "semi-annual">("monthly");
   const [deliveryFrequency, setDeliveryFrequency] = useState(30);
   const [analysis, setAnalysis] = useState<BloodworkAnalysis | null>(null);
+  const [couponCode, setCouponCode] = useState("");
+  const [couponApplied, setCouponApplied] = useState<string | null>(null);
 
   useEffect(() => {
     const storedAnalysis = localStorage.getItem("bloodworkAnalysis");
@@ -26,10 +28,10 @@ const OrderReviewScreen = () => {
   }, []);
 
   const plans = [
-    { id: "one-time", label: "One-time purchase", price: 49, savings: null, description: "Single delivery" },
-    { id: "monthly", label: "Monthly subscription", price: 49, savings: null, description: "Cancel anytime" },
-    { id: "quarterly", label: "3-month plan", price: 140, savings: 5, description: "RM46.67/month" },
-    { id: "semi-annual", label: "6-month plan", price: 265, savings: 10, description: "RM44.17/month" }
+    { id: "one-time", label: "One-time purchase", price: 90, savings: null, description: "Single delivery" },
+    { id: "monthly", label: "Monthly subscription", price: 90, savings: null, description: "Cancel anytime" },
+    { id: "quarterly", label: "3-month plan", price: 270, savings: null, description: "RM90/month" },
+    { id: "semi-annual", label: "6-month plan", price: 540, savings: null, description: "RM90/month" }
   ];
 
   const selectedPlanDetails = plans.find(p => p.id === selectedPlan);
@@ -40,9 +42,18 @@ const OrderReviewScreen = () => {
       plan: selectedPlan,
       deliveryFrequency,
       price: selectedPlanDetails?.price,
-      recommendations: analysis?.recommendations
+      recommendations: analysis?.recommendations,
+      couponCode: couponApplied
     }));
     navigate("/checkout");
+  };
+
+  const handleApplyCoupon = () => {
+    if (!couponCode.trim()) {
+      setCouponApplied(null);
+      return;
+    }
+    setCouponApplied(couponCode.trim().toUpperCase());
   };
 
   if (!analysis) {
@@ -140,6 +151,24 @@ const OrderReviewScreen = () => {
           </select>
         </Card>
       )}
+
+      <Card style={styles.card}>
+        <SectionHeader title="Coupon code" />
+        <div style={styles.couponRow}>
+          <input
+            value={couponCode}
+            onChange={(e) => setCouponCode(e.target.value)}
+            placeholder="Enter code"
+            style={styles.couponInput}
+          />
+          <Button title="Apply" variant="secondary" onClick={handleApplyCoupon} />
+        </div>
+        {couponApplied ? (
+          <span style={styles.couponApplied}>Applied: {couponApplied}</span>
+        ) : (
+          <span style={styles.couponHelper}>You can apply a promo code at checkout.</span>
+        )}
+      </Card>
 
       {/* Continue Button */}
       <div style={styles.footerSpacer} />
@@ -331,6 +360,34 @@ const createStyles = (theme: AppTheme) => ({
     fontFamily: "inherit",
     cursor: "pointer"
   },
+  couponRow: {
+    display: "flex",
+    gap: theme.spacing.sm,
+    alignItems: "center"
+  },
+  couponInput: {
+    flex: 1,
+    padding: theme.spacing.md,
+    fontSize: 15,
+    borderRadius: theme.radii.md,
+    border: `1px solid ${theme.colors.divider}`,
+    background: theme.colors.background,
+    color: theme.colors.text,
+    fontFamily: "inherit"
+  },
+  couponHelper: {
+    display: "block",
+    marginTop: theme.spacing.xs,
+    fontSize: 12,
+    color: theme.colors.textSecondary
+  },
+  couponApplied: {
+    display: "block",
+    marginTop: theme.spacing.xs,
+    fontSize: 12,
+    color: theme.colors.success,
+    fontWeight: 600
+  },
   footerSpacer: {
     height: 120
   },
@@ -350,4 +407,3 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default OrderReviewScreen;
-
