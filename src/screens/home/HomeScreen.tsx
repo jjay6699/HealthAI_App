@@ -67,9 +67,9 @@ const HomeScreen = () => {
     <div style={styles.page}>
       <section style={styles.hero}>
         <div style={styles.heroPill}>Last upload - {formatDate(meta?.uploadedAt)}</div>
-        <h1 style={styles.heroTitle}>Upload bloodwork or DNA</h1>
+        <h1 style={styles.heroTitle}>Understand Your Body's Story</h1>
         <p style={styles.heroCopy}>
-          Get personalised ranges, supplement suggestions, and lifestyle nudges based on your biomarkers.
+          Upload your bloodwork or DNA to get simple explanations, custom supplement plans, and lifestyle tips tailored to you.
         </p>
         <div style={styles.heroBadges}>
           <Badge label="Instant Lab Analysis" tone="info" />

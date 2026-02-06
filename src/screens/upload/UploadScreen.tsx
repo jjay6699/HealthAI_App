@@ -196,9 +196,9 @@ const UploadScreen = () => {
 
   return (
     <div style={styles.page}>
-      <h1 style={styles.heading}>Turn Your Lab Results into Action</h1>
+      <h1 style={styles.heading}>From Lab Results to Personalized Supplement Guidance</h1>
       <p style={styles.subheading}>
-        Upload your bloodwork or DNA to get simple explanations, custom supplement plans, and lifestyle tips tailored to you.
+        Upload your bloodwork or DNA to see what your biomarkers mean and receive personalized supplement recommendations.
       </p>
 
       {error && (
@@ -246,9 +246,9 @@ const UploadScreen = () => {
       <Card style={styles.card}>
         <SectionHeader title="How it works" />
         <ol style={styles.timeline}>
-          <li style={styles.timelineItem}>Parse your document and map biomarkers to standard codes.</li>
-          <li style={styles.timelineItem}>Normalise units and compare against evidence-informed ranges.</li>
-          <li style={styles.timelineItem}>Review detected markers, tweak anything, and confirm upload.</li>
+          <li style={styles.timelineItem}>Upload your lab report or DNA file.</li>
+          <li style={styles.timelineItem}>We analyze your results and highlight anything that stands out.</li>
+          <li style={styles.timelineItem}>You receive clear explanations and personalized supplement recommendations.</li>
         </ol>
       </Card>
 
