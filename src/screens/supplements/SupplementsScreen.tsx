@@ -3,16 +3,19 @@ import { Link, useNavigate } from "react-router-dom";
 import Badge from "../../components/Badge";
 import Button from "../../components/Button";
 import Card from "../../components/Card";
+import Dialog from "../../components/Dialog";
 import SectionHeader from "../../components/SectionHeader";
 import { AppTheme, useTheme } from "../../theme";
 import { BloodworkAnalysis, SupplementRecommendation } from "../../services/openai";
 import { AVAILABLE_SUPPLEMENTS, Supplement } from "../../data/supplements";
+import { SUPPLEMENT_DESCRIPTIONS } from "../../data/supplementDescriptions";
 
 const SupplementsScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const navigate = useNavigate();
   const [recommendations, setRecommendations] = useState<SupplementRecommendation[]>([]);
+  const [activeSupplementId, setActiveSupplementId] = useState<string | null>(null);
 
   useEffect(() => {
     // Load recommendations from localStorage
@@ -166,6 +169,7 @@ const SupplementsScreen = () => {
       <div style={styles.cardList}>
         {recommendations.map((rec, index) => {
           const supplementDetails = getSupplementDetails(rec.supplementId);
+          const description = SUPPLEMENT_DESCRIPTIONS[rec.supplementId];
 
           return (
             <Card key={index} style={styles.card}>
@@ -221,10 +225,30 @@ const SupplementsScreen = () => {
                   </div>
                 </>
               )}
+
+              <div style={styles.learnMoreRow}>
+                <button
+                  type="button"
+                  style={styles.learnMoreButton}
+                  onClick={() => setActiveSupplementId(rec.supplementId)}
+                >
+                  Learn more
+                </button>
+                {!description ? <span style={styles.learnMoreHint}>Details coming soon</span> : null}
+              </div>
             </Card>
           );
         })}
       </div>
+
+      {activeSupplementId ? (
+        <Dialog
+          title={getSupplementDetails(activeSupplementId)?.name ?? "Supplement details"}
+          description={SUPPLEMENT_DESCRIPTIONS[activeSupplementId] ?? "Details coming soon."}
+          onClose={() => setActiveSupplementId(null)}
+          cancelLabel="Close"
+        />
+      ) : null}
     </div>
   );
 };
@@ -362,6 +386,26 @@ const createStyles = (theme: AppTheme) => ({
     fontWeight: 600,
     padding: `${theme.spacing.xs}px ${theme.spacing.sm}px`,
     borderRadius: theme.radii.md
+  },
+  learnMoreRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: theme.spacing.sm
+  },
+  learnMoreButton: {
+    border: `1px solid ${theme.colors.primary}`,
+    background: theme.colors.primary,
+    color: theme.colors.background,
+    fontSize: 13,
+    fontWeight: 700,
+    padding: `${theme.spacing.xs}px ${theme.spacing.md}px`,
+    borderRadius: theme.radii.lg,
+    cursor: "pointer",
+    boxShadow: "0 4px 10px rgba(212, 140, 68, 0.16)"
+  },
+  learnMoreHint: {
+    fontSize: 12,
+    color: theme.colors.textSecondary
   },
   notice: {
     border: `1px solid ${theme.colors.divider}`
