@@ -72,6 +72,13 @@ type Order = {
 };
 
 type EditKey = keyof ProfileState;
+type EditConfig = {
+  label: string;
+  helper?: string;
+  type?: React.HTMLInputTypeAttribute;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  options?: string[];
+};
 
 // Helper function to generate initials from name
 const getInitials = (name: string): string => {
@@ -183,6 +190,9 @@ const ProfileScreen = () => {
     label: string;
     helper?: string;
     value: string;
+    type?: React.HTMLInputTypeAttribute;
+    inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+    options?: string[];
   }>(null);
   const [editValue, setEditValue] = useState("");
   const [showImageUpload, setShowImageUpload] = useState(false);
@@ -215,9 +225,72 @@ const ProfileScreen = () => {
     localStorage.setItem("orderHistory", JSON.stringify(orders));
   }, [orders]);
 
-  const openEdit = (key: EditKey, label: string, helper?: string) => {
-    setEditState({ key, label, helper, value: profile[key] as string });
-    setEditValue(profile[key] as string);
+  const editConfig: Record<EditKey, EditConfig> = {
+    avatarImage: { label: "Profile photo" },
+    name: { label: "Full name" },
+    email: { label: "Email address", type: "email" },
+    dob: { label: "Date of birth", type: "date" },
+    gender: { label: "Gender", options: ["Female", "Male"] },
+    height: { label: "Height (cm)", type: "number", inputMode: "numeric" },
+    weight: { label: "Weight (kg)", type: "number", inputMode: "numeric" },
+    activityLevel: { label: "Activity level", options: ["Sedentary", "Lightly active", "Moderately active", "Very active"] },
+    exerciseDays: { label: "Exercise days (per week)", type: "number", inputMode: "numeric" },
+    minutesPerSession: { label: "Minutes per session", type: "number", inputMode: "numeric" },
+    sleepDuration: { label: "Sleep duration", options: ["Under 5 hrs", "5-6 hrs", "6-7 hrs", "7-8 hrs", "8+ hrs"] },
+    stressLevel: { label: "Stress level", options: ["Low", "Moderate", "High"] },
+    bloodPressure: { label: "Blood pressure", helper: "Format: 120/80" },
+    fastingGlucose: { label: "Fasting glucose (mg/dL)", type: "number", inputMode: "numeric" },
+    hba1c: { label: "HbA1c (%)", type: "number", inputMode: "decimal" },
+    restingHeartRate: { label: "Resting HR (bpm)", type: "number", inputMode: "numeric" },
+    waistCircumference: { label: "Waist circumference (cm)", type: "number", inputMode: "numeric" },
+    bodyFat: { label: "Body fat (%)", type: "number", inputMode: "decimal" },
+    dietPattern: { label: "Diet pattern", options: ["Balanced", "Mediterranean", "Plant-based", "Vegetarian", "Vegan", "Low-carb", "Keto", "Paleo"] },
+    mealsPerDay: { label: "Meals per day", type: "number", inputMode: "numeric" },
+    caffeineIntake: { label: "Caffeine intake", options: ["None", "Low (1 cup)", "Moderate (2-3 cups)", "High (4+ cups)"] },
+    waterIntake: { label: "Water intake (cups/day)", type: "number", inputMode: "numeric" },
+    allergies: { label: "Allergies" },
+    conditions: { label: "Conditions" },
+    surgeries: { label: "Surgeries" },
+    medications: { label: "Medications" },
+    supplements: { label: "Supplements" },
+    topPriorities: { label: "Top priorities" },
+    dataProcessingConsent: { label: "Data processing consent" },
+    dataProcessing: { label: "Data processing" },
+    dataStorage: { label: "Health data storage" },
+    research: { label: "Research participation" },
+    appleHealth: { label: "Apple Health status" },
+    googleFit: { label: "Google Fit status" }
+  };
+
+  const numericKeys = new Set<EditKey>([
+    "height",
+    "weight",
+    "exerciseDays",
+    "minutesPerSession",
+    "fastingGlucose",
+    "hba1c",
+    "restingHeartRate",
+    "waistCircumference",
+    "bodyFat",
+    "mealsPerDay",
+    "waterIntake"
+  ]);
+
+  const openEdit = (key: EditKey, labelOverride?: string) => {
+    const config = editConfig[key] ?? { label: key };
+    const rawValue = profile[key];
+    const value =
+      typeof rawValue === "number" ? (rawValue === 0 ? "" : String(rawValue)) : (rawValue as string) || "";
+    setEditState({
+      key,
+      label: labelOverride ?? config.label,
+      helper: config.helper,
+      value,
+      type: config.type,
+      inputMode: config.inputMode,
+      options: config.options
+    });
+    setEditValue(value);
   };
 
   const handleConfirm = () => {
@@ -227,7 +300,14 @@ const ProfileScreen = () => {
       setEditState(null);
       return;
     }
-    setProfile((prev) => ({ ...prev, [editState.key]: value }));
+    if (numericKeys.has(editState.key)) {
+      const parsed = Number(value);
+      if (!Number.isNaN(parsed)) {
+        setProfile((prev) => ({ ...prev, [editState.key]: parsed }));
+      }
+    } else {
+      setProfile((prev) => ({ ...prev, [editState.key]: value }));
+    }
     setEditState(null);
   };
 
@@ -310,60 +390,60 @@ const ProfileScreen = () => {
       </header>
       <Card style={styles.card}>
         <SectionHeader title="Personal info" />
-        <ProfileRow label="Full name" value={profile.name} action="Edit" onEdit={() => openEdit("name", "Full name")} />
-        <ProfileRow label="Email" value={profile.email} action="Edit" onEdit={() => openEdit("email", "Email address")} />
-        <ProfileRow label="Date of birth" value={profile.dob} action="Edit" onEdit={() => openEdit("dob", "Date of birth")} />
-        <ProfileRow label="Gender" value={formatValue(profile.gender)} action="Edit" onEdit={() => openEdit("gender", "Gender")} />
+        <ProfileRow label="Full name" value={profile.name} action="Edit" onEdit={() => openEdit("name")} />
+        <ProfileRow label="Email" value={profile.email} action="Edit" onEdit={() => openEdit("email")} />
+        <ProfileRow label="Date of birth" value={profile.dob} action="Edit" onEdit={() => openEdit("dob")} />
+        <ProfileRow label="Gender" value={formatValue(profile.gender)} action="Edit" onEdit={() => openEdit("gender")} />
       </Card>
 
       <Card style={styles.card}>
         <SectionHeader title="Health data" />
         <ProfileRow label="Measurements" value={`${profile.height} cm • ${profile.weight} kg`} action="Update" onEdit={() => setIsEditingMeasurements(true)} />
-        <ProfileRow label="Activity level" value={formatValue(profile.activityLevel)} action="Update" onEdit={() => openEdit("activityLevel", "Activity level")} />
+        <ProfileRow label="Activity level" value={formatValue(profile.activityLevel)} action="Update" onEdit={() => openEdit("activityLevel")} />
       </Card>
 
       <Card style={styles.card}>
         <SectionHeader title="Vitals & markers" />
         <div style={styles.infoGrid}>
-          <InfoItem label="Blood pressure" value={formatValue(profile.bloodPressure)} />
-          <InfoItem label="Fasting glucose" value={formatNumber(profile.fastingGlucose, "mg/dL")} />
-          <InfoItem label="HbA1c" value={formatNumber(profile.hba1c, "%")} />
-          <InfoItem label="Resting HR" value={formatNumber(profile.restingHeartRate, "bpm")} />
-          <InfoItem label="Waist circumference" value={formatNumber(profile.waistCircumference, "cm")} />
-          <InfoItem label="Body fat" value={formatNumber(profile.bodyFat, "%")} />
+          <InfoItem label="Blood pressure" value={formatValue(profile.bloodPressure)} action="Set" onEdit={() => openEdit("bloodPressure")} />
+          <InfoItem label="Fasting glucose" value={formatNumber(profile.fastingGlucose, "mg/dL")} action="Set" onEdit={() => openEdit("fastingGlucose")} />
+          <InfoItem label="HbA1c" value={formatNumber(profile.hba1c, "%")} action="Set" onEdit={() => openEdit("hba1c")} />
+          <InfoItem label="Resting HR" value={formatNumber(profile.restingHeartRate, "bpm")} action="Set" onEdit={() => openEdit("restingHeartRate")} />
+          <InfoItem label="Waist circumference" value={formatNumber(profile.waistCircumference, "cm")} action="Set" onEdit={() => openEdit("waistCircumference")} />
+          <InfoItem label="Body fat" value={formatNumber(profile.bodyFat, "%")} action="Set" onEdit={() => openEdit("bodyFat")} />
         </div>
       </Card>
 
       <Card style={styles.card}>
         <SectionHeader title="Lifestyle & diet" />
         <div style={styles.infoGrid}>
-          <InfoItem label="Exercise days" value={formatNumber(profile.exerciseDays, "days/week")} />
-          <InfoItem label="Minutes per session" value={formatNumber(profile.minutesPerSession, "min")} />
-          <InfoItem label="Sleep duration" value={formatValue(profile.sleepDuration)} />
-          <InfoItem label="Stress level" value={formatValue(profile.stressLevel)} />
-          <InfoItem label="Diet pattern" value={formatValue(profile.dietPattern)} />
-          <InfoItem label="Meals per day" value={formatNumber(profile.mealsPerDay)} />
-          <InfoItem label="Caffeine intake" value={formatValue(profile.caffeineIntake)} />
-          <InfoItem label="Water intake" value={formatNumber(profile.waterIntake, "cups/day")} />
-          <InfoItem label="Allergies" value={formatValue(profile.allergies)} />
+          <InfoItem label="Exercise days" value={formatNumber(profile.exerciseDays, "days/week")} action="Set" onEdit={() => openEdit("exerciseDays")} />
+          <InfoItem label="Minutes per session" value={formatNumber(profile.minutesPerSession, "min")} action="Set" onEdit={() => openEdit("minutesPerSession")} />
+          <InfoItem label="Sleep duration" value={formatValue(profile.sleepDuration)} action="Set" onEdit={() => openEdit("sleepDuration")} />
+          <InfoItem label="Stress level" value={formatValue(profile.stressLevel)} action="Set" onEdit={() => openEdit("stressLevel")} />
+          <InfoItem label="Diet pattern" value={formatValue(profile.dietPattern)} action="Set" onEdit={() => openEdit("dietPattern")} />
+          <InfoItem label="Meals per day" value={formatNumber(profile.mealsPerDay)} action="Set" onEdit={() => openEdit("mealsPerDay")} />
+          <InfoItem label="Caffeine intake" value={formatValue(profile.caffeineIntake)} action="Set" onEdit={() => openEdit("caffeineIntake")} />
+          <InfoItem label="Water intake" value={formatNumber(profile.waterIntake, "cups/day")} action="Set" onEdit={() => openEdit("waterIntake")} />
+          <InfoItem label="Allergies" value={formatValue(profile.allergies)} action="Set" onEdit={() => openEdit("allergies")} />
         </div>
       </Card>
 
       <Card style={styles.card}>
         <SectionHeader title="Medical context" />
         <div style={styles.infoGrid}>
-          <InfoItem label="Conditions" value={formatValue(profile.conditions)} />
-          <InfoItem label="Surgeries" value={formatValue(profile.surgeries)} />
-          <InfoItem label="Medications" value={formatValue(profile.medications)} />
-          <InfoItem label="Supplements" value={formatValue(profile.supplements)} />
+          <InfoItem label="Conditions" value={formatValue(profile.conditions)} action="Set" onEdit={() => openEdit("conditions")} />
+          <InfoItem label="Surgeries" value={formatValue(profile.surgeries)} action="Set" onEdit={() => openEdit("surgeries")} />
+          <InfoItem label="Medications" value={formatValue(profile.medications)} action="Set" onEdit={() => openEdit("medications")} />
+          <InfoItem label="Supplements" value={formatValue(profile.supplements)} action="Set" onEdit={() => openEdit("supplements")} />
         </div>
       </Card>
 
       <Card style={styles.card}>
         <SectionHeader title="Goals & consent" />
         <div style={styles.infoGrid}>
-          <InfoItem label="Top priorities" value={formatValue(profile.topPriorities)} />
-          <InfoItem label="Data consent" value={formatValue(profile.dataProcessingConsent)} />
+          <InfoItem label="Top priorities" value={formatValue(profile.topPriorities)} action="Set" onEdit={() => openEdit("topPriorities")} />
+          <InfoItem label="Data consent" value={formatValue(profile.dataProcessingConsent)} action="Set" onEdit={() => openEdit("dataProcessingConsent")} />
         </div>
       </Card>
 
@@ -460,15 +540,15 @@ const ProfileScreen = () => {
 
       <Card style={styles.card}>
         <SectionHeader title="Privacy & connections" />
-        <ProfileRow label="Data processing" value={profile.dataProcessing} action="Manage" onEdit={() => openEdit("dataProcessing", "Data processing") } />
-        <ProfileRow label="Health data storage" value={profile.dataStorage} action="Manage" onEdit={() => openEdit("dataStorage", "Health data storage") } />
-        <ProfileRow label="Research participation" value={profile.research} action="Manage" onEdit={() => openEdit("research", "Research participation") } />
+        <ProfileRow label="Data processing" value={profile.dataProcessing} action="Manage" onEdit={() => openEdit("dataProcessing") } />
+        <ProfileRow label="Health data storage" value={profile.dataStorage} action="Manage" onEdit={() => openEdit("dataStorage") } />
+        <ProfileRow label="Research participation" value={profile.research} action="Manage" onEdit={() => openEdit("research") } />
       </Card>
 
       <Card style={styles.card}>
         <SectionHeader title="Linked services" />
-        <ProfileRow label="Apple Health" value={profile.appleHealth} action="Connect" onEdit={() => openEdit("appleHealth", "Apple Health status") } />
-        <ProfileRow label="Google Fit" value={profile.googleFit} action="Connect" onEdit={() => openEdit("googleFit", "Google Fit status") } />
+        <ProfileRow label="Apple Health" value={profile.appleHealth} action="Connect" onEdit={() => openEdit("appleHealth") } />
+        <ProfileRow label="Google Fit" value={profile.googleFit} action="Connect" onEdit={() => openEdit("googleFit") } />
       </Card>
 
       <div style={styles.logoutStack}>
@@ -483,20 +563,47 @@ const ProfileScreen = () => {
           onClose={() => setEditState(null)}
           onConfirm={handleConfirm}
         >
-          <input
-            type={editState.key === "dob" ? "date" : "text"}
-            value={editValue}
-            onChange={(event) => setEditValue(event.target.value)}
-            autoFocus
-            style={{
-              width: "100%",
-              borderRadius: theme.radii.lg,
-              border: `1px solid ${theme.colors.divider}`,
-              padding: `${theme.spacing.lg}px`,
-              fontSize: 16,
-              marginTop: theme.spacing.sm
-            }}
-          />
+          {editState.options ? (
+            <select
+              value={editValue}
+              onChange={(event) => setEditValue(event.target.value)}
+              autoFocus
+              style={{
+                width: "100%",
+                borderRadius: theme.radii.lg,
+                border: `1px solid ${theme.colors.divider}`,
+                padding: `${theme.spacing.lg}px`,
+                fontSize: 16,
+                marginTop: theme.spacing.sm,
+                fontFamily: "inherit"
+              }}
+            >
+              <option value="" disabled>
+                Select
+              </option>
+              {editState.options.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type={editState.type || "text"}
+              inputMode={editState.inputMode}
+              value={editValue}
+              onChange={(event) => setEditValue(event.target.value)}
+              autoFocus
+              style={{
+                width: "100%",
+                borderRadius: theme.radii.lg,
+                border: `1px solid ${theme.colors.divider}`,
+                padding: `${theme.spacing.lg}px`,
+                fontSize: 16,
+                marginTop: theme.spacing.sm
+              }}
+            />
+          )}
         </Dialog>
       ) : null}
 
@@ -600,14 +707,15 @@ const ProfileRow = ({ label, value, action, onEdit }: { label: string; value: st
   );
 };
 
-const InfoItem = ({ label, value }: { label: string; value: string }) => {
+const InfoItem = ({ label, value, action, onEdit }: { label: string; value: string; action: string; onEdit: () => void }) => {
   const theme = useTheme();
 
   return (
-    <div style={infoItemStyles(theme)}>
+    <button type="button" style={infoItemStyles(theme)} onClick={onEdit}>
       <span style={infoLabelStyles(theme)}>{label}</span>
       <span style={infoValueStyles(theme)}>{value}</span>
-    </div>
+      <span style={infoActionStyles(theme)}>{action}</span>
+    </button>
   );
 };
 
@@ -631,7 +739,10 @@ const infoItemStyles = (theme: AppTheme) => ({
   padding: `${theme.spacing.md}px ${theme.spacing.lg}px`,
   borderRadius: theme.radii.lg,
   border: `1px solid ${theme.colors.divider}`,
-  background: theme.colors.surface
+  background: theme.colors.surface,
+  textAlign: "left" as const,
+  cursor: "pointer",
+  transition: "transform 0.2s ease, box-shadow 0.2s ease"
 });
 
 const infoLabelStyles = (theme: AppTheme) => ({
@@ -646,6 +757,14 @@ const infoValueStyles = (theme: AppTheme) => ({
   fontSize: 14,
   fontWeight: 600,
   color: theme.colors.text
+});
+
+const infoActionStyles = (theme: AppTheme) => ({
+  fontSize: 11,
+  fontWeight: 700,
+  color: theme.colors.primary,
+  textTransform: "uppercase" as const,
+  letterSpacing: 0.4
 });
 
 const createStyles = (theme: AppTheme) => ({
