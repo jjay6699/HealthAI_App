@@ -174,7 +174,8 @@ const createStyles = (theme: AppTheme) => {
       flexDirection: "column" as const,
       gap: theme.spacing.sm,
       width: "100%",
-      alignItems: "center"
+      alignItems: "center",
+      marginTop: theme.spacing.lg
     },
     ctaButton: {
       minWidth: 220,
