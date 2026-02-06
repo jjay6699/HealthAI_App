@@ -196,8 +196,10 @@ const UploadScreen = () => {
 
   return (
     <div style={styles.page}>
-      <h1 style={styles.heading}>Upload your labs</h1>
-      <p style={styles.subheading}>Choose a file or snap a photo. We parse, normalise, and confirm with you.</p>
+      <h1 style={styles.heading}>Turn Your Lab Results into Action</h1>
+      <p style={styles.subheading}>
+        Upload your bloodwork or DNA to get simple explanations, custom supplement plans, and lifestyle tips tailored to you.
+      </p>
 
       {error && (
         <Card style={{ ...styles.card, background: theme.colors.accentPeach, border: `1px solid ${theme.colors.error}` }}>

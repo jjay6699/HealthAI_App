@@ -72,8 +72,8 @@ const HomeScreen = () => {
           Get personalised ranges, supplement suggestions, and lifestyle nudges based on your biomarkers.
         </p>
         <div style={styles.heroBadges}>
-          <Badge label="Auto-parse labs" tone="info" />
-          <Badge label="Versioned history" tone="success" />
+          <Badge label="Instant Lab Analysis" tone="info" />
+          <Badge label="Health Progress" tone="success" />
         </div>
       </section>
 
@@ -98,7 +98,7 @@ const HomeScreen = () => {
         ) : (
           <Card style={styles.insightCard}>
             <h3 style={styles.cardTitle}>No insights yet</h3>
-            <p style={styles.cardBody}>Upload your bloodwork to see personalized insights here.</p>
+            <p style={styles.cardBody}>Ready to see what's happening inside? Upload your first report to unlock your health analysis.</p>
             <Link to="/upload" style={styles.cardLink}>
               Upload now
             </Link>

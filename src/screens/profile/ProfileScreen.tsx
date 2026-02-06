@@ -86,6 +86,42 @@ const ProfileScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const navigate = useNavigate();
+  const defaultProfile: ProfileState = {
+    avatarImage: null,
+    name: "JJAY TECH",
+    email: "contact@jjay.info",
+    dob: "1986-07-28",
+    gender: "",
+    height: 175, // Default height in cm
+    weight: 70, // Default weight in kg
+    activityLevel: "Moderate",
+    exerciseDays: 0,
+    minutesPerSession: 0,
+    sleepDuration: "",
+    stressLevel: "",
+    bloodPressure: "",
+    fastingGlucose: 0,
+    hba1c: 0,
+    restingHeartRate: 0,
+    waistCircumference: 0,
+    bodyFat: 0,
+    dietPattern: "",
+    mealsPerDay: 0,
+    caffeineIntake: "",
+    waterIntake: 0,
+    allergies: "",
+    conditions: "",
+    surgeries: "",
+    medications: "",
+    supplements: "",
+    topPriorities: "",
+    dataProcessingConsent: "",
+    dataProcessing: "Allowed",
+    dataStorage: "Opted in",
+    research: "Opted out",
+    appleHealth: "Not connected",
+    googleFit: "Not connected"
+  };
   const [profile, setProfile] = useState<ProfileState>(() => {
     const saved = localStorage.getItem("userProfile");
     if (saved) {
@@ -98,47 +134,12 @@ const ProfileScreen = () => {
           parsed.weight = parseInt(weightStr, 10) || 70;
           delete parsed.measurements; // Remove old key
         }
-        return parsed;
+        return { ...defaultProfile, ...parsed };
       } catch {
         // Fall through to default
       }
     }
-    return {
-      avatarImage: null,
-      name: "JJAY TECH",
-      email: "contact@jjay.info",
-      dob: "1986-07-28",
-      gender: "",
-      height: 175, // Default height in cm
-      weight: 70, // Default weight in kg
-      activityLevel: "Moderate",
-      exerciseDays: 0,
-      minutesPerSession: 0,
-      sleepDuration: "",
-      stressLevel: "",
-      bloodPressure: "",
-      fastingGlucose: 0,
-      hba1c: 0,
-      restingHeartRate: 0,
-      waistCircumference: 0,
-      bodyFat: 0,
-      dietPattern: "",
-      mealsPerDay: 0,
-      caffeineIntake: "",
-      waterIntake: 0,
-      allergies: "",
-      conditions: "",
-      surgeries: "",
-      medications: "",
-      supplements: "",
-      topPriorities: "",
-      dataProcessingConsent: "",
-      dataProcessing: "Allowed",
-      dataStorage: "Opted in",
-      research: "Opted out",
-      appleHealth: "Not connected",
-      googleFit: "Not connected"
-    };
+    return defaultProfile;
   });
 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(() => {
