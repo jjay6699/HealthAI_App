@@ -71,6 +71,17 @@ type Order = {
   status: "processing" | "shipped" | "delivered" | "cancelled";
 };
 
+type BloodPressureEntry = {
+  date: string;
+  systolic: number;
+  diastolic: number;
+};
+
+type FastingGlucoseEntry = {
+  date: string;
+  value: number;
+};
+
 type EditKey = keyof ProfileState;
 type EditConfig = {
   label: string;
@@ -197,6 +208,34 @@ const ProfileScreen = () => {
   const [editValue, setEditValue] = useState("");
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [isEditingMeasurements, setIsEditingMeasurements] = useState(false);
+  const [activeTracker, setActiveTracker] = useState<"bloodPressure" | "fastingGlucose" | null>(null);
+  const [bpDate, setBpDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [bpSystolic, setBpSystolic] = useState("");
+  const [bpDiastolic, setBpDiastolic] = useState("");
+  const [bpMonthFilter, setBpMonthFilter] = useState("all");
+  const [glucoseDate, setGlucoseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [glucoseValue, setGlucoseValue] = useState("");
+  const [glucoseMonthFilter, setGlucoseMonthFilter] = useState("all");
+  const [bpHistory, setBpHistory] = useState<BloodPressureEntry[]>(() => {
+    const saved = localStorage.getItem("bloodPressureHistory");
+    if (!saved) return [];
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [glucoseHistory, setGlucoseHistory] = useState<FastingGlucoseEntry[]>(() => {
+    const saved = localStorage.getItem("fastingGlucoseHistory");
+    if (!saved) return [];
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Temporary state for measurement editor
   const [tempHeight, setTempHeight] = useState(profile.height);
@@ -224,6 +263,14 @@ const ProfileScreen = () => {
   useEffect(() => {
     localStorage.setItem("orderHistory", JSON.stringify(orders));
   }, [orders]);
+
+  useEffect(() => {
+    localStorage.setItem("bloodPressureHistory", JSON.stringify(bpHistory));
+  }, [bpHistory]);
+
+  useEffect(() => {
+    localStorage.setItem("fastingGlucoseHistory", JSON.stringify(glucoseHistory));
+  }, [glucoseHistory]);
 
   const editConfig: Record<EditKey, EditConfig> = {
     avatarImage: { label: "Profile photo" },
@@ -358,6 +405,145 @@ const ProfileScreen = () => {
   const formatNumber = (value: number, unit?: string) =>
     value && value > 0 ? `${value}${unit ? ` ${unit}` : ""}` : "Not set";
 
+  const getLatestBp = () => {
+    if (bpHistory.length === 0) return formatValue(profile.bloodPressure);
+    const sorted = [...bpHistory].sort((a, b) => b.date.localeCompare(a.date));
+    return `${sorted[0].systolic}/${sorted[0].diastolic}`;
+  };
+
+  const getLatestGlucose = () => {
+    if (glucoseHistory.length === 0) return formatNumber(profile.fastingGlucose, "mg/dL");
+    const sorted = [...glucoseHistory].sort((a, b) => b.date.localeCompare(a.date));
+    return `${sorted[0].value} mg/dL`;
+  };
+
+  const addBloodPressureEntry = () => {
+    const systolic = Number(bpSystolic);
+    const diastolic = Number(bpDiastolic);
+    if (!bpDate || Number.isNaN(systolic) || Number.isNaN(diastolic) || systolic <= 0 || diastolic <= 0) {
+      return;
+    }
+
+    setBpHistory((prev) => {
+      const withoutDate = prev.filter((entry) => entry.date !== bpDate);
+      return [...withoutDate, { date: bpDate, systolic, diastolic }].sort((a, b) => a.date.localeCompare(b.date));
+    });
+    setProfile((prev) => ({ ...prev, bloodPressure: `${systolic}/${diastolic}` }));
+    setBpSystolic("");
+    setBpDiastolic("");
+  };
+
+  const addGlucoseEntry = () => {
+    const value = Number(glucoseValue);
+    if (!glucoseDate || Number.isNaN(value) || value <= 0) {
+      return;
+    }
+
+    setGlucoseHistory((prev) => {
+      const withoutDate = prev.filter((entry) => entry.date !== glucoseDate);
+      return [...withoutDate, { date: glucoseDate, value }].sort((a, b) => a.date.localeCompare(b.date));
+    });
+    setProfile((prev) => ({ ...prev, fastingGlucose: value }));
+    setGlucoseValue("");
+  };
+
+  const buildLinePath = (values: number[], width: number, height: number) => {
+    if (values.length === 0) return "";
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = Math.max(max - min, 1);
+    return values
+      .map((value, index) => {
+        const x = values.length === 1 ? width / 2 : (index / (values.length - 1)) * width;
+        const y = height - ((value - min) / range) * height;
+        return `${index === 0 ? "M" : "L"}${x},${y}`;
+      })
+      .join(" ");
+  };
+
+  const buildMonthTicks = (dates: string[], width: number) => {
+    if (dates.length === 0) return [] as { x: number; label: string; anchor: "start" | "middle" | "end" }[];
+    const hasMultipleYears = new Set(dates.map((date) => date.slice(0, 4))).size > 1;
+    const seen = new Set<string>();
+    const ticks: { x: number; label: string; anchor: "start" | "middle" | "end" }[] = [];
+
+    dates.forEach((date, index) => {
+      const monthKey = date.slice(0, 7);
+      if (seen.has(monthKey)) return;
+      seen.add(monthKey);
+
+      const rawX = dates.length === 1 ? width / 2 : (index / (dates.length - 1)) * width;
+      const x = Math.max(8, Math.min(width - 8, rawX));
+      const parsed = new Date(`${date}T00:00:00`);
+      const label = Number.isNaN(parsed.getTime())
+        ? monthKey
+        : parsed.toLocaleDateString(undefined, hasMultipleYears ? { month: "short", year: "2-digit" } : { month: "short" });
+      const anchor: "start" | "middle" | "end" = x <= 16 ? "start" : x >= width - 16 ? "end" : "middle";
+      ticks.push({ x, label, anchor });
+    });
+
+    return ticks;
+  };
+
+  const chartWidth = 300;
+  const chartPlotHeight = 96;
+
+  const toMonthLabel = (monthKey: string) => {
+    const parsed = new Date(`${monthKey}-01T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return monthKey;
+    return parsed.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  };
+
+  const bpSortedEntries = [...bpHistory].sort((a, b) => a.date.localeCompare(b.date));
+  const glucoseSortedEntries = [...glucoseHistory].sort((a, b) => a.date.localeCompare(b.date));
+  const bpMonthOptions = Array.from(new Set(bpSortedEntries.map((entry) => entry.date.slice(0, 7))))
+    .sort((a, b) => b.localeCompare(a));
+  const glucoseMonthOptions = Array.from(new Set(glucoseSortedEntries.map((entry) => entry.date.slice(0, 7))))
+    .sort((a, b) => b.localeCompare(a));
+
+  const bpFilteredEntries =
+    bpMonthFilter === "all"
+      ? bpSortedEntries
+      : bpSortedEntries.filter((entry) => entry.date.startsWith(bpMonthFilter));
+  const glucoseFilteredEntries =
+    glucoseMonthFilter === "all"
+      ? glucoseSortedEntries
+      : glucoseSortedEntries.filter((entry) => entry.date.startsWith(glucoseMonthFilter));
+
+  const bpChartEntries = bpFilteredEntries.slice(-31);
+  const glucoseChartEntries = glucoseFilteredEntries.slice(-31);
+
+  const bpSystolicPath = buildLinePath(bpChartEntries.map((entry) => entry.systolic), chartWidth, chartPlotHeight);
+  const bpDiastolicPath = buildLinePath(bpChartEntries.map((entry) => entry.diastolic), chartWidth, chartPlotHeight);
+  const glucosePath = buildLinePath(glucoseChartEntries.map((entry) => entry.value), chartWidth, chartPlotHeight);
+  const bpMonthTicks = buildMonthTicks(bpChartEntries.map((entry) => entry.date), chartWidth);
+  const glucoseMonthTicks = buildMonthTicks(glucoseChartEntries.map((entry) => entry.date), chartWidth);
+
+  const bpInsight = (() => {
+    if (bpFilteredEntries.length < 2) return "Add daily readings to see blood pressure trends.";
+    const avgSystolic =
+      bpFilteredEntries.reduce((sum, entry) => sum + entry.systolic, 0) / bpFilteredEntries.length;
+    const avgDiastolic =
+      bpFilteredEntries.reduce((sum, entry) => sum + entry.diastolic, 0) / bpFilteredEntries.length;
+    const trend = bpFilteredEntries[bpFilteredEntries.length - 1].systolic - bpFilteredEntries[0].systolic;
+    const trendText = trend > 0 ? "rising" : trend < 0 ? "improving" : "stable";
+    if (avgSystolic >= 130 || avgDiastolic >= 80) {
+      return `Recent average is ${Math.round(avgSystolic)}/${Math.round(avgDiastolic)} and trend is ${trendText}. Keep tracking and monitor response to your nutrition routine.`;
+    }
+    return `Recent average is ${Math.round(avgSystolic)}/${Math.round(avgDiastolic)} with a ${trendText} pattern. Current range looks stable.`;
+  })();
+
+  const glucoseInsight = (() => {
+    if (glucoseFilteredEntries.length < 2) return "Add daily readings to see fasting glucose trends.";
+    const avg = glucoseFilteredEntries.reduce((sum, entry) => sum + entry.value, 0) / glucoseFilteredEntries.length;
+    const trend = glucoseFilteredEntries[glucoseFilteredEntries.length - 1].value - glucoseFilteredEntries[0].value;
+    const trendText = trend > 0 ? "rising" : trend < 0 ? "improving" : "stable";
+    if (avg >= 100) {
+      return `Recent average fasting glucose is ${Math.round(avg)} mg/dL and trend is ${trendText}. Keep monitoring daily while using your nutrition plan.`;
+    }
+    return `Recent average fasting glucose is ${Math.round(avg)} mg/dL with a ${trendText} pattern. Current range looks good.`;
+  })();
+
   return (
     <div style={styles.page}>
       <header style={styles.hero}>
@@ -405,8 +591,8 @@ const ProfileScreen = () => {
       <Card style={styles.card}>
         <SectionHeader title="Vitals & markers" />
         <div style={styles.infoGrid}>
-          <InfoItem label="Blood pressure" value={formatValue(profile.bloodPressure)} action="Set" onEdit={() => openEdit("bloodPressure")} />
-          <InfoItem label="Fasting glucose" value={formatNumber(profile.fastingGlucose, "mg/dL")} action="Set" onEdit={() => openEdit("fastingGlucose")} />
+          <InfoItem label="Blood pressure" value={getLatestBp()} action="Track" onEdit={() => setActiveTracker("bloodPressure")} />
+          <InfoItem label="Fasting glucose" value={getLatestGlucose()} action="Track" onEdit={() => setActiveTracker("fastingGlucose")} />
           <InfoItem label="HbA1c" value={formatNumber(profile.hba1c, "%")} action="Set" onEdit={() => openEdit("hba1c")} />
           <InfoItem label="Resting HR" value={formatNumber(profile.restingHeartRate, "bpm")} action="Set" onEdit={() => openEdit("restingHeartRate")} />
           <InfoItem label="Waist circumference" value={formatNumber(profile.waistCircumference, "cm")} action="Set" onEdit={() => openEdit("waistCircumference")} />
@@ -604,6 +790,173 @@ const ProfileScreen = () => {
               }}
             />
           )}
+        </Dialog>
+      ) : null}
+
+      {activeTracker === "bloodPressure" ? (
+        <Dialog
+          title="Blood pressure daily tracker"
+          description="Log your morning readings daily to monitor trend and response to nutrition."
+          onClose={() => setActiveTracker(null)}
+          cancelLabel="Close"
+        >
+          <div style={styles.trackerContent}>
+            <div style={styles.trackerFormRowOne}>
+              <input
+                type="date"
+                value={bpDate}
+                onChange={(event) => setBpDate(event.target.value)}
+                style={styles.trackerInput}
+              />
+            </div>
+            <div style={styles.trackerFormRowTwo}>
+              <input
+                type="number"
+                inputMode="numeric"
+                placeholder="Systolic"
+                value={bpSystolic}
+                onChange={(event) => setBpSystolic(event.target.value)}
+                style={styles.trackerInput}
+              />
+              <input
+                type="number"
+                inputMode="numeric"
+                placeholder="Diastolic"
+                value={bpDiastolic}
+                onChange={(event) => setBpDiastolic(event.target.value)}
+                style={styles.trackerInput}
+              />
+            </div>
+            <button type="button" style={styles.trackerAddButton} onClick={addBloodPressureEntry}>
+              Add reading
+            </button>
+            <div style={styles.trackerFilterRow}>
+              <span style={styles.trackerFilterLabel}>Month</span>
+              <select
+                value={bpMonthFilter}
+                onChange={(event) => setBpMonthFilter(event.target.value)}
+                style={styles.trackerSelect}
+              >
+                <option value="all">All months</option>
+                {bpMonthOptions.map((month) => (
+                  <option key={month} value={month}>
+                    {toMonthLabel(month)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <svg viewBox="0 0 300 120" style={styles.trackerChart}>
+              <rect x="0" y="0" width="300" height="120" fill={theme.colors.surface} rx="8" />
+              {[60, 120, 180, 240].map((x) => (
+                <line key={`bp-v-${x}`} x1={x} y1="0" x2={x} y2="96" stroke={theme.colors.divider} strokeWidth="1" opacity="0.25" />
+              ))}
+              {[0, 24, 48, 72, 96].map((y) => (
+                <line key={`bp-h-${y}`} x1="0" y1={y} x2="300" y2={y} stroke={theme.colors.divider} strokeWidth="1" opacity="0.35" />
+              ))}
+              {bpMonthTicks.map((tick) => (
+                <g key={`bp-m-${tick.label}-${tick.x}`}>
+                  <line x1={tick.x} y1="0" x2={tick.x} y2="96" stroke={theme.colors.divider} strokeWidth="1" opacity="0.55" />
+                  <text x={tick.x} y="114" textAnchor={tick.anchor} fontSize="9" fill={theme.colors.textSecondary}>
+                    {tick.label}
+                  </text>
+                </g>
+              ))}
+              {bpSystolicPath ? <path d={bpSystolicPath} stroke="#DC2626" strokeWidth="2" fill="none" /> : null}
+              {bpDiastolicPath ? <path d={bpDiastolicPath} stroke="#D97706" strokeWidth="2" fill="none" /> : null}
+            </svg>
+            <p style={styles.trackerLegend}>Red: systolic • Amber: diastolic</p>
+            <p style={styles.trackerInsight}>{bpInsight}</p>
+            <div style={styles.trackerHistory}>
+              {bpFilteredEntries
+                .slice(-7)
+                .reverse()
+                .map((entry) => (
+                  <div key={`bp-${entry.date}`} style={styles.trackerHistoryRow}>
+                    <span>{entry.date}</span>
+                    <span>{entry.systolic}/{entry.diastolic}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </Dialog>
+      ) : null}
+
+      {activeTracker === "fastingGlucose" ? (
+        <Dialog
+          title="Fasting glucose daily tracker"
+          description="Log your morning fasting glucose to see trend and progression."
+          onClose={() => setActiveTracker(null)}
+          cancelLabel="Close"
+        >
+          <div style={styles.trackerContent}>
+            <div style={styles.trackerFormRowTwo}>
+              <input
+                type="date"
+                value={glucoseDate}
+                onChange={(event) => setGlucoseDate(event.target.value)}
+                style={styles.trackerInput}
+              />
+              <input
+                type="number"
+                inputMode="numeric"
+                placeholder="mg/dL"
+                value={glucoseValue}
+                onChange={(event) => setGlucoseValue(event.target.value)}
+                style={styles.trackerInput}
+              />
+            </div>
+            <button type="button" style={styles.trackerAddButton} onClick={addGlucoseEntry}>
+              Add reading
+            </button>
+            <div style={styles.trackerFilterRow}>
+              <span style={styles.trackerFilterLabel}>Month</span>
+              <select
+                value={glucoseMonthFilter}
+                onChange={(event) => setGlucoseMonthFilter(event.target.value)}
+                style={styles.trackerSelect}
+              >
+                <option value="all">All months</option>
+                {glucoseMonthOptions.map((month) => (
+                  <option key={month} value={month}>
+                    {toMonthLabel(month)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <svg viewBox="0 0 300 120" style={styles.trackerChart}>
+              <rect x="0" y="0" width="300" height="120" fill={theme.colors.surface} rx="8" />
+              {[60, 120, 180, 240].map((x) => (
+                <line key={`gl-v-${x}`} x1={x} y1="0" x2={x} y2="96" stroke={theme.colors.divider} strokeWidth="1" opacity="0.25" />
+              ))}
+              {[0, 24, 48, 72, 96].map((y) => (
+                <line key={`gl-h-${y}`} x1="0" y1={y} x2="300" y2={y} stroke={theme.colors.divider} strokeWidth="1" opacity="0.35" />
+              ))}
+              {glucoseMonthTicks.map((tick) => (
+                <g key={`gl-m-${tick.label}-${tick.x}`}>
+                  <line x1={tick.x} y1="0" x2={tick.x} y2="96" stroke={theme.colors.divider} strokeWidth="1" opacity="0.55" />
+                  <text x={tick.x} y="114" textAnchor={tick.anchor} fontSize="9" fill={theme.colors.textSecondary}>
+                    {tick.label}
+                  </text>
+                </g>
+              ))}
+              {glucosePath ? <path d={glucosePath} stroke="#2563EB" strokeWidth="2" fill="none" /> : null}
+            </svg>
+            <p style={styles.trackerLegend}>Blue: fasting glucose</p>
+            <p style={styles.trackerInsight}>{glucoseInsight}</p>
+            <div style={styles.trackerHistory}>
+              {glucoseFilteredEntries
+                .slice(-7)
+                .reverse()
+                .map((entry) => (
+                  <div key={`glucose-${entry.date}`} style={styles.trackerHistoryRow}>
+                    <span>{entry.date}</span>
+                    <span>{entry.value} mg/dL</span>
+                  </div>
+                ))}
+            </div>
+          </div>
         </Dialog>
       ) : null}
 
@@ -1083,6 +1436,97 @@ const createStyles = (theme: AppTheme) => ({
     background: theme.colors.surface,
     fontFamily: "inherit",
     color: theme.colors.text
+  },
+  trackerContent: {
+    display: "grid",
+    gap: theme.spacing.md
+  },
+  trackerFormRowOne: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: theme.spacing.sm
+  },
+  trackerFormRowTwo: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: theme.spacing.sm
+  },
+  trackerInput: {
+    width: "100%",
+    minWidth: 0,
+    boxSizing: "border-box" as const,
+    borderRadius: theme.radii.md,
+    border: `1px solid ${theme.colors.divider}`,
+    padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+    fontSize: 14,
+    fontFamily: "inherit"
+  },
+  trackerAddButton: {
+    border: "none",
+    borderRadius: theme.radii.md,
+    background: theme.colors.primary,
+    color: theme.colors.background,
+    padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer",
+    justifySelf: "start"
+  },
+  trackerFilterRow: {
+    display: "grid",
+    gap: theme.spacing.xs
+  },
+  trackerFilterLabel: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: theme.colors.textSecondary,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.6
+  },
+  trackerSelect: {
+    width: "100%",
+    minWidth: 0,
+    boxSizing: "border-box" as const,
+    borderRadius: theme.radii.md,
+    border: `1px solid ${theme.colors.divider}`,
+    padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+    fontSize: 14,
+    fontFamily: "inherit",
+    background: theme.colors.surface,
+    color: theme.colors.text
+  },
+  trackerChart: {
+    display: "block",
+    width: "100%",
+    height: 140,
+    borderRadius: theme.radii.md,
+    border: `1px solid ${theme.colors.divider}`,
+    overflow: "hidden" as const
+  },
+  trackerLegend: {
+    margin: 0,
+    fontSize: 12,
+    color: theme.colors.textSecondary
+  },
+  trackerInsight: {
+    margin: 0,
+    fontSize: 13,
+    lineHeight: "20px",
+    color: theme.colors.text
+  },
+  trackerHistory: {
+    borderTop: `1px solid ${theme.colors.divider}`,
+    paddingTop: theme.spacing.sm,
+    display: "grid",
+    gap: theme.spacing.xs,
+    maxHeight: 140,
+    overflowY: "auto" as const
+  },
+  trackerHistoryRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    fontSize: 12,
+    color: theme.colors.textSecondary
   }
 });
 
