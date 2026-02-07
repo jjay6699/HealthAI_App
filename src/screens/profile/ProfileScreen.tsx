@@ -82,6 +82,11 @@ type FastingGlucoseEntry = {
   value: number;
 };
 
+type WeightEntry = {
+  date: string;
+  value: number;
+};
+
 type EditKey = keyof ProfileState;
 type EditConfig = {
   label: string;
@@ -208,7 +213,7 @@ const ProfileScreen = () => {
   const [editValue, setEditValue] = useState("");
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [isEditingMeasurements, setIsEditingMeasurements] = useState(false);
-  const [activeTracker, setActiveTracker] = useState<"bloodPressure" | "fastingGlucose" | null>(null);
+  const [activeTracker, setActiveTracker] = useState<"bloodPressure" | "fastingGlucose" | "weight" | null>(null);
   const [bpDate, setBpDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [bpSystolic, setBpSystolic] = useState("");
   const [bpDiastolic, setBpDiastolic] = useState("");
@@ -216,6 +221,9 @@ const ProfileScreen = () => {
   const [glucoseDate, setGlucoseDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [glucoseValue, setGlucoseValue] = useState("");
   const [glucoseMonthFilter, setGlucoseMonthFilter] = useState("all");
+  const [weightDate, setWeightDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [weightValue, setWeightValue] = useState("");
+  const [weightMonthFilter, setWeightMonthFilter] = useState("all");
   const [bpHistory, setBpHistory] = useState<BloodPressureEntry[]>(() => {
     const saved = localStorage.getItem("bloodPressureHistory");
     if (!saved) return [];
@@ -228,6 +236,16 @@ const ProfileScreen = () => {
   });
   const [glucoseHistory, setGlucoseHistory] = useState<FastingGlucoseEntry[]>(() => {
     const saved = localStorage.getItem("fastingGlucoseHistory");
+    if (!saved) return [];
+    try {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [weightHistory, setWeightHistory] = useState<WeightEntry[]>(() => {
+    const saved = localStorage.getItem("weightHistory");
     if (!saved) return [];
     try {
       const parsed = JSON.parse(saved);
@@ -271,6 +289,10 @@ const ProfileScreen = () => {
   useEffect(() => {
     localStorage.setItem("fastingGlucoseHistory", JSON.stringify(glucoseHistory));
   }, [glucoseHistory]);
+
+  useEffect(() => {
+    localStorage.setItem("weightHistory", JSON.stringify(weightHistory));
+  }, [weightHistory]);
 
   const editConfig: Record<EditKey, EditConfig> = {
     avatarImage: { label: "Profile photo" },
@@ -417,6 +439,12 @@ const ProfileScreen = () => {
     return `${sorted[0].value} mg/dL`;
   };
 
+  const getLatestWeight = () => {
+    if (weightHistory.length === 0) return formatNumber(profile.weight, "kg");
+    const sorted = [...weightHistory].sort((a, b) => b.date.localeCompare(a.date));
+    return `${sorted[0].value} kg`;
+  };
+
   const addBloodPressureEntry = () => {
     const systolic = Number(bpSystolic);
     const diastolic = Number(bpDiastolic);
@@ -445,6 +473,20 @@ const ProfileScreen = () => {
     });
     setProfile((prev) => ({ ...prev, fastingGlucose: value }));
     setGlucoseValue("");
+  };
+
+  const addWeightEntry = () => {
+    const value = Number(weightValue);
+    if (!weightDate || Number.isNaN(value) || value <= 0) {
+      return;
+    }
+
+    setWeightHistory((prev) => {
+      const withoutDate = prev.filter((entry) => entry.date !== weightDate);
+      return [...withoutDate, { date: weightDate, value }].sort((a, b) => a.date.localeCompare(b.date));
+    });
+    setProfile((prev) => ({ ...prev, weight: value }));
+    setWeightValue("");
   };
 
   const buildLinePath = (values: number[], width: number, height: number) => {
@@ -496,9 +538,12 @@ const ProfileScreen = () => {
 
   const bpSortedEntries = [...bpHistory].sort((a, b) => a.date.localeCompare(b.date));
   const glucoseSortedEntries = [...glucoseHistory].sort((a, b) => a.date.localeCompare(b.date));
+  const weightSortedEntries = [...weightHistory].sort((a, b) => a.date.localeCompare(b.date));
   const bpMonthOptions = Array.from(new Set(bpSortedEntries.map((entry) => entry.date.slice(0, 7))))
     .sort((a, b) => b.localeCompare(a));
   const glucoseMonthOptions = Array.from(new Set(glucoseSortedEntries.map((entry) => entry.date.slice(0, 7))))
+    .sort((a, b) => b.localeCompare(a));
+  const weightMonthOptions = Array.from(new Set(weightSortedEntries.map((entry) => entry.date.slice(0, 7))))
     .sort((a, b) => b.localeCompare(a));
 
   const bpFilteredEntries =
@@ -509,15 +554,22 @@ const ProfileScreen = () => {
     glucoseMonthFilter === "all"
       ? glucoseSortedEntries
       : glucoseSortedEntries.filter((entry) => entry.date.startsWith(glucoseMonthFilter));
+  const weightFilteredEntries =
+    weightMonthFilter === "all"
+      ? weightSortedEntries
+      : weightSortedEntries.filter((entry) => entry.date.startsWith(weightMonthFilter));
 
   const bpChartEntries = bpFilteredEntries.slice(-31);
   const glucoseChartEntries = glucoseFilteredEntries.slice(-31);
+  const weightChartEntries = weightFilteredEntries.slice(-31);
 
   const bpSystolicPath = buildLinePath(bpChartEntries.map((entry) => entry.systolic), chartWidth, chartPlotHeight);
   const bpDiastolicPath = buildLinePath(bpChartEntries.map((entry) => entry.diastolic), chartWidth, chartPlotHeight);
   const glucosePath = buildLinePath(glucoseChartEntries.map((entry) => entry.value), chartWidth, chartPlotHeight);
+  const weightPath = buildLinePath(weightChartEntries.map((entry) => entry.value), chartWidth, chartPlotHeight);
   const bpMonthTicks = buildMonthTicks(bpChartEntries.map((entry) => entry.date), chartWidth);
   const glucoseMonthTicks = buildMonthTicks(glucoseChartEntries.map((entry) => entry.date), chartWidth);
+  const weightMonthTicks = buildMonthTicks(weightChartEntries.map((entry) => entry.date), chartWidth);
 
   const bpInsight = (() => {
     if (bpFilteredEntries.length < 2) return "Add daily readings to see blood pressure trends.";
@@ -542,6 +594,15 @@ const ProfileScreen = () => {
       return `Recent average fasting glucose is ${Math.round(avg)} mg/dL and trend is ${trendText}. Keep monitoring daily while using your nutrition plan.`;
     }
     return `Recent average fasting glucose is ${Math.round(avg)} mg/dL with a ${trendText} pattern. Current range looks good.`;
+  })();
+
+  const weightInsight = (() => {
+    if (weightFilteredEntries.length < 2) return "Add daily weight readings to see your trend.";
+    const avg = weightFilteredEntries.reduce((sum, entry) => sum + entry.value, 0) / weightFilteredEntries.length;
+    const delta = weightFilteredEntries[weightFilteredEntries.length - 1].value - weightFilteredEntries[0].value;
+    const trendText = delta > 0 ? "upward" : delta < 0 ? "downward" : "stable";
+    const changeText = `${Math.abs(delta).toFixed(1)} kg`;
+    return `Average is ${avg.toFixed(1)} kg with a ${trendText} trend (${changeText} change in this period).`;
   })();
 
   return (
@@ -585,6 +646,7 @@ const ProfileScreen = () => {
       <Card style={styles.card}>
         <SectionHeader title="Health data" />
         <ProfileRow label="Measurements" value={`${profile.height} cm • ${profile.weight} kg`} action="Update" onEdit={() => setIsEditingMeasurements(true)} />
+        <ProfileRow label="Daily weight" value={getLatestWeight()} action="Track" onEdit={() => setActiveTracker("weight")} />
         <ProfileRow label="Activity level" value={formatValue(profile.activityLevel)} action="Update" onEdit={() => openEdit("activityLevel")} />
       </Card>
 
@@ -953,6 +1015,84 @@ const ProfileScreen = () => {
                   <div key={`glucose-${entry.date}`} style={styles.trackerHistoryRow}>
                     <span>{entry.date}</span>
                     <span>{entry.value} mg/dL</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </Dialog>
+      ) : null}
+
+      {activeTracker === "weight" ? (
+        <Dialog
+          title="Weight daily tracker"
+          description="Log your morning weight daily to monitor trend and progression."
+          onClose={() => setActiveTracker(null)}
+          cancelLabel="Close"
+        >
+          <div style={styles.trackerContent}>
+            <div style={styles.trackerFormRowTwo}>
+              <input
+                type="date"
+                value={weightDate}
+                onChange={(event) => setWeightDate(event.target.value)}
+                style={styles.trackerInput}
+              />
+              <input
+                type="number"
+                inputMode="decimal"
+                placeholder="kg"
+                value={weightValue}
+                onChange={(event) => setWeightValue(event.target.value)}
+                style={styles.trackerInput}
+              />
+            </div>
+            <button type="button" style={styles.trackerAddButton} onClick={addWeightEntry}>
+              Add reading
+            </button>
+            <div style={styles.trackerFilterRow}>
+              <span style={styles.trackerFilterLabel}>Month</span>
+              <select
+                value={weightMonthFilter}
+                onChange={(event) => setWeightMonthFilter(event.target.value)}
+                style={styles.trackerSelect}
+              >
+                <option value="all">All months</option>
+                {weightMonthOptions.map((month) => (
+                  <option key={month} value={month}>
+                    {toMonthLabel(month)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <svg viewBox="0 0 300 120" style={styles.trackerChart}>
+              <rect x="0" y="0" width="300" height="120" fill={theme.colors.surface} rx="8" />
+              {[60, 120, 180, 240].map((x) => (
+                <line key={`wt-v-${x}`} x1={x} y1="0" x2={x} y2="96" stroke={theme.colors.divider} strokeWidth="1" opacity="0.25" />
+              ))}
+              {[0, 24, 48, 72, 96].map((y) => (
+                <line key={`wt-h-${y}`} x1="0" y1={y} x2="300" y2={y} stroke={theme.colors.divider} strokeWidth="1" opacity="0.35" />
+              ))}
+              {weightMonthTicks.map((tick) => (
+                <g key={`wt-m-${tick.label}-${tick.x}`}>
+                  <line x1={tick.x} y1="0" x2={tick.x} y2="96" stroke={theme.colors.divider} strokeWidth="1" opacity="0.55" />
+                  <text x={tick.x} y="114" textAnchor={tick.anchor} fontSize="9" fill={theme.colors.textSecondary}>
+                    {tick.label}
+                  </text>
+                </g>
+              ))}
+              {weightPath ? <path d={weightPath} stroke="#7C3AED" strokeWidth="2" fill="none" /> : null}
+            </svg>
+            <p style={styles.trackerLegend}>Purple: weight</p>
+            <p style={styles.trackerInsight}>{weightInsight}</p>
+            <div style={styles.trackerHistory}>
+              {weightFilteredEntries
+                .slice(-7)
+                .reverse()
+                .map((entry) => (
+                  <div key={`weight-${entry.date}`} style={styles.trackerHistoryRow}>
+                    <span>{entry.date}</span>
+                    <span>{entry.value} kg</span>
                   </div>
                 ))}
             </div>
