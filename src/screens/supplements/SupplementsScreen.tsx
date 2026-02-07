@@ -100,7 +100,7 @@ const SupplementsScreen = () => {
   const servingsPerMonth = 28;
   const bottlesPerMonth = 2;
   const bottlePrice = 45;
-  const monthPrice = 90;
+  const monthPrice = 85;
 
   const totalGrams = recommendations.reduce((sum, rec) => {
     const grams = rec.dosageGramsPerDay ?? parseDosageGrams(rec.dosage);
@@ -154,9 +154,7 @@ const SupplementsScreen = () => {
           <div>
             <p style={styles.priceLabel}>Monthly Supply</p>
             <p style={styles.priceAmount}>RM{monthPrice}</p>
-            <p style={styles.priceSub}>
-              {bottlesPerMonth} bottles/month • RM{bottlePrice} per bottle
-            </p>
+            <p style={styles.priceSub}>{bottlesPerMonth} bottles/month bundle</p>
           </div>
           <Button
             title="Order Now"

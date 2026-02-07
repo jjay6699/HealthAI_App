@@ -28,7 +28,7 @@ const OrderReviewScreen = () => {
 
   const plans = [
     { id: "one-bottle", label: "One Bottle Order", price: 45, savings: null, description: "1 bottle" },
-    { id: "one-month", label: "One Month Order", price: 95, savings: null, description: "2 bottles" },
+    { id: "one-month", label: "One Month Order", price: 85, savings: null, description: "2 bottles" },
     { id: "three-months", label: "3-Months Order", price: 240, savings: null, description: "6 bottles" }
   ];
 
