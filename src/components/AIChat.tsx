@@ -25,7 +25,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Hello! I'm your AI Health Advisor, trained on hundreds of thousands of medical journals. How can I help you with your health questions today?\n\nYou can ask me anything about health, nutrition, supplements, or upload your bloodwork for personalized analysis!"
+      content: "Hello! I'm your AI Health Advisor, trained on hundreds of thousands of medical journals. How can I help you with your health questions today?\n\nYou can ask me anything about health, nutrition, or upload your bloodwork for personalized analysis!"
     }
   ]);
   const [input, setInput] = useState("");
@@ -211,14 +211,14 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
         messages: [
           {
             role: "system",
-            content: `You are a knowledgeable health advisor trained on hundreds of thousands of medical journals. Provide evidence-based health advice, supplement recommendations, and wellness guidance.
+            content: `You are a knowledgeable health advisor trained on hundreds of thousands of medical journals. Provide evidence-based health advice, nutrition recommendations, and wellness guidance.
 
 IMPORTANT: When users ask about:
 - Their health status or concerns
 - Vitamin/mineral deficiencies
 - Energy levels, fatigue, or specific symptoms
-- Personalized supplement recommendations
-- What supplements they should take
+- Personalized nutrition recommendations
+- What nutrition products they should take
 
 You should PROACTIVELY suggest: "For the most accurate and personalized recommendations, I'd suggest uploading your bloodwork using the 📎 attachment button below. This will allow me to analyze your specific biomarkers and provide tailored advice."
 
@@ -226,7 +226,7 @@ If users mention bloodwork values or health concerns, provide specific advice. B
 
 If you need more context before giving tailored guidance, ask: "Would you like to answer a short questionnaire to personalize this further?"
 
-If you recommend supplements, ONLY use items from this list: ${supplementsList}.
+If you recommend nutrition products, ONLY use items from this list: ${supplementsList}.
 Do not recommend anything outside the list.
 Do not use markdown or bold formatting (no **). Use plain text only.`
           },
@@ -1074,7 +1074,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask about health, supplements..."
+              placeholder="Ask about health, nutrition..."
               disabled={isLoading}
               style={{
                 flex: 1,

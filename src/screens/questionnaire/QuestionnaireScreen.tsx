@@ -82,9 +82,9 @@ const sections = [
   },
   {
     title: "Safety checks",
-    description: "We use this to keep supplement suggestions safe.",
+    description: "We use this to keep nutrition suggestions safe.",
     items: [
-      "Known allergies (medications or supplements)",
+      "Known allergies (medications or nutrition products)",
       "Kidney or liver conditions",
       "Bleeding disorders or anticoagulants",
       "Pregnancy or trying to conceive"
@@ -237,3 +237,4 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default QuestionnaireScreen;
+

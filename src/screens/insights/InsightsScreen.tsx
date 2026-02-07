@@ -57,7 +57,7 @@ const InsightsScreen = () => {
         <Card style={styles.emptyCard}>
           <h3 style={styles.emptyTitle}>No analysis yet</h3>
           <p style={styles.emptyBody}>
-            Upload your lab results to receive personalized health insights and supplement recommendations powered by AI.
+            Upload your lab results to receive personalized health insights and nutrition recommendations powered by AI.
           </p>
           <Link to="/upload">
             <Button title="Upload Bloodwork" fullWidth />
@@ -125,12 +125,12 @@ const InsightsScreen = () => {
         </Card>
       )}
 
-      {/* Supplement Recommendations */}
+      {/* Nutrition Recommendations */}
       {analysis.recommendations && analysis.recommendations.length > 0 && (
         <Card style={styles.recommendationsCard}>
-          <SectionHeader title="Recommended Supplements" />
+          <SectionHeader title="Recommended Nutrition" />
           <p style={styles.recommendationsSubtext}>
-            Based on your bloodwork, we recommend the following supplements from our collection:
+            Based on your bloodwork, we recommend the following nutrition products from our collection:
           </p>
           <Link to="/supplements">
             <Button title="View All Recommendations" fullWidth />
@@ -278,3 +278,4 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default InsightsScreen;
+

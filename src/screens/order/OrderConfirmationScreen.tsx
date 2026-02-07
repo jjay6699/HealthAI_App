@@ -8,6 +8,7 @@ interface LastOrder {
   orderNumber: string;
   date: string;
   plan: string;
+  planLabel?: string;
   price: number;
   recommendations: any[];
 }
@@ -78,7 +79,7 @@ const OrderConfirmationScreen = () => {
       <Card style={styles.card}>
         <h3 style={styles.cardTitle}>Order Summary</h3>
         <div style={styles.summaryRow}>
-          <span style={styles.summaryLabel}>Custom Blend ({order.plan})</span>
+          <span style={styles.summaryLabel}>Custom Blend ({order.planLabel || order.plan})</span>
           <span style={styles.summaryValue}>RM{order.price.toFixed(2)}</span>
         </div>
         <div style={styles.summaryRow}>
@@ -107,7 +108,7 @@ const OrderConfirmationScreen = () => {
             <div style={styles.stepIcon}>📦</div>
             <div style={styles.stepContent}>
               <p style={styles.stepTitle}>Preparing Your Blend</p>
-              <p style={styles.stepText}>We'll prepare your custom supplement blend</p>
+              <p style={styles.stepText}>We'll prepare your custom nutrition blend</p>
             </div>
           </div>
           <div style={styles.step}>
@@ -121,7 +122,7 @@ const OrderConfirmationScreen = () => {
             <div style={styles.stepIcon}>🏠</div>
             <div style={styles.stepContent}>
               <p style={styles.stepTitle}>Delivery</p>
-              <p style={styles.stepText}>Receive your supplements in 3-5 days</p>
+              <p style={styles.stepText}>Receive your nutrition products in 3-5 days</p>
             </div>
           </div>
         </div>
@@ -317,4 +318,5 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default OrderConfirmationScreen;
+
 

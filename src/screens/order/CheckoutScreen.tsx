@@ -7,7 +7,7 @@ import { AppTheme, useTheme } from "../../theme";
 
 interface OrderDetails {
   plan: string;
-  deliveryFrequency: number;
+  planLabel?: string;
   price: number;
   recommendations: any[];
 }
@@ -216,7 +216,7 @@ const CheckoutScreen = () => {
         <SectionHeader title="Order Summary" />
         <div style={styles.summaryRow}>
           <span style={styles.summaryLabel}>
-            {orderDetails.recommendations.length} supplements ({orderDetails.plan})
+            {orderDetails.recommendations.length} nutrition items ({orderDetails.planLabel || orderDetails.plan})
           </span>
           <span style={styles.summaryValue}>RM{orderDetails.price.toFixed(2)}</span>
         </div>
@@ -387,4 +387,5 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default CheckoutScreen;
+
 

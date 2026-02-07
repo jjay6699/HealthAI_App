@@ -63,13 +63,13 @@ const SupplementsScreen = () => {
   if (recommendations.length === 0) {
     return (
       <div style={styles.page}>
-        <h1 style={styles.heading}>Supplement recommendations</h1>
-        <p style={styles.subheading}>Get personalized supplement recommendations based on your bloodwork.</p>
+        <h1 style={styles.heading}>Nutrition recommendations</h1>
+        <p style={styles.subheading}>Get personalized nutrition recommendations based on your bloodwork.</p>
 
         <Card style={styles.emptyCard}>
           <h3 style={styles.emptyTitle}>No recommendations yet</h3>
           <p style={styles.emptyBody}>
-            Upload your bloodwork to receive AI-powered supplement recommendations tailored to your health needs.
+            Upload your bloodwork to receive AI-powered nutrition recommendations tailored to your health needs.
           </p>
           <Link to="/upload">
             <Button title="Upload Bloodwork" fullWidth />
@@ -77,9 +77,9 @@ const SupplementsScreen = () => {
         </Card>
 
         <Card style={styles.notice} shadow={false}>
-          <h3 style={styles.noticeTitle}>Our Supplement Collection</h3>
+          <h3 style={styles.noticeTitle}>Our Nutrition Collection</h3>
           <p style={styles.noticeBody}>
-            We offer {AVAILABLE_SUPPLEMENTS.length} premium superfood supplements including wheatgrass, spirulina, turmeric, and more.
+            We offer {AVAILABLE_SUPPLEMENTS.length} premium superfood nutrition products including wheatgrass, spirulina, turmeric, and more.
           </p>
         </Card>
       </div>
@@ -130,15 +130,15 @@ const SupplementsScreen = () => {
     const supplementNames = recommendations.map(rec => rec.supplementName).join(", ");
     const base = getBaseSelections();
     const baseText = base.protein && base.fiber ? ` Base blend: ${base.protein} + ${base.fiber}.` : "";
-    const gramsText = `Total daily blend: ${servingGrams.toFixed(1)} g.`;
+    const gramsText = `Total serving size blend: ${servingGrams.toFixed(1)} g.`;
     return `Your personalized blend includes ${supplementNames}.${baseText} ${gramsText}`.trim();
   };
 
   return (
     <div style={styles.page}>
-      <h1 style={styles.heading}>Your personalized supplements</h1>
+      <h1 style={styles.heading}>Your personalized nutrition plan</h1>
       <p style={styles.subheading}>
-        Based on your bloodwork analysis, we recommend the following supplements from our collection.
+        Based on your bloodwork analysis, we recommend the following nutrition products from our collection.
       </p>
 
       {/* Combined Summary Card */}
@@ -193,13 +193,13 @@ const SupplementsScreen = () => {
 
               {(rec.dosageGramsPerDay || parseDosageGrams(rec.dosage)) && (
                 <div style={styles.section}>
-                  <span style={styles.label}>Daily grams</span>
+                  <span style={styles.label}>Serving size grams</span>
                   <p style={styles.body}>
                     {(
                       scaledGrams.find((item) => item.id === rec.supplementId)?.grams ??
                       rec.dosageGramsPerDay ??
                       parseDosageGrams(rec.dosage)
-                    )} g/day
+                    )} g per serving size
                   </p>
                 </div>
               )}
@@ -243,7 +243,7 @@ const SupplementsScreen = () => {
 
       {activeSupplementId ? (
         <Dialog
-          title={getSupplementDetails(activeSupplementId)?.name ?? "Supplement details"}
+          title={getSupplementDetails(activeSupplementId)?.name ?? "Nutrition details"}
           description={SUPPLEMENT_DESCRIPTIONS[activeSupplementId] ?? "Details coming soon."}
           onClose={() => setActiveSupplementId(null)}
           cancelLabel="Close"
@@ -424,3 +424,4 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default SupplementsScreen;
+

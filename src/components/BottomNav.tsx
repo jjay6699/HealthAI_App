@@ -14,7 +14,7 @@ const tabs = [
   { to: "/home", label: "Home", icon: HomeIcon },
   { to: "/upload", label: "Upload", icon: UploadIcon },
   { to: "/insights", label: "Insights", icon: InsightsIcon },
-  { to: "/supplements", label: "Supps", icon: SupplementsIcon },
+  { to: "/supplements", label: "Nutrition", icon: SupplementsIcon },
   { to: "/history", label: "History", icon: HistoryIcon },
   { to: "/profile", label: "Profile", icon: ProfileIcon }
 ];

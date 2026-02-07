@@ -20,7 +20,7 @@ const UploadScreen = () => {
     { icon: "📄", text: "Reading document", color: "#8B5CF6" },
     { icon: "🔍", text: "Extracting biomarkers", color: "#3B82F6" },
     { icon: "🧬", text: "Analyzing values", color: "#10B981" },
-    { icon: "💊", text: "Recommending supplements", color: "#F59E0B" }
+    { icon: "💊", text: "Recommending nutrition products", color: "#F59E0B" }
   ];
 
   // Animate through steps
@@ -144,7 +144,7 @@ const UploadScreen = () => {
           <div style={styles.spinner}></div>
           <h2 style={styles.analyzingTitle}>Analyzing Your Bloodwork</h2>
           <p style={styles.analyzingText}>
-            Our AI is reading your bloodwork report and generating personalized supplement recommendations...
+            Our AI is reading your bloodwork report and generating personalized nutrition recommendations...
           </p>
           <div style={styles.progressSteps}>
             {analysisSteps.map((step, index) => {
@@ -196,9 +196,9 @@ const UploadScreen = () => {
 
   return (
     <div style={styles.page}>
-      <h1 style={styles.heading}>From Lab Results to Personalized Supplement Guidance</h1>
+      <h1 style={styles.heading}>From Lab Results to Personalized Nutrition Guidance</h1>
       <p style={styles.subheading}>
-        Upload your bloodwork or DNA to see what your biomarkers mean and receive personalized supplement recommendations.
+        Upload your bloodwork or DNA to see what your biomarkers mean and receive personalized nutrition recommendations.
       </p>
 
       {error && (
@@ -206,6 +206,14 @@ const UploadScreen = () => {
           <p style={{ color: theme.colors.error, margin: 0, fontSize: 14 }}>{error}</p>
         </Card>
       )}
+      <Card style={styles.card}>
+        <SectionHeader title="How it works" />
+        <ol style={styles.timeline}>
+          <li style={styles.timelineItem}>Upload your lab report or DNA file.</li>
+          <li style={styles.timelineItem}>We analyze your results and highlight anything that stands out.</li>
+          <li style={styles.timelineItem}>You receive clear explanations and personalized nutrition recommendations.</li>
+        </ol>
+      </Card>
 
       <Card style={styles.card}>
         <SectionHeader title="Choose source" />
@@ -243,14 +251,6 @@ const UploadScreen = () => {
         </button>
       </Card>
 
-      <Card style={styles.card}>
-        <SectionHeader title="How it works" />
-        <ol style={styles.timeline}>
-          <li style={styles.timelineItem}>Upload your lab report or DNA file.</li>
-          <li style={styles.timelineItem}>We analyze your results and highlight anything that stands out.</li>
-          <li style={styles.timelineItem}>You receive clear explanations and personalized supplement recommendations.</li>
-        </ol>
-      </Card>
 
       <Card style={styles.card}>
         <SectionHeader title="Past uploads" />
@@ -491,3 +491,6 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default UploadScreen;
+
+
+

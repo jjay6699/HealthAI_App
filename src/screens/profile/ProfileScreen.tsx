@@ -252,7 +252,7 @@ const ProfileScreen = () => {
     conditions: { label: "Conditions" },
     surgeries: { label: "Surgeries" },
     medications: { label: "Medications" },
-    supplements: { label: "Supplements" },
+    supplements: { label: "Current nutrition" },
     topPriorities: { label: "Top priorities" },
     dataProcessingConsent: { label: "Data processing consent" },
     dataProcessing: { label: "Data processing" },
@@ -435,7 +435,7 @@ const ProfileScreen = () => {
           <InfoItem label="Conditions" value={formatValue(profile.conditions)} action="Set" onEdit={() => openEdit("conditions")} />
           <InfoItem label="Surgeries" value={formatValue(profile.surgeries)} action="Set" onEdit={() => openEdit("surgeries")} />
           <InfoItem label="Medications" value={formatValue(profile.medications)} action="Set" onEdit={() => openEdit("medications")} />
-          <InfoItem label="Supplements" value={formatValue(profile.supplements)} action="Set" onEdit={() => openEdit("supplements")} />
+          <InfoItem label="Current nutrition" value={formatValue(profile.supplements)} action="Set" onEdit={() => openEdit("supplements")} />
         </div>
       </Card>
 
@@ -1087,3 +1087,4 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default ProfileScreen;
+

@@ -7,7 +7,7 @@ import { AppTheme, useTheme } from "../../theme";
 
 interface OrderDetails {
   plan: string;
-  deliveryFrequency: number;
+  planLabel?: string;
   price: number;
   recommendations: any[];
 }
@@ -91,7 +91,7 @@ const PaymentScreen = () => {
         <SectionHeader title="Order Summary" />
         <div style={styles.summaryRow}>
           <span style={styles.summaryLabel}>
-            Custom Blend ({orderDetails.plan})
+            Custom Blend ({orderDetails.planLabel || orderDetails.plan})
           </span>
           <span style={styles.summaryValue}>RM{orderDetails.price.toFixed(2)}</span>
         </div>
@@ -348,4 +348,3 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default PaymentScreen;
-

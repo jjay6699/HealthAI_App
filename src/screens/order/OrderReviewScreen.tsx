@@ -10,8 +10,7 @@ const OrderReviewScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const navigate = useNavigate();
-  const [selectedPlan, setSelectedPlan] = useState<"one-time" | "monthly" | "quarterly" | "semi-annual">("monthly");
-  const [deliveryFrequency, setDeliveryFrequency] = useState(30);
+  const [selectedPlan, setSelectedPlan] = useState<"one-bottle" | "one-month" | "three-months">("one-month");
   const [analysis, setAnalysis] = useState<BloodworkAnalysis | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [couponApplied, setCouponApplied] = useState<string | null>(null);
@@ -28,10 +27,9 @@ const OrderReviewScreen = () => {
   }, []);
 
   const plans = [
-    { id: "one-time", label: "One-time purchase", price: 90, savings: null, description: "Single delivery" },
-    { id: "monthly", label: "Monthly subscription", price: 90, savings: null, description: "Cancel anytime" },
-    { id: "quarterly", label: "3-month plan", price: 270, savings: null, description: "RM90/month" },
-    { id: "semi-annual", label: "6-month plan", price: 540, savings: null, description: "RM90/month" }
+    { id: "one-bottle", label: "One Bottle Order", price: 45, savings: null, description: "1 bottle" },
+    { id: "one-month", label: "One Month Order", price: 95, savings: null, description: "2 bottles" },
+    { id: "three-months", label: "3-Months Order", price: 240, savings: null, description: "6 bottles" }
   ];
 
   const selectedPlanDetails = plans.find(p => p.id === selectedPlan);
@@ -40,7 +38,7 @@ const OrderReviewScreen = () => {
     // Save order details to localStorage
     localStorage.setItem("orderDetails", JSON.stringify({
       plan: selectedPlan,
-      deliveryFrequency,
+      planLabel: selectedPlanDetails?.label,
       price: selectedPlanDetails?.price,
       recommendations: analysis?.recommendations,
       couponCode: couponApplied
@@ -71,11 +69,11 @@ const OrderReviewScreen = () => {
       {/* Back Button */}
       <button onClick={() => navigate("/supplements")} style={styles.backButton}>
         <span style={styles.backArrow}>←</span>
-        <span>Back to Supplements</span>
+        <span>Back to Nutrition</span>
       </button>
 
       <h1 style={styles.heading}>Review Your Order</h1>
-      <p style={styles.subheading}>Choose your plan and confirm your custom supplement blend</p>
+      <p style={styles.subheading}>Choose your plan and confirm your custom nutrition blend</p>
 
       {/* Custom Blend Summary */}
       <Card style={styles.card}>
@@ -86,7 +84,7 @@ const OrderReviewScreen = () => {
               <div style={styles.supplementIcon}>💊</div>
               <div style={styles.supplementInfo}>
                 <span style={styles.supplementName}>{rec.supplementName}</span>
-                <span style={styles.supplementDosage}>{rec.dosage}</span>
+                <span style={styles.supplementDosage}>{(rec.dosage || "").replace(/per day/gi, "per serving size").replace(/g\/day/gi, "g per serving size")}</span>
               </div>
             </div>
           ))}
@@ -128,29 +126,12 @@ const OrderReviewScreen = () => {
               </div>
               <div style={styles.planPrice}>
                 <span style={styles.priceAmount}>RM{plan.price}</span>
-                {plan.id !== "one-time" && <span style={styles.priceFrequency}>/{plan.id === "monthly" ? "mo" : "total"}</span>}
               </div>
               </button>
             );
           })}
         </div>
       </Card>
-
-      {/* Delivery Frequency (only for monthly subscription) */}
-      {selectedPlan === "monthly" && (
-        <Card style={styles.card}>
-          <SectionHeader title="Delivery Frequency" />
-          <select
-            value={deliveryFrequency}
-            onChange={(e) => setDeliveryFrequency(Number(e.target.value))}
-            style={styles.select}
-          >
-            <option value={30}>Every 30 days</option>
-            <option value={60}>Every 60 days</option>
-            <option value={90}>Every 90 days</option>
-          </select>
-        </Card>
-      )}
 
       <Card style={styles.card}>
         <SectionHeader title="Coupon code" />
@@ -407,3 +388,4 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default OrderReviewScreen;
+

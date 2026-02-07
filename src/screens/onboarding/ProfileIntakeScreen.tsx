@@ -144,7 +144,7 @@ const steps: {
       { key: "conditions", label: "Conditions", placeholder: "Type to add" },
       { key: "surgeries", label: "Surgeries or hospitalisations", placeholder: "Optional" },
       { key: "medications", label: "Current medications", placeholder: "List" },
-      { key: "supplements", label: "Current supplements", placeholder: "List" }
+      { key: "supplements", label: "Current nutrition", placeholder: "List" }
     ]
   },
   {
@@ -611,3 +611,4 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default ProfileIntakeScreen;
+

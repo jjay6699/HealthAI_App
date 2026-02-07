@@ -193,7 +193,7 @@ const buildAnalysisCacheKey = (kind: string, payload: unknown): string => {
 };
 
 /**
- * Analyzes bloodwork data using OpenAI and recommends supplements
+ * Analyzes bloodwork data using OpenAI and recommends nutrition products
  */
 export async function analyzeBloodwork(
   bloodworkData: BloodworkData
@@ -215,51 +215,51 @@ export async function analyzeBloodwork(
     .map(([key, data]) => `${key}: ${data.value} ${data.unit}${data.referenceRange ? ` (Reference: ${data.referenceRange})` : ""}`)
     .join("\n");
 
-  const prompt = `You are a health and nutrition expert analyzing bloodwork results. Based on the following bloodwork data, provide personalized supplement recommendations from our available products.
+  const prompt = `You are a health and nutrition expert analyzing bloodwork results. Based on the following bloodwork data, provide personalized nutrition recommendations from our available products.
 
 BLOODWORK DATA:
 ${bloodworkSummary}
 
-AVAILABLE SUPPLEMENTS:
+AVAILABLE NUTRITION PRODUCTS:
 ${supplementsList}
 
 Please analyze the bloodwork and provide:
 1. A brief summary of the overall health status
 2. Key concerns or areas that need attention (ONLY values outside reference ranges)
 3. Positive findings or strengths (ONLY values clearly within healthy ranges)
-4. Specific supplement recommendations from our list that would address any deficiencies or support optimal health
+4. Specific nutrition recommendations from our list that would address any deficiencies or support optimal health
 5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
 
 Before giving recommendations, confirm you checked common lipid/metabolic markers if present: LDL, HDL, total cholesterol, triglycerides (TG), non-HDL, ApoB, glucose, HbA1c. If any of these are missing from the report, explicitly note them as "missing/unreported".
 
 Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
 Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
-Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default supplements.
+Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default nutrition products.
 Base blend rule: include exactly one protein base (Pea Protein Original OR Pea Protein Cacao) and exactly one fiber base (Australian Instant Oats OR Organic Psyllium Husk) as part of the recommendations, unless contraindicated by the bloodwork or user sensitivities.
 Base blend rule: include exactly one protein base (Pea Protein Original OR Pea Protein Cacao) and exactly one fiber base (Australian Instant Oats OR Organic Psyllium Husk) as part of the recommendations, unless contraindicated by the bloodwork or user sensitivities.
 
-IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements.
-Use grams only (e.g., "3 g per day"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
-Also include numeric field dosageGramsPerDay (number of grams per day).
-Ensure the total daily grams across all recommended supplements sums to 10 g per day (2 tbsp total blend).
-- Spirulina: 3-5g per day (1 teaspoon = ~3g)
-- Chlorella: 2-3g per day
-- Wheatgrass: 3-5g per day (1 teaspoon)
-- Moringa: 2-3g per day
-- Turmeric: 1-3g per day (500mg-1g for mild support, 2-3g for significant inflammation)
-- Ashwagandha: 300-600mg per day (0.3-0.6g)
-- Maca Root: 3-5g per day
-- Beetroot: 5-10g per day
-- Matcha: 1-2g per day (1/2 to 1 teaspoon)
-- Cacao: 5-10g per day (1-2 teaspoons)
-- Chia Seeds: 1-2 tablespoons per day (15-30g)
-- Flax Seeds: 1-2 tablespoons per day (ground)
-- Hemp Seeds: 2-3 tablespoons per day (30-45g)
-- Goji Berries: 10-30g per day (1-3 tablespoons)
-- Acai: 5-10g per day (powder)
-- Mushroom blends: 1-3g per day depending on type
-- Collagen: 10-20g per day
-- Protein powders: 20-30g per day
+IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for nutrition products you already decided to recommend; do NOT use it to choose nutrition products.
+Use grams only (e.g., "3 g per serving size"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
+Also include numeric field dosageGramsPerDay (number of grams per serving size).
+Ensure the total daily grams across all recommended nutrition products sums to 10 g per serving size (2 tbsp total blend).
+- Spirulina: 3-5g per serving size (1 teaspoon = ~3g)
+- Chlorella: 2-3g per serving size
+- Wheatgrass: 3-5g per serving size (1 teaspoon)
+- Moringa: 2-3g per serving size
+- Turmeric: 1-3g per serving size (500mg-1g for mild support, 2-3g for significant inflammation)
+- Ashwagandha: 300-600mg per serving size (0.3-0.6g)
+- Maca Root: 3-5g per serving size
+- Beetroot: 5-10g per serving size
+- Matcha: 1-2g per serving size (1/2 to 1 teaspoon)
+- Cacao: 5-10g per serving size (1-2 teaspoons)
+- Chia Seeds: 1-2 tablespoons per serving size (15-30g)
+- Flax Seeds: 1-2 tablespoons per serving size (ground)
+- Hemp Seeds: 2-3 tablespoons per serving size (30-45g)
+- Goji Berries: 10-30g per serving size (1-3 tablespoons)
+- Acai: 5-10g per serving size (powder)
+- Mushroom blends: 1-3g per serving size depending on type
+- Collagen: 10-20g per serving size
+- Protein powders: 20-30g per serving size
 
 ADJUST dosages based on:
 - Severity of deficiency (higher for severe deficiencies)
@@ -267,7 +267,7 @@ ADJUST dosages based on:
 - Age, weight, and health status
 - Specific biomarker levels
 
-Do NOT use generic "5g per day" for everything - be specific and evidence-based!
+Do NOT use generic "5g per serving size" for everything - be specific and evidence-based!
 
 Respond in JSON format with this structure:
 {
@@ -277,10 +277,10 @@ Respond in JSON format with this structure:
   "recommendations": [
     {
       "supplementId": "supplement-id",
-      "supplementName": "Supplement Name",
-      "reason": "Why this supplement is recommended based on specific bloodwork values",
+      "supplementName": "Nutrition Product Name",
+      "reason": "Why this nutrition product is recommended based on specific bloodwork values",
       "priority": "high|medium|low",
-      "dosage": "Accurate daily intake amount in grams (e.g., '3 g per day')",
+      "dosage": "Accurate daily intake amount in grams (e.g., '3 g per serving size')",
       "dosageGramsPerDay": 3
     }
   ],
@@ -299,7 +299,7 @@ Respond in JSON format with this structure:
       messages: [
         {
           role: "system",
-          content: "You are a knowledgeable health and nutrition expert who analyzes bloodwork and provides evidence-based supplement recommendations with ACCURATE dosages that vary based on the specific supplement and severity of deficiencies. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
+          content: "You are a knowledgeable health and nutrition expert who analyzes bloodwork and provides evidence-based nutrition recommendations with ACCURATE dosages that vary based on the specific nutrition product and severity of deficiencies. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
         },
         {
           role: "user",
@@ -361,7 +361,7 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
       messages: [
         {
           role: "system",
-          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized supplement recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
+          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized nutrition recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
         },
         {
           role: "user",
@@ -370,14 +370,14 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
               type: "text",
               text: `Analyze this multi-page bloodwork report (converted from PDF) and extract all biomarker values with their units and reference ranges across ALL pages.
 
-AVAILABLE SUPPLEMENTS:
+AVAILABLE NUTRITION PRODUCTS:
 ${supplementsList}
 
 Please provide:
 1. A brief summary of the overall health status
 2. Key concerns or areas that need attention (ONLY values outside reference ranges)
 3. Positive findings or strengths (ONLY values clearly within healthy ranges)
-4. Specific supplement recommendations from our list that would address any deficiencies or support optimal health
+4. Specific nutrition recommendations from our list that would address any deficiencies or support optimal health
 5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
 
 Before giving recommendations, confirm you checked common lipid/metabolic markers if present: LDL, HDL, total cholesterol, triglycerides (TG), non-HDL, ApoB, glucose, HbA1c. If any of these are missing from the report, explicitly note them as "missing/unreported".
@@ -390,31 +390,31 @@ Use layman-friendly language (avoid medical jargon, define any necessary terms).
 
 Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
 Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
-Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default supplements.
+Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default nutrition products.
 Base blend rule: include exactly one protein base (Pea Protein Original OR Pea Protein Cacao) and exactly one fiber base (Australian Instant Oats OR Organic Psyllium Husk) as part of the recommendations, unless contraindicated by the bloodwork or user sensitivities.
 
-IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements.
-Use grams only (e.g., "3 g per day"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
-Also include numeric field dosageGramsPerDay (number of grams per day).
-Ensure the total daily grams across all recommended supplements sums to 10 g per day (2 tbsp total blend).
-- Spirulina: 3-5g per day (1 teaspoon = ~3g)
-- Chlorella: 2-3g per day
-- Wheatgrass: 3-5g per day (1 teaspoon)
-- Moringa: 2-3g per day
-- Turmeric: 1-3g per day (500mg-1g for mild support, 2-3g for significant inflammation)
-- Ashwagandha: 300-600mg per day (0.3-0.6g)
-- Maca Root: 3-5g per day
-- Beetroot: 5-10g per day
-- Matcha: 1-2g per day (1/2 to 1 teaspoon)
-- Cacao: 5-10g per day (1-2 teaspoons)
-- Chia Seeds: 1-2 tablespoons per day (15-30g)
-- Flax Seeds: 1-2 tablespoons per day (ground)
-- Hemp Seeds: 2-3 tablespoons per day (30-45g)
-- Goji Berries: 10-30g per day (1-3 tablespoons)
-- Acai: 5-10g per day (powder)
-- Mushroom blends: 1-3g per day depending on type
-- Collagen: 10-20g per day
-- Protein powders: 20-30g per day
+IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for nutrition products you already decided to recommend; do NOT use it to choose nutrition products.
+Use grams only (e.g., "3 g per serving size"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
+Also include numeric field dosageGramsPerDay (number of grams per serving size).
+Ensure the total daily grams across all recommended nutrition products sums to 10 g per serving size (2 tbsp total blend).
+- Spirulina: 3-5g per serving size (1 teaspoon = ~3g)
+- Chlorella: 2-3g per serving size
+- Wheatgrass: 3-5g per serving size (1 teaspoon)
+- Moringa: 2-3g per serving size
+- Turmeric: 1-3g per serving size (500mg-1g for mild support, 2-3g for significant inflammation)
+- Ashwagandha: 300-600mg per serving size (0.3-0.6g)
+- Maca Root: 3-5g per serving size
+- Beetroot: 5-10g per serving size
+- Matcha: 1-2g per serving size (1/2 to 1 teaspoon)
+- Cacao: 5-10g per serving size (1-2 teaspoons)
+- Chia Seeds: 1-2 tablespoons per serving size (15-30g)
+- Flax Seeds: 1-2 tablespoons per serving size (ground)
+- Hemp Seeds: 2-3 tablespoons per serving size (30-45g)
+- Goji Berries: 10-30g per serving size (1-3 tablespoons)
+- Acai: 5-10g per serving size (powder)
+- Mushroom blends: 1-3g per serving size depending on type
+- Collagen: 10-20g per serving size
+- Protein powders: 20-30g per serving size
 
 ADJUST dosages based on:
 - Severity of deficiency (higher for severe deficiencies)
@@ -422,7 +422,7 @@ ADJUST dosages based on:
 - Age, weight, and health status
 - Specific biomarker levels
 
-Do NOT use generic "5g per day" for everything - be specific and evidence-based!
+Do NOT use generic "5g per serving size" for everything - be specific and evidence-based!
 
 Respond in JSON format with this structure:
 {
@@ -432,10 +432,10 @@ Respond in JSON format with this structure:
   "recommendations": [
     {
       "supplementId": "supplement-id",
-      "supplementName": "Supplement Name",
-      "reason": "Why this supplement is recommended based on the bloodwork",
+      "supplementName": "Nutrition Product Name",
+      "reason": "Why this nutrition product is recommended based on the bloodwork",
       "priority": "high|medium|low",
-      "dosage": "Daily intake amount in grams (e.g., '5 g per day')",
+      "dosage": "Daily intake amount in grams (e.g., '5 g per serving size')",
       "dosageGramsPerDay": 5
     }
   ],
@@ -519,7 +519,7 @@ export async function analyzeBloodworkFile(
       messages: [
         {
           role: "system",
-          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized supplement recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
+          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized nutrition recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
         },
         {
           role: "user",
@@ -528,44 +528,44 @@ export async function analyzeBloodworkFile(
               type: "text",
               text: `Analyze this bloodwork report image and extract all biomarker values with their units and reference ranges.
 
-AVAILABLE SUPPLEMENTS:
+AVAILABLE NUTRITION PRODUCTS:
 ${supplementsList}
 
 Please provide:
 1. A brief summary of the overall health status
 2. Key concerns or areas that need attention (ONLY values outside reference ranges)
 3. Positive findings or strengths (ONLY values clearly within healthy ranges)
-4. Specific supplement recommendations from our list that would address any deficiencies or support optimal health
+4. Specific nutrition recommendations from our list that would address any deficiencies or support optimal health
 5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
 
 Use layman-friendly language (avoid medical jargon, define any necessary terms).
 
 Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
 Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
-Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default supplements.
+Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default nutrition products.
 
-IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements.
-Use grams only (e.g., "3 g per day"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
-Also include numeric field dosageGramsPerDay (number of grams per day).
-Ensure the total daily grams across all recommended supplements sums to 10 g per day (2 tbsp total blend).
-- Spirulina: 3-5g per day (1 teaspoon = ~3g)
-- Chlorella: 2-3g per day
-- Wheatgrass: 3-5g per day (1 teaspoon)
-- Moringa: 2-3g per day
-- Turmeric: 1-3g per day (500mg-1g for mild support, 2-3g for significant inflammation)
-- Ashwagandha: 300-600mg per day (0.3-0.6g)
-- Maca Root: 3-5g per day
-- Beetroot: 5-10g per day
-- Matcha: 1-2g per day (1/2 to 1 teaspoon)
-- Cacao: 5-10g per day (1-2 teaspoons)
-- Chia Seeds: 1-2 tablespoons per day (15-30g)
-- Flax Seeds: 1-2 tablespoons per day (ground)
-- Hemp Seeds: 2-3 tablespoons per day (30-45g)
-- Goji Berries: 10-30g per day (1-3 tablespoons)
-- Acai: 5-10g per day (powder)
-- Mushroom blends: 1-3g per day depending on type
-- Collagen: 10-20g per day
-- Protein powders: 20-30g per day
+IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for nutrition products you already decided to recommend; do NOT use it to choose nutrition products.
+Use grams only (e.g., "3 g per serving size"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
+Also include numeric field dosageGramsPerDay (number of grams per serving size).
+Ensure the total daily grams across all recommended nutrition products sums to 10 g per serving size (2 tbsp total blend).
+- Spirulina: 3-5g per serving size (1 teaspoon = ~3g)
+- Chlorella: 2-3g per serving size
+- Wheatgrass: 3-5g per serving size (1 teaspoon)
+- Moringa: 2-3g per serving size
+- Turmeric: 1-3g per serving size (500mg-1g for mild support, 2-3g for significant inflammation)
+- Ashwagandha: 300-600mg per serving size (0.3-0.6g)
+- Maca Root: 3-5g per serving size
+- Beetroot: 5-10g per serving size
+- Matcha: 1-2g per serving size (1/2 to 1 teaspoon)
+- Cacao: 5-10g per serving size (1-2 teaspoons)
+- Chia Seeds: 1-2 tablespoons per serving size (15-30g)
+- Flax Seeds: 1-2 tablespoons per serving size (ground)
+- Hemp Seeds: 2-3 tablespoons per serving size (30-45g)
+- Goji Berries: 10-30g per serving size (1-3 tablespoons)
+- Acai: 5-10g per serving size (powder)
+- Mushroom blends: 1-3g per serving size depending on type
+- Collagen: 10-20g per serving size
+- Protein powders: 20-30g per serving size
 
 ADJUST dosages based on:
 - Severity of deficiency (higher for severe deficiencies)
@@ -573,7 +573,7 @@ ADJUST dosages based on:
 - Age, weight, and health status
 - Specific biomarker levels
 
-Do NOT use generic "5g per day" for everything - be specific and evidence-based!
+Do NOT use generic "5g per serving size" for everything - be specific and evidence-based!
 
 Respond in JSON format with this structure:
 {
@@ -583,10 +583,10 @@ Respond in JSON format with this structure:
   "recommendations": [
     {
       "supplementId": "supplement-id",
-      "supplementName": "Supplement Name",
-      "reason": "Why this supplement is recommended based on the bloodwork",
+      "supplementName": "Nutrition Product Name",
+      "reason": "Why this nutrition product is recommended based on the bloodwork",
       "priority": "high|medium|low",
-      "dosage": "Daily intake amount in grams (e.g., '5 g per day')",
+      "dosage": "Daily intake amount in grams (e.g., '5 g per serving size')",
       "dosageGramsPerDay": 5
     }
   ],
@@ -673,7 +673,7 @@ export async function analyzeBloodworkImages(
       messages: [
         {
           role: "system",
-          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized supplement recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
+          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized nutrition recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
         },
         {
           role: "user",
@@ -682,27 +682,27 @@ export async function analyzeBloodworkImages(
               type: "text",
               text: `Analyze these bloodwork report images and extract all biomarker values with their units and reference ranges.
 
-AVAILABLE SUPPLEMENTS:
+AVAILABLE NUTRITION PRODUCTS:
 ${supplementsList}
 
 Please provide:
 1. A brief summary of the overall health status
 2. Key concerns or areas that need attention (ONLY values outside reference ranges)
 3. Positive findings or strengths (ONLY values clearly within healthy ranges)
-4. Specific supplement recommendations from our list that would address any deficiencies or support optimal health
+4. Specific nutrition recommendations from our list that would address any deficiencies or support optimal health
 5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
 
 Use layman-friendly language (avoid medical jargon, define any necessary terms).
 
 Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
 Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
-Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default supplements.
+Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default nutrition products.
 Base blend rule: include exactly one protein base (Pea Protein Original OR Pea Protein Cacao) and exactly one fiber base (Australian Instant Oats OR Organic Psyllium Husk) as part of the recommendations, unless contraindicated by the bloodwork or user sensitivities.
 
-IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for supplements you already decided to recommend; do NOT use it to choose supplements.
-Use grams only (e.g., "3 g per day"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
-Also include numeric field dosageGramsPerDay (number of grams per day).
-Ensure the total daily grams across all recommended supplements sums to 10 g per day (2 tbsp total blend).
+IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for nutrition products you already decided to recommend; do NOT use it to choose nutrition products.
+Use grams only (e.g., "3 g per serving size"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
+Also include numeric field dosageGramsPerDay (number of grams per serving size).
+Ensure the total daily grams across all recommended nutrition products sums to 10 g per serving size (2 tbsp total blend).
 
 ADJUST dosages based on:
 - Severity of deficiency (higher for severe deficiencies)
@@ -710,7 +710,7 @@ ADJUST dosages based on:
 - Age, weight, and health status
 - Specific biomarker levels
 
-Do NOT use generic "5g per day" for everything - be specific and evidence-based!
+Do NOT use generic "5g per serving size" for everything - be specific and evidence-based!
 
 Respond in JSON format with this structure:
 {
@@ -720,10 +720,10 @@ Respond in JSON format with this structure:
   "recommendations": [
     {
       "supplementId": "supplement-id",
-      "supplementName": "Supplement Name",
-      "reason": "Why this supplement is recommended based on the bloodwork",
+      "supplementName": "Nutrition Product Name",
+      "reason": "Why this nutrition product is recommended based on the bloodwork",
       "priority": "high|medium|low",
-      "dosage": "Daily intake amount in grams (e.g., '5 g per day')",
+      "dosage": "Daily intake amount in grams (e.g., '5 g per serving size')",
       "dosageGramsPerDay": 5
     }
   ],
@@ -812,3 +812,5 @@ Provide clear, actionable insights that are easy to understand.`;
     throw new Error("Failed to generate health insights.");
   }
 }
+
+

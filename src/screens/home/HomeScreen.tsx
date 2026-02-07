@@ -69,7 +69,7 @@ const HomeScreen = () => {
         <div style={styles.heroPill}>Last upload - {formatDate(meta?.uploadedAt)}</div>
         <h1 style={styles.heroTitle}>Understand Your Body's Story</h1>
         <p style={styles.heroCopy}>
-          Upload your bloodwork or DNA to get simple explanations, custom supplement plans, and lifestyle tips tailored to you.
+          Upload your bloodwork or DNA to get simple explanations, custom nutrition plans, and lifestyle tips tailored to you.
         </p>
         <div style={styles.heroBadges}>
           <Badge label="Instant Lab Analysis" tone="info" />
@@ -256,3 +256,4 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default HomeScreen;
+
