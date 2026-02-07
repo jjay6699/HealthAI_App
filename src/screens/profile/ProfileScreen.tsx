@@ -248,10 +248,10 @@ const ProfileScreen = () => {
     mealsPerDay: { label: "Meals per day", type: "number", inputMode: "numeric" },
     caffeineIntake: { label: "Caffeine intake", options: ["None", "Low (1 cup)", "Moderate (2-3 cups)", "High (4+ cups)"] },
     waterIntake: { label: "Water intake (cups/day)", type: "number", inputMode: "numeric" },
-    allergies: { label: "Allergies" },
+    allergies: { label: "Medications or supplements allergy history" },
     conditions: { label: "Conditions" },
-    surgeries: { label: "Surgeries" },
-    medications: { label: "Medications" },
+    surgeries: { label: "Surgeries history" },
+    medications: { label: "Medications history" },
     supplements: { label: "Current nutrition" },
     topPriorities: { label: "Top priorities" },
     dataProcessingConsent: { label: "Data processing consent" },
@@ -425,16 +425,16 @@ const ProfileScreen = () => {
           <InfoItem label="Meals per day" value={formatNumber(profile.mealsPerDay)} action="Set" onEdit={() => openEdit("mealsPerDay")} />
           <InfoItem label="Caffeine intake" value={formatValue(profile.caffeineIntake)} action="Set" onEdit={() => openEdit("caffeineIntake")} />
           <InfoItem label="Water intake" value={formatNumber(profile.waterIntake, "cups/day")} action="Set" onEdit={() => openEdit("waterIntake")} />
-          <InfoItem label="Allergies" value={formatValue(profile.allergies)} action="Set" onEdit={() => openEdit("allergies")} />
+          <InfoItem label="Medications or supplements allergy history" value={formatValue(profile.allergies)} action="Set" onEdit={() => openEdit("allergies")} />
         </div>
       </Card>
 
       <Card style={styles.card}>
-        <SectionHeader title="Medical context" />
+        <SectionHeader title="Medical History" />
         <div style={styles.infoGrid}>
           <InfoItem label="Conditions" value={formatValue(profile.conditions)} action="Set" onEdit={() => openEdit("conditions")} />
-          <InfoItem label="Surgeries" value={formatValue(profile.surgeries)} action="Set" onEdit={() => openEdit("surgeries")} />
-          <InfoItem label="Medications" value={formatValue(profile.medications)} action="Set" onEdit={() => openEdit("medications")} />
+          <InfoItem label="Surgeries history" value={formatValue(profile.surgeries)} action="Set" onEdit={() => openEdit("surgeries")} />
+          <InfoItem label="Medications history" value={formatValue(profile.medications)} action="Set" onEdit={() => openEdit("medications")} />
           <InfoItem label="Current nutrition" value={formatValue(profile.supplements)} action="Set" onEdit={() => openEdit("supplements")} />
         </div>
       </Card>
