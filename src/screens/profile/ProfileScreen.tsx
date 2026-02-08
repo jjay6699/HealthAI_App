@@ -5,6 +5,7 @@ import SectionHeader from "../../components/SectionHeader";
 import Button from "../../components/Button";
 import Dialog from "../../components/Dialog";
 import { AppTheme, useTheme } from "../../theme";
+import { generateProfileSummary } from "../../services/openai";
 
 type ProfileState = {
   avatarImage: string | null;
@@ -254,6 +255,10 @@ const ProfileScreen = () => {
       return [];
     }
   });
+  const [aiSummary, setAiSummary] = useState("");
+  const [aiMotivation, setAiMotivation] = useState("");
+  const [isAiSummaryLoading, setIsAiSummaryLoading] = useState(false);
+  const [aiSummaryError, setAiSummaryError] = useState("");
 
   // Temporary state for measurement editor
   const [tempHeight, setTempHeight] = useState(profile.height);
@@ -605,6 +610,51 @@ const ProfileScreen = () => {
     return `Average is ${avg.toFixed(1)} kg with a ${trendText} trend (${changeText} change in this period).`;
   })();
 
+  const latestBpValue = useMemo(() => {
+    if (bpHistory.length === 0) return profile.bloodPressure;
+    const sorted = [...bpHistory].sort((a, b) => b.date.localeCompare(a.date));
+    return `${sorted[0].systolic}/${sorted[0].diastolic}`;
+  }, [bpHistory, profile.bloodPressure]);
+
+  const latestGlucoseValue = useMemo(() => {
+    if (glucoseHistory.length === 0) return profile.fastingGlucose;
+    const sorted = [...glucoseHistory].sort((a, b) => b.date.localeCompare(a.date));
+    return sorted[0].value;
+  }, [glucoseHistory, profile.fastingGlucose]);
+
+  const fetchProfileSummary = async () => {
+    setIsAiSummaryLoading(true);
+    setAiSummaryError("");
+    try {
+      const result = await generateProfileSummary({
+        name: profile.name,
+        weightKg: profile.weight > 0 ? profile.weight : undefined,
+        bloodPressure: latestBpValue || undefined,
+        fastingGlucoseMgDl: latestGlucoseValue > 0 ? latestGlucoseValue : undefined
+      });
+      setAiSummary(result.summary);
+      setAiMotivation(result.motivation);
+    } catch {
+      setAiSummary("");
+      setAiMotivation("");
+      setAiSummaryError("Unable to load AI profile insight right now. Please try again.");
+    } finally {
+      setIsAiSummaryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const hasData =
+      Boolean(profile.name.trim()) ||
+      profile.weight > 0 ||
+      Boolean(latestBpValue) ||
+      latestGlucoseValue > 0;
+    if (!hasData) return;
+    fetchProfileSummary();
+    // Only rerun when the core summary inputs change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.name, profile.weight, latestBpValue, latestGlucoseValue]);
+
   return (
     <div style={styles.page}>
       <header style={styles.hero}>
@@ -635,6 +685,28 @@ const ProfileScreen = () => {
           </button>
         </div>
       </header>
+      <Card style={styles.card}>
+        <div style={styles.aiSummaryHeader}>
+          <SectionHeader title="Your daily insight" />
+          <button
+            type="button"
+            style={styles.aiRefreshButton}
+            onClick={fetchProfileSummary}
+            disabled={isAiSummaryLoading}
+          >
+            {isAiSummaryLoading ? "Analyzing..." : "Refresh"}
+          </button>
+        </div>
+        {aiSummaryError ? <p style={styles.aiSummaryError}>{aiSummaryError}</p> : null}
+        {!aiSummaryError ? (
+          <p style={styles.aiSummaryText}>
+            {isAiSummaryLoading && !aiSummary
+              ? "Analyzing your profile data to build your daily summary..."
+              : aiSummary || "Add your vitals to get a personalized AI summary."}
+          </p>
+        ) : null}
+        {!aiSummaryError && aiMotivation ? <p style={styles.aiMotivationText}>{aiMotivation}</p> : null}
+      </Card>
       <Card style={styles.card}>
         <SectionHeader title="Personal info" />
         <ProfileRow label="Full name" value={profile.name} action="Edit" onEdit={() => openEdit("name")} />
@@ -1351,6 +1423,42 @@ const createStyles = (theme: AppTheme) => ({
     flexDirection: "column" as const,
     gap: theme.spacing.sm,
     width: "100%"
+  },
+  aiSummaryHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm
+  },
+  aiRefreshButton: {
+    border: `1px solid ${theme.colors.divider}`,
+    background: theme.colors.surface,
+    color: theme.colors.primary,
+    borderRadius: theme.radii.md,
+    padding: `${theme.spacing.xs}px ${theme.spacing.md}px`,
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "inherit"
+  },
+  aiSummaryText: {
+    margin: 0,
+    fontSize: 14,
+    lineHeight: "22px",
+    color: theme.colors.text
+  },
+  aiMotivationText: {
+    margin: 0,
+    fontSize: 14,
+    lineHeight: "20px",
+    color: theme.colors.primary,
+    fontWeight: 600
+  },
+  aiSummaryError: {
+    margin: 0,
+    fontSize: 13,
+    lineHeight: "20px",
+    color: theme.colors.error
   },
   infoGrid: {
     display: "grid",

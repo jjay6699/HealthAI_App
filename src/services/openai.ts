@@ -813,4 +813,95 @@ Provide clear, actionable insights that are easy to understand.`;
   }
 }
 
+export interface DailyProfileSummaryInput {
+  name: string;
+  weightKg?: number;
+  bloodPressure?: string;
+  fastingGlucoseMgDl?: number;
+}
+
+export interface DailyProfileSummary {
+  summary: string;
+  motivation: string;
+}
+
+export async function generateProfileSummary(
+  input: DailyProfileSummaryInput
+): Promise<DailyProfileSummary> {
+  const cacheKey = buildAnalysisCacheKey("profile-summary", input);
+  if (typeof window !== "undefined") {
+    try {
+      const cachedRaw = window.localStorage.getItem(cacheKey);
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw) as DailyProfileSummary;
+        if (cached?.summary && cached?.motivation) {
+          return cached;
+        }
+      }
+    } catch {
+      // Ignore cache parse/storage errors.
+    }
+  }
+
+  const prompt = `Create a short daily profile health insight for this person.
+
+PROFILE:
+- Name: ${input.name || "Unknown"}
+- Weight: ${input.weightKg && input.weightKg > 0 ? `${input.weightKg} kg` : "Not provided"}
+- Blood pressure: ${input.bloodPressure?.trim() || "Not provided"}
+- Fasting glucose: ${input.fastingGlucoseMgDl && input.fastingGlucoseMgDl > 0 ? `${input.fastingGlucoseMgDl} mg/dL` : "Not provided"}
+
+Requirements:
+- Keep language plain and supportive.
+- Do not diagnose disease.
+- Mention what looks good and what to monitor.
+- Include one clear action for today.
+- Return strict JSON with keys: summary, motivation.
+- summary: 2-4 short sentences.
+- motivation: 1 short encouraging sentence.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: ANALYSIS_MODEL,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a supportive health coach. You provide cautious non-diagnostic wellness guidance from profile data. Always return valid JSON."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.4,
+      max_tokens: 220
+    });
+
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error("No response from OpenAI");
+    }
+
+    const parsed = JSON.parse(content) as Partial<DailyProfileSummary>;
+    const result: DailyProfileSummary = {
+      summary: parsed.summary?.trim() || "Your profile looks stable today. Keep tracking your metrics and stay consistent with your plan.",
+      motivation: parsed.motivation?.trim() || "Small consistent actions today will build stronger results over time."
+    };
+
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(cacheKey, JSON.stringify(result));
+      } catch {
+        // Ignore storage errors.
+      }
+    }
+    return result;
+  } catch (error) {
+    console.error("Error generating profile summary:", error);
+    throw new Error("Failed to generate profile summary.");
+  }
+}
+
 
