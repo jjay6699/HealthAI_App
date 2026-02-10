@@ -89,9 +89,6 @@ const LoginScreen = () => {
 
       <div style={styles.socialRow}>
         <button type="button" style={styles.socialButton}>
-          Apple
-        </button>
-        <button type="button" style={styles.socialButton}>
           Google
         </button>
       </div>
@@ -196,7 +193,7 @@ const createStyles = (theme: AppTheme) => ({
   },
   socialRow: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
+    gridTemplateColumns: "1fr",
     gap: theme.spacing.md
   },
   socialButton: {
