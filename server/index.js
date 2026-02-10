@@ -49,6 +49,15 @@ const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "4mb" }));
 
+// If the SPA hasn't been built (no dist/), still return a 200 at / so common
+// platform health-checks don't mark the service as unhealthy.
+const distDir = path.join(process.cwd(), "dist");
+if (!fs.existsSync(distDir)) {
+  app.get("/", (req, res) => {
+    res.status(200).type("text/plain").send("ok");
+  });
+}
+
 const isSafeClientId = (value) => typeof value === "string" && /^[a-zA-Z0-9._-]{8,100}$/.test(value);
 const isSafeKey = (value) => typeof value === "string" && /^[a-zA-Z0-9:._-]{1,240}$/.test(value);
 
@@ -113,7 +122,6 @@ app.delete("/api/kv/:clientId/:key", (req, res) => {
 });
 
 // Serve the Vite SPA from /dist in production.
-const distDir = path.join(process.cwd(), "dist");
 if (fs.existsSync(distDir)) {
   app.use(express.static(distDir));
   app.get("*", (req, res) => {
@@ -122,8 +130,36 @@ if (fs.existsSync(distDir)) {
   });
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`[server] listening on :${PORT} (db: ${DATABASE_PATH})`);
 });
+
+// Ensure common listen errors don't become an unhandled 'error' event.
+server.on("error", (err) => {
+  // eslint-disable-next-line no-console
+  console.error("[server] listen error", err);
+  process.exit(1);
+});
+
+// Graceful shutdown so container stops (SIGTERM) don't surface as npm "errors".
+const shutdown = (signal) => {
+  // eslint-disable-next-line no-console
+  console.log(`[server] received ${signal}, shutting down...`);
+  try {
+    server.close(() => {
+      try {
+        db.close();
+      } catch {
+        // ignore
+      }
+      process.exit(0);
+    });
+  } catch {
+    process.exit(0);
+  }
+};
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
