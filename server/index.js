@@ -1,7 +1,10 @@
 import express from "express";
+import cookieParser from "cookie-parser";
 import fs from "node:fs";
+import crypto from "node:crypto";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { OAuth2Client } from "google-auth-library";
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -26,6 +29,33 @@ db.exec(`
   );
 `);
 
+// Auth tables
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT,
+    name TEXT,
+    pictureUrl TEXT,
+    provider TEXT NOT NULL,
+    providerSub TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    lastLoginAt INTEGER NOT NULL,
+    UNIQUE(provider, providerSub),
+    UNIQUE(email)
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    expiresAt INTEGER NOT NULL,
+    FOREIGN KEY(userId) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_sessions_userId ON sessions(userId);
+  CREATE INDEX IF NOT EXISTS idx_sessions_expiresAt ON sessions(expiresAt);
+`);
+
 const stmtGetAll = db.prepare(
   "SELECT key, value, updatedAt FROM kv WHERE clientId = ? ORDER BY key ASC"
 );
@@ -39,6 +69,28 @@ const stmtDeleteOne = db.prepare(
   "DELETE FROM kv WHERE clientId = ? AND key = ?"
 );
 
+const stmtGetUserByProviderSub = db.prepare(
+  "SELECT id, email, name, pictureUrl, provider, providerSub, createdAt, lastLoginAt FROM users WHERE provider = ? AND providerSub = ?"
+);
+const stmtGetUserById = db.prepare(
+  "SELECT id, email, name, pictureUrl, provider, providerSub, createdAt, lastLoginAt FROM users WHERE id = ?"
+);
+const stmtInsertUser = db.prepare(
+  "INSERT INTO users (id, email, name, pictureUrl, provider, providerSub, createdAt, lastLoginAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+);
+const stmtUpdateUserLogin = db.prepare(
+  "UPDATE users SET email = ?, name = ?, pictureUrl = ?, lastLoginAt = ? WHERE id = ?"
+);
+
+const stmtInsertSession = db.prepare(
+  "INSERT INTO sessions (token, userId, createdAt, expiresAt) VALUES (?, ?, ?, ?)"
+);
+const stmtGetSession = db.prepare(
+  "SELECT token, userId, createdAt, expiresAt FROM sessions WHERE token = ?"
+);
+const stmtDeleteSession = db.prepare("DELETE FROM sessions WHERE token = ?");
+const stmtDeleteExpiredSessions = db.prepare("DELETE FROM sessions WHERE expiresAt < ?");
+
 const upsertMany = db.transaction((clientId, items) => {
   for (const [key, value] of items) {
     stmtUpsert.run(clientId, key, value, Date.now());
@@ -48,6 +100,68 @@ const upsertMany = db.transaction((clientId, items) => {
 const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "4mb" }));
+
+const SESSION_COOKIE = "ng_session";
+const OAUTH_STATE_COOKIE = "ng_oauth_state";
+const isProd = process.env.NODE_ENV === "production";
+const sessionSecret = process.env.SESSION_SECRET;
+
+app.use(sessionSecret ? cookieParser(sessionSecret) : cookieParser());
+
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+const makeCookieOptions = (extra = {}) => ({
+  httpOnly: true,
+  sameSite: "lax",
+  secure: isProd,
+  path: "/",
+  ...(sessionSecret ? { signed: true } : null),
+  ...extra
+});
+
+const getSessionTokenFromReq = (req) => req.signedCookies?.[SESSION_COOKIE] || req.cookies?.[SESSION_COOKIE] || null;
+
+const getAuthedUser = (req) => {
+  const token = getSessionTokenFromReq(req);
+  if (!token) return null;
+
+  // opportunistic cleanup
+  try {
+    stmtDeleteExpiredSessions.run(Date.now());
+  } catch {
+    // ignore
+  }
+
+  const sess = stmtGetSession.get(token);
+  if (!sess) return null;
+  if (sess.expiresAt < Date.now()) {
+    try {
+      stmtDeleteSession.run(token);
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+  const user = stmtGetUserById.get(sess.userId);
+  return user || null;
+};
+
+const createSessionForUser = (userId) => {
+  const token = crypto.randomBytes(32).toString("base64url");
+  const createdAt = Date.now();
+  const expiresAt = createdAt + 1000 * 60 * 60 * 24 * 30; // 30 days
+  stmtInsertSession.run(token, userId, createdAt, expiresAt);
+  return { token, expiresAt };
+};
+
+const getGoogleOAuthClient = () => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const redirectUri = process.env.GOOGLE_REDIRECT_URL;
+
+  if (!clientId || !clientSecret || !redirectUri) return null;
+  return new OAuth2Client({ clientId, clientSecret, redirectUri });
+};
 
 // If the SPA hasn't been built (no dist/), still return a 200 at / so common
 // platform health-checks don't mark the service as unhealthy.
@@ -64,6 +178,98 @@ const isSafeKey = (value) => typeof value === "string" && /^[a-zA-Z0-9:._-]{1,24
 app.get("/api/kv/ping", (req, res) => {
   res.json({ ok: true, now: Date.now() });
 });
+
+// --- Auth (Google OAuth) ---
+app.get("/api/auth/me", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) return res.json({ user: null });
+  const { id, email, name, pictureUrl, provider, createdAt, lastLoginAt } = user;
+  res.json({ user: { id, email, name, pictureUrl, provider, createdAt, lastLoginAt } });
+});
+
+app.post("/api/auth/logout", (req, res) => {
+  const token = getSessionTokenFromReq(req);
+  if (token) {
+    try {
+      stmtDeleteSession.run(token);
+    } catch {
+      // ignore
+    }
+  }
+  res.clearCookie(SESSION_COOKIE, makeCookieOptions({ maxAge: 0 }));
+  res.json({ ok: true });
+});
+
+app.get(
+  "/api/auth/google/start",
+  asyncHandler(async (req, res) => {
+    const client = getGoogleOAuthClient();
+    if (!client) return res.status(501).json({ error: "google_oauth_not_configured" });
+
+    const state = crypto.randomBytes(16).toString("hex");
+    res.cookie(OAUTH_STATE_COOKIE, state, makeCookieOptions({ maxAge: 10 * 60 * 1000 }));
+
+    const url = client.generateAuthUrl({
+      access_type: "offline",
+      scope: ["openid", "email", "profile"],
+      state,
+      prompt: "select_account"
+    });
+    res.redirect(url);
+  })
+);
+
+app.get(
+  "/api/auth/google/callback",
+  asyncHandler(async (req, res) => {
+    const client = getGoogleOAuthClient();
+    if (!client) return res.status(501).json({ error: "google_oauth_not_configured" });
+
+    const code = typeof req.query.code === "string" ? req.query.code : null;
+    const state = typeof req.query.state === "string" ? req.query.state : null;
+    const cookieState = req.signedCookies?.[OAUTH_STATE_COOKIE] || req.cookies?.[OAUTH_STATE_COOKIE] || null;
+    res.clearCookie(OAUTH_STATE_COOKIE, makeCookieOptions({ maxAge: 0 }));
+
+    if (!code) return res.status(400).json({ error: "missing_code" });
+    if (!state || !cookieState || state !== cookieState) return res.status(400).json({ error: "invalid_state" });
+
+    const { tokens } = await client.getToken(code);
+    if (!tokens?.id_token) return res.status(400).json({ error: "missing_id_token" });
+
+    const ticket = await client.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: process.env.GOOGLE_CLIENT_ID
+    });
+
+    const payload = ticket.getPayload();
+    const sub = payload?.sub;
+    const email = payload?.email || null;
+    const name = payload?.name || null;
+    const pictureUrl = payload?.picture || null;
+    if (!sub) return res.status(400).json({ error: "missing_sub" });
+
+    const provider = "google";
+    const now = Date.now();
+
+    // Upsert user (by provider-sub)
+    const existing = stmtGetUserByProviderSub.get(provider, sub);
+    let userId;
+    if (!existing) {
+      userId = crypto.randomUUID();
+      stmtInsertUser.run(userId, email, name, pictureUrl, provider, sub, now, now);
+    } else {
+      userId = existing.id;
+      stmtUpdateUserLogin.run(email, name, pictureUrl, now, userId);
+    }
+
+    const { token, expiresAt } = createSessionForUser(userId);
+    res.cookie(SESSION_COOKIE, token, makeCookieOptions({ maxAge: expiresAt - now }));
+
+    const appOrigin = process.env.APP_ORIGIN;
+    const redirectTo = appOrigin ? `${appOrigin.replace(/\/$/, "")}/home` : "/home";
+    res.redirect(redirectTo);
+  })
+);
 
 app.get("/api/kv/:clientId", (req, res) => {
   const { clientId } = req.params;
@@ -129,6 +335,14 @@ if (fs.existsSync(distDir)) {
     res.sendFile(path.join(distDir, "index.html"));
   });
 }
+
+// Express error handler
+app.use((err, req, res, next) => {
+  // eslint-disable-next-line no-console
+  console.error("[server] unhandled error", err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: "server_error" });
+});
 
 const server = app.listen(PORT, () => {
   // eslint-disable-next-line no-console

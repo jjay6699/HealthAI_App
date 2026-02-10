@@ -31,6 +31,10 @@ const LoginScreen = () => {
     setPassword(demoCredentials.password);
   };
 
+  const handleGoogleLogin = () => {
+    window.location.href = "/api/auth/google/start";
+  };
+
   return (
     <div style={styles.wrapper}>
       <h1 style={styles.heading}>Welcome back</h1>
@@ -88,7 +92,7 @@ const LoginScreen = () => {
       </div>
 
       <div style={styles.socialRow}>
-        <button type="button" style={styles.socialButton}>
+        <button type="button" style={styles.socialButton} onClick={handleGoogleLogin}>
           Google
         </button>
       </div>
