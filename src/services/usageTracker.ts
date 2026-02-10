@@ -1,4 +1,6 @@
-const USAGE_KEY = 'appUsageStats';
+import { persistentStorage } from "./persistentStorage";
+
+const USAGE_KEY = "appUsageStats";
 
 export interface UsageStats {
   chatInteractions: number;
@@ -13,7 +15,7 @@ const defaultStats: UsageStats = {
 // Function to get current usage stats from localStorage
 export const getUsageStats = (): UsageStats => {
   try {
-    const savedStats = localStorage.getItem(USAGE_KEY);
+    const savedStats = persistentStorage.getItem(USAGE_KEY);
     if (savedStats) {
       return JSON.parse(savedStats);
     }
@@ -25,7 +27,7 @@ export const getUsageStats = (): UsageStats => {
 
 // Function to save usage stats to localStorage
 const saveUsageStats = (stats: UsageStats) => {
-  localStorage.setItem(USAGE_KEY, JSON.stringify(stats));
+  persistentStorage.setItem(USAGE_KEY, JSON.stringify(stats));
 };
 
 // Function to increment chat interactions
@@ -48,4 +50,3 @@ export const shouldShowPaywall = (): boolean => {
   // Show paywall after 1 chat interaction and 2 analyses
   return stats.chatInteractions >= 1 && stats.analysesRun >= 2;
 };
-

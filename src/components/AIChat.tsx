@@ -4,6 +4,7 @@ import { useTheme } from "../theme";
 import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
 import OpenAI from "openai";
 import { analyzeBloodworkFile, analyzeBloodworkPdf, analyzeBloodworkImages } from "../services/openai";
+import { persistentStorage } from "../services/persistentStorage";
 
 interface Message {
   role: "user" | "assistant";
@@ -174,8 +175,8 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
         analysis = await analyzeBloodworkFile(base64, file.type);
       }
 
-      localStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
-      localStorage.setItem(
+      persistentStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
+      persistentStorage.setItem(
         "bloodworkAnalysisMeta",
         JSON.stringify({
           uploadedAt: new Date().toISOString(),
@@ -782,8 +783,8 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
         }))
       );
       const analysis = await analyzeBloodworkImages(images);
-      localStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
-      localStorage.setItem(
+      persistentStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
+      persistentStorage.setItem(
         "bloodworkAnalysisMeta",
         JSON.stringify({
           uploadedAt: new Date().toISOString(),

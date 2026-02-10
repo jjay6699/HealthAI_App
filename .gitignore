@@ -83,3 +83,9 @@ web_modules
 dist
 .vite
 
+# Local SQLite (used by server/index.js)
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+

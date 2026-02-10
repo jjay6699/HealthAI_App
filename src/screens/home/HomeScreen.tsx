@@ -7,6 +7,7 @@ import SectionHeader from "../../components/SectionHeader";
 import StickyFooter from "../../components/StickyFooter";
 import { AppTheme, useTheme } from "../../theme";
 import { BloodworkAnalysis } from "../../services/openai";
+import { persistentStorage } from "../../services/persistentStorage";
 
 type AnalysisMeta = {
   uploadedAt?: string;
@@ -23,7 +24,7 @@ const HomeScreen = () => {
   const [meta, setMeta] = useState<AnalysisMeta | null>(null);
 
   useEffect(() => {
-    const storedAnalysis = localStorage.getItem("bloodworkAnalysis");
+    const storedAnalysis = persistentStorage.getItem("bloodworkAnalysis");
     if (storedAnalysis) {
       try {
         setAnalysis(JSON.parse(storedAnalysis));
@@ -32,7 +33,7 @@ const HomeScreen = () => {
       }
     }
 
-    const storedMeta = localStorage.getItem("bloodworkAnalysisMeta");
+    const storedMeta = persistentStorage.getItem("bloodworkAnalysisMeta");
     if (storedMeta) {
       try {
         setMeta(JSON.parse(storedMeta));

@@ -5,6 +5,7 @@ import Button from "../../components/Button";
 import SectionHeader from "../../components/SectionHeader";
 import { AppTheme, useTheme } from "../../theme";
 import { BloodworkAnalysis } from "../../services/openai";
+import { persistentStorage } from "../../services/persistentStorage";
 
 const OrderReviewScreen = () => {
   const theme = useTheme();
@@ -16,7 +17,7 @@ const OrderReviewScreen = () => {
   const [couponApplied, setCouponApplied] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedAnalysis = localStorage.getItem("bloodworkAnalysis");
+    const storedAnalysis = persistentStorage.getItem("bloodworkAnalysis");
     if (storedAnalysis) {
       try {
         setAnalysis(JSON.parse(storedAnalysis));
@@ -36,7 +37,7 @@ const OrderReviewScreen = () => {
 
   const handleContinue = () => {
     // Save order details to localStorage
-    localStorage.setItem("orderDetails", JSON.stringify({
+    persistentStorage.setItem("orderDetails", JSON.stringify({
       plan: selectedPlan,
       planLabel: selectedPlanDetails?.label,
       price: selectedPlanDetails?.price,

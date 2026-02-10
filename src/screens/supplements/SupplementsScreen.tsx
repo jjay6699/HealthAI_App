@@ -9,6 +9,7 @@ import { AppTheme, useTheme } from "../../theme";
 import { BloodworkAnalysis, SupplementRecommendation } from "../../services/openai";
 import { AVAILABLE_SUPPLEMENTS, Supplement } from "../../data/supplements";
 import { SUPPLEMENT_DESCRIPTIONS } from "../../data/supplementDescriptions";
+import { persistentStorage } from "../../services/persistentStorage";
 
 const SupplementsScreen = () => {
   const theme = useTheme();
@@ -19,7 +20,7 @@ const SupplementsScreen = () => {
 
   useEffect(() => {
     // Load recommendations from localStorage
-    const storedAnalysis = localStorage.getItem("bloodworkAnalysis");
+    const storedAnalysis = persistentStorage.getItem("bloodworkAnalysis");
     if (storedAnalysis) {
       try {
         const analysis: BloodworkAnalysis = JSON.parse(storedAnalysis);

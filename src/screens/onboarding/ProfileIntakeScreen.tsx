@@ -4,6 +4,7 @@ import Button from "../../components/Button";
 import Card from "../../components/Card";
 import ProgressBar from "../../components/ProgressBar";
 import { AppTheme, useTheme } from "../../theme";
+import { persistentStorage } from "../../services/persistentStorage";
 
 type FieldSpec = {
   key: string;
@@ -301,7 +302,7 @@ const ProfileIntakeScreen = () => {
   ]);
 
   const persistProfile = (values: Record<string, FieldValue>) => {
-    const saved = localStorage.getItem("userProfile");
+    const saved = persistentStorage.getItem("userProfile");
     let existing: Partial<IntakeProfile> = {};
     if (saved) {
       try {
@@ -327,11 +328,11 @@ const ProfileIntakeScreen = () => {
       updates[profileKey] = normalized as never;
     });
 
-    localStorage.setItem("userProfile", JSON.stringify({ ...existing, ...updates }));
+    persistentStorage.setItem("userProfile", JSON.stringify({ ...existing, ...updates }));
   };
 
   React.useEffect(() => {
-    const saved = localStorage.getItem("userProfile");
+    const saved = persistentStorage.getItem("userProfile");
     if (!saved) return;
     try {
       const parsed = JSON.parse(saved) as Partial<IntakeProfile>;

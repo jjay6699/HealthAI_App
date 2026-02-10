@@ -4,6 +4,7 @@ import Card from "../../components/Card";
 import Button from "../../components/Button";
 import SectionHeader from "../../components/SectionHeader";
 import { AppTheme, useTheme } from "../../theme";
+import { persistentStorage } from "../../services/persistentStorage";
 
 interface OrderDetails {
   plan: string;
@@ -31,7 +32,7 @@ const CheckoutScreen = () => {
   });
 
   useEffect(() => {
-    const stored = localStorage.getItem("orderDetails");
+    const stored = persistentStorage.getItem("orderDetails");
     if (stored) {
       try {
         setOrderDetails(JSON.parse(stored));
@@ -41,7 +42,7 @@ const CheckoutScreen = () => {
     }
 
     // Load saved address if exists
-    const savedAddress = localStorage.getItem("deliveryAddress");
+    const savedAddress = persistentStorage.getItem("deliveryAddress");
     if (savedAddress) {
       try {
         setFormData(prev => ({ ...prev, ...JSON.parse(savedAddress) }));
@@ -64,10 +65,10 @@ const CheckoutScreen = () => {
     }
 
     // Save delivery address
-    localStorage.setItem("deliveryAddress", JSON.stringify(formData));
+    persistentStorage.setItem("deliveryAddress", JSON.stringify(formData));
 
     // Add to shipping addresses if not already exists
-    const shippingAddresses = JSON.parse(localStorage.getItem("shippingAddresses") || "[]");
+    const shippingAddresses = JSON.parse(persistentStorage.getItem("shippingAddresses") || "[]");
     const addressExists = shippingAddresses.some((addr: any) =>
       addr.addressLine1 === formData.addressLine1 &&
       addr.postcode === formData.postcode
@@ -80,7 +81,7 @@ const CheckoutScreen = () => {
         isDefault: shippingAddresses.length === 0 // First address is default
       };
       shippingAddresses.push(newAddress);
-      localStorage.setItem("shippingAddresses", JSON.stringify(shippingAddresses));
+      persistentStorage.setItem("shippingAddresses", JSON.stringify(shippingAddresses));
     }
 
     // Navigate to payment

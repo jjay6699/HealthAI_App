@@ -4,6 +4,7 @@ import Card from "../../components/Card";
 import Button from "../../components/Button";
 import SectionHeader from "../../components/SectionHeader";
 import { AppTheme, useTheme } from "../../theme";
+import { persistentStorage } from "../../services/persistentStorage";
 
 interface OrderDetails {
   plan: string;
@@ -21,7 +22,7 @@ const PaymentScreen = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("orderDetails");
+    const stored = persistentStorage.getItem("orderDetails");
     if (stored) {
       try {
         setOrderDetails(JSON.parse(stored));
@@ -48,12 +49,12 @@ const PaymentScreen = () => {
     };
 
     // Save order confirmation
-    localStorage.setItem("lastOrder", JSON.stringify(newOrder));
+    persistentStorage.setItem("lastOrder", JSON.stringify(newOrder));
 
     // Add to order history
-    const orderHistory = JSON.parse(localStorage.getItem("orderHistory") || "[]");
+    const orderHistory = JSON.parse(persistentStorage.getItem("orderHistory") || "[]");
     orderHistory.unshift(newOrder); // Add to beginning of array
-    localStorage.setItem("orderHistory", JSON.stringify(orderHistory));
+    persistentStorage.setItem("orderHistory", JSON.stringify(orderHistory));
 
     // Navigate to confirmation
     navigate("/order-confirmation");

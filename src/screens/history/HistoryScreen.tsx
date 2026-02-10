@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Card from "../../components/Card";
 import SectionHeader from "../../components/SectionHeader";
 import { AppTheme, useTheme } from "../../theme";
+import { persistentStorage } from "../../services/persistentStorage";
 
 type HistoryRecommendation = {
   supplementName?: string;
@@ -35,7 +36,7 @@ const HistoryScreen = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
-    const storedHistory = localStorage.getItem("bloodworkHistory");
+    const storedHistory = persistentStorage.getItem("bloodworkHistory");
     if (!storedHistory) return;
     try {
       const parsed = JSON.parse(storedHistory);

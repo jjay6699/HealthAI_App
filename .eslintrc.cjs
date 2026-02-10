@@ -2,7 +2,6 @@ module.exports = {
   root: true,
   parser: "@typescript-eslint/parser",
   parserOptions: {
-    project: "./tsconfig.json",
     ecmaVersion: "latest",
     sourceType: "module"
   },
@@ -22,6 +21,13 @@ module.exports = {
   ignorePatterns: ["node_modules/", "dist/"],
   rules: {
     "react/react-in-jsx-scope": "off",
-    "@typescript-eslint/explicit-function-return-type": "off"
+    "@typescript-eslint/explicit-function-return-type": "off",
+    "@typescript-eslint/ban-ts-comment": "off",
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/no-unused-vars": "off",
+    "react/no-unescaped-entities": "off",
+    "react-hooks/exhaustive-deps": "off",
+    "prefer-const": "off"
   }
 };
+

@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
 import { pdfToImages, extractTextFromPdf } from "../utils/pdfProcessor";
+import { persistentStorage } from "./persistentStorage";
 
 const openai = new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
@@ -165,7 +166,7 @@ const hashString = (input: string): string => {
 const getCachedAnalysis = (cacheKey: string): BloodworkAnalysis | null => {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(cacheKey);
+    const raw = persistentStorage.getItem(cacheKey);
     if (!raw) return null;
     return JSON.parse(raw) as BloodworkAnalysis;
   } catch {
@@ -176,7 +177,7 @@ const getCachedAnalysis = (cacheKey: string): BloodworkAnalysis | null => {
 const setCachedAnalysis = (cacheKey: string, analysis: BloodworkAnalysis) => {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(cacheKey, JSON.stringify(analysis));
+    persistentStorage.setItem(cacheKey, JSON.stringify(analysis));
   } catch {
     // Ignore storage errors (quota, privacy mode).
   }
@@ -831,7 +832,7 @@ export async function generateProfileSummary(
   const cacheKey = buildAnalysisCacheKey("profile-summary", input);
   if (typeof window !== "undefined") {
     try {
-      const cachedRaw = window.localStorage.getItem(cacheKey);
+      const cachedRaw = persistentStorage.getItem(cacheKey);
       if (cachedRaw) {
         const cached = JSON.parse(cachedRaw) as DailyProfileSummary;
         if (cached?.summary && cached?.motivation) {
@@ -892,7 +893,7 @@ Requirements:
 
     if (typeof window !== "undefined") {
       try {
-        window.localStorage.setItem(cacheKey, JSON.stringify(result));
+        persistentStorage.setItem(cacheKey, JSON.stringify(result));
       } catch {
         // Ignore storage errors.
       }

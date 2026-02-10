@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Card from "../../components/Card";
 import Button from "../../components/Button";
 import { AppTheme, useTheme } from "../../theme";
+import { persistentStorage } from "../../services/persistentStorage";
 
 interface LastOrder {
   orderNumber: string;
@@ -20,7 +21,7 @@ const OrderConfirmationScreen = () => {
   const [order, setOrder] = useState<LastOrder | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem("lastOrder");
+    const stored = persistentStorage.getItem("lastOrder");
     if (stored) {
       try {
         setOrder(JSON.parse(stored));

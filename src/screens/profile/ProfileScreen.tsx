@@ -6,6 +6,7 @@ import Button from "../../components/Button";
 import Dialog from "../../components/Dialog";
 import { AppTheme, useTheme } from "../../theme";
 import { generateProfileSummary } from "../../services/openai";
+import { persistentStorage } from "../../services/persistentStorage";
 
 type ProfileState = {
   avatarImage: string | null;
@@ -147,7 +148,7 @@ const ProfileScreen = () => {
     googleFit: "Not connected"
   };
   const [profile, setProfile] = useState<ProfileState>(() => {
-    const saved = localStorage.getItem("userProfile");
+    const saved = persistentStorage.getItem("userProfile");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -167,7 +168,7 @@ const ProfileScreen = () => {
   });
 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(() => {
-    const saved = localStorage.getItem("paymentMethods");
+    const saved = persistentStorage.getItem("paymentMethods");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -179,7 +180,7 @@ const ProfileScreen = () => {
   });
 
   const [shippingAddresses, setShippingAddresses] = useState<ShippingAddress[]>(() => {
-    const saved = localStorage.getItem("shippingAddresses");
+    const saved = persistentStorage.getItem("shippingAddresses");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -191,7 +192,7 @@ const ProfileScreen = () => {
   });
 
   const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = localStorage.getItem("orderHistory");
+    const saved = persistentStorage.getItem("orderHistory");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -226,7 +227,7 @@ const ProfileScreen = () => {
   const [weightValue, setWeightValue] = useState("");
   const [weightMonthFilter, setWeightMonthFilter] = useState("all");
   const [bpHistory, setBpHistory] = useState<BloodPressureEntry[]>(() => {
-    const saved = localStorage.getItem("bloodPressureHistory");
+    const saved = persistentStorage.getItem("bloodPressureHistory");
     if (!saved) return [];
     try {
       const parsed = JSON.parse(saved);
@@ -236,7 +237,7 @@ const ProfileScreen = () => {
     }
   });
   const [glucoseHistory, setGlucoseHistory] = useState<FastingGlucoseEntry[]>(() => {
-    const saved = localStorage.getItem("fastingGlucoseHistory");
+    const saved = persistentStorage.getItem("fastingGlucoseHistory");
     if (!saved) return [];
     try {
       const parsed = JSON.parse(saved);
@@ -246,7 +247,7 @@ const ProfileScreen = () => {
     }
   });
   const [weightHistory, setWeightHistory] = useState<WeightEntry[]>(() => {
-    const saved = localStorage.getItem("weightHistory");
+    const saved = persistentStorage.getItem("weightHistory");
     if (!saved) return [];
     try {
       const parsed = JSON.parse(saved);
@@ -269,34 +270,34 @@ const ProfileScreen = () => {
 
   // Save profile to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem("userProfile", JSON.stringify(profile));
+    persistentStorage.setItem("userProfile", JSON.stringify(profile));
   }, [profile]);
 
   // Save payment methods to localStorage
   useEffect(() => {
-    localStorage.setItem("paymentMethods", JSON.stringify(paymentMethods));
+    persistentStorage.setItem("paymentMethods", JSON.stringify(paymentMethods));
   }, [paymentMethods]);
 
   // Save shipping addresses to localStorage
   useEffect(() => {
-    localStorage.setItem("shippingAddresses", JSON.stringify(shippingAddresses));
+    persistentStorage.setItem("shippingAddresses", JSON.stringify(shippingAddresses));
   }, [shippingAddresses]);
 
   // Save order history to localStorage
   useEffect(() => {
-    localStorage.setItem("orderHistory", JSON.stringify(orders));
+    persistentStorage.setItem("orderHistory", JSON.stringify(orders));
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem("bloodPressureHistory", JSON.stringify(bpHistory));
+    persistentStorage.setItem("bloodPressureHistory", JSON.stringify(bpHistory));
   }, [bpHistory]);
 
   useEffect(() => {
-    localStorage.setItem("fastingGlucoseHistory", JSON.stringify(glucoseHistory));
+    persistentStorage.setItem("fastingGlucoseHistory", JSON.stringify(glucoseHistory));
   }, [glucoseHistory]);
 
   useEffect(() => {
-    localStorage.setItem("weightHistory", JSON.stringify(weightHistory));
+    persistentStorage.setItem("weightHistory", JSON.stringify(weightHistory));
   }, [weightHistory]);
 
   const editConfig: Record<EditKey, EditConfig> = {
@@ -417,12 +418,12 @@ const ProfileScreen = () => {
 
   const handleLogout = () => {
     // Clear all user-related data from local storage
-    localStorage.removeItem("userProfile");
-    localStorage.removeItem("paymentMethods");
-    localStorage.removeItem("shippingAddresses");
-    localStorage.removeItem("orderHistory");
-    localStorage.removeItem("bloodworkAnalysis");
-    localStorage.removeItem("lastOrder");
+    persistentStorage.removeItem("userProfile");
+    persistentStorage.removeItem("paymentMethods");
+    persistentStorage.removeItem("shippingAddresses");
+    persistentStorage.removeItem("orderHistory");
+    persistentStorage.removeItem("bloodworkAnalysis");
+    persistentStorage.removeItem("lastOrder");
 
     // Navigate to the login screen
     navigate("/login");

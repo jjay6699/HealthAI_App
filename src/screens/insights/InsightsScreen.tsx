@@ -6,6 +6,7 @@ import SectionHeader from "../../components/SectionHeader";
 import Button from "../../components/Button";
 import { AppTheme, useTheme } from "../../theme";
 import { BloodworkAnalysis } from "../../services/openai";
+import { persistentStorage } from "../../services/persistentStorage";
 
 const domainScores = [
   { id: "energy", label: "Energy", score: 62, status: "On watch", description: "Ferritin and B12 suggest an opportunity to optimise energy production." },
@@ -37,7 +38,7 @@ const InsightsScreen = () => {
 
   useEffect(() => {
     // Load analysis from localStorage
-    const storedAnalysis = localStorage.getItem("bloodworkAnalysis");
+    const storedAnalysis = persistentStorage.getItem("bloodworkAnalysis");
     if (storedAnalysis) {
       try {
         setAnalysis(JSON.parse(storedAnalysis));

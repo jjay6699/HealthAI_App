@@ -6,14 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "start": "node server/index.js",
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.20.1",
+    "better-sqlite3": "^12.4.1",
     "classnames": "^2.5.1",
     "dayjs": "^1.11.10",
+    "express": "^4.21.2",
     "openai": "^6.8.1",
     "pdfjs-dist": "^5.4.394",
     "react": "18.2.0",

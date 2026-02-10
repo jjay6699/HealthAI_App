@@ -6,6 +6,7 @@ import Button from "../../components/Button";
 import AIChat from "../../components/AIChat";
 import { AppTheme, useTheme } from "../../theme";
 import { analyzeBloodworkFile, analyzeBloodworkPdf } from "../../services/openai";
+import { persistentStorage } from "../../services/persistentStorage";
 
 const UploadScreen = () => {
   const theme = useTheme();
@@ -72,13 +73,13 @@ const UploadScreen = () => {
         analysis = result;
       }
 
-      // Save to localStorage
-      localStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
+      // Save (locally + to Railway-backed SQLite when available)
+      persistentStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
       const uploadedAt = new Date().toISOString();
       const fileType = file.type || "unknown";
       const fileSize = file.size;
 
-      localStorage.setItem(
+      persistentStorage.setItem(
         "bloodworkAnalysisMeta",
         JSON.stringify({
           uploadedAt,
@@ -88,7 +89,7 @@ const UploadScreen = () => {
         })
       );
 
-      const historyRaw = localStorage.getItem("bloodworkHistory");
+      const historyRaw = persistentStorage.getItem("bloodworkHistory");
       let history: any[] = [];
       if (historyRaw) {
         try {
@@ -109,7 +110,7 @@ const UploadScreen = () => {
         recommendations: analysis.recommendations || [],
         detailedInsights: analysis.detailedInsights || []
       });
-      localStorage.setItem("bloodworkHistory", JSON.stringify(history.slice(0, 20)));
+      persistentStorage.setItem("bloodworkHistory", JSON.stringify(history.slice(0, 20)));
 
       // Navigate to insights
       navigate("/insights");
