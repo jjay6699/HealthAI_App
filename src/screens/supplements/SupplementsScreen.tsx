@@ -49,11 +49,6 @@ const SupplementsScreen = () => {
     let cancelled = false;
 
     const run = async () => {
-      if (language === "en") {
-        setDisplayRecommendations(recommendations);
-        return;
-      }
-
       const translated = await translateBloodworkAnalysis(
         {
           summary: "",

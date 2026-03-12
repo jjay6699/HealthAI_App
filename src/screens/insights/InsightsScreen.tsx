@@ -59,11 +59,6 @@ const InsightsScreen = () => {
       return;
     }
 
-    if (language === "en") {
-      setDisplayAnalysis(analysis);
-      return;
-    }
-
     translateBloodworkAnalysis(analysis, language)
       .then((translated) => {
         if (!cancelled) setDisplayAnalysis(translated);

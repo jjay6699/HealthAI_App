@@ -1,4 +1,5 @@
 import React, { ReactNode, createContext, useContext, useMemo, useState } from "react";
+import { SHOW_LANGUAGE_SWITCHER } from "../config/features";
 import { persistentStorage } from "../services/persistentStorage";
 import { defaultLanguage, Language, TranslationKey, translations } from "./translations";
 

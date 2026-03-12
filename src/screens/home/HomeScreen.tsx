@@ -5,6 +5,7 @@ import Button from "../../components/Button";
 import Card from "../../components/Card";
 import SectionHeader from "../../components/SectionHeader";
 import StickyFooter from "../../components/StickyFooter";
+import { SHOW_LANGUAGE_SWITCHER } from "../../config/features";
 import { AppTheme, useTheme } from "../../theme";
 import { BloodworkAnalysis, translateBloodworkAnalysis } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
@@ -51,11 +52,6 @@ const HomeScreen = () => {
 
     if (!analysis) {
       setDisplayAnalysis(null);
-      return;
-    }
-
-    if (language === "en") {
-      setDisplayAnalysis(analysis);
       return;
     }
 
@@ -109,21 +105,23 @@ const HomeScreen = () => {
           <div style={styles.heroPill}>
             {t("home.hero.lastUpload")} - {formatDate(meta?.uploadedAt)}
           </div>
-          <div style={styles.languageSwitcher} aria-label={t("home.switcher.label")}>
-            {languageOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                style={{
-                  ...styles.languageButton,
-                  ...(language === option.value ? styles.languageButtonActive : {})
-                }}
-                onClick={() => setLanguage(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          {SHOW_LANGUAGE_SWITCHER ? (
+            <div style={styles.languageSwitcher} aria-label={t("home.switcher.label")}>
+              {languageOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  style={{
+                    ...styles.languageButton,
+                    ...(language === option.value ? styles.languageButtonActive : {})
+                  }}
+                  onClick={() => setLanguage(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
         <h1 style={styles.heroTitle}>{t("home.hero.title")}</h1>
         <p style={styles.heroCopy}>

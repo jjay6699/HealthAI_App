@@ -4,6 +4,7 @@ import Card from "../../components/Card";
 import SectionHeader from "../../components/SectionHeader";
 import Button from "../../components/Button";
 import Dialog from "../../components/Dialog";
+import { SHOW_LANGUAGE_SWITCHER } from "../../config/features";
 import { AppTheme, useTheme } from "../../theme";
 import { generateProfileSummary, translateDailyProfileSummary } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
@@ -740,25 +741,27 @@ const ProfileScreen = () => {
         ) : null}
         {!aiSummaryError && aiMotivation ? <p style={styles.aiMotivationText}>{aiMotivation}</p> : null}
       </Card>
-      <Card style={styles.card}>
-        <SectionHeader title={t("profile.languageTitle")} />
-        <p style={styles.languageIntro}>{t("profile.languageIntro")}</p>
-        <div style={styles.languageSwitcher}>
-          {languageOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              style={{
-                ...styles.languageButton,
-                ...(language === option.value ? styles.languageButtonActive : {})
-              }}
-              onClick={() => setLanguage(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </Card>
+      {SHOW_LANGUAGE_SWITCHER ? (
+        <Card style={styles.card}>
+          <SectionHeader title={t("profile.languageTitle")} />
+          <p style={styles.languageIntro}>{t("profile.languageIntro")}</p>
+          <div style={styles.languageSwitcher}>
+            {languageOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                style={{
+                  ...styles.languageButton,
+                  ...(language === option.value ? styles.languageButtonActive : {})
+                }}
+                onClick={() => setLanguage(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </Card>
+      ) : null}
       <Card style={styles.card}>
         <SectionHeader title={t("profile.personalInfo")} />
         <ProfileRow label={t("profile.fullName")} value={profile.name} action={t("profile.edit")} onEdit={() => openEdit("name")} />

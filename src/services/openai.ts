@@ -882,8 +882,6 @@ export async function translateBloodworkAnalysis(
   analysis: BloodworkAnalysis,
   language: Language
 ): Promise<BloodworkAnalysis> {
-  if (language === "en") return analysis;
-
   const cacheKey = buildAnalysisCacheKey("bloodwork-translation", {
     language,
     analysis
