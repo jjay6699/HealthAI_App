@@ -14,12 +14,26 @@ type FeatureCardProps = {
 
 const FeatureCard = ({ icon, title, description, styles }: FeatureCardProps) => (
   <div style={styles.featureCard}>
-    <div style={styles.featureIconWrap} dangerouslySetInnerHTML={{ __html: icon }} />
+    <div style={styles.featureIconPlate}>
+      <div style={styles.featureIconWrap} dangerouslySetInnerHTML={{ __html: icon }} />
+    </div>
     <div style={styles.featureCopy}>
       <h2 style={styles.featureTitle}>{title}</h2>
       <p style={styles.featureDescription}>{description}</p>
     </div>
   </div>
+);
+
+const LockIcon = ({ styles }: { styles: ReturnType<typeof createStyles> }) => (
+  <svg style={styles.lockIcon} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M6.8 8.4V6.9C6.8 5.13 8.23 3.7 10 3.7C11.77 3.7 13.2 5.13 13.2 6.9V8.4"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+    <rect x="5.2" y="8.4" width="9.6" height="7.9" rx="2.2" stroke="currentColor" strokeWidth="1.6" />
+  </svg>
 );
 
 const SplashScreen = () => {
@@ -61,22 +75,24 @@ const SplashScreen = () => {
             styles={styles}
           />
         </section>
+        <div style={styles.ctaShell}>
+          <Button
+            title="Start Biomarker Analysis"
+            onClick={() => navigate("/login")}
+            style={styles.ctaButton}
+          />
+          <p style={styles.trustLine}>
+            <LockIcon styles={styles} />
+            <span>Your data stays on your device.</span>
+          </p>
+        </div>
       </main>
-
-      <div style={styles.ctaShell}>
-        <Button
-          title="Start Biomarker Analysis"
-          onClick={() => navigate("/login")}
-          style={styles.ctaButton}
-        />
-        <p style={styles.trustLine}>Your data stays on your device.</p>
-      </div>
     </div>
   );
 };
 
 const createStyles = (theme: AppTheme) => {
-  const contentWidth = `min(100%, 332px)`;
+  const contentMaxWidth = 332;
 
   return {
     page: {
@@ -88,7 +104,8 @@ const createStyles = (theme: AppTheme) => {
       background:
         "linear-gradient(180deg, #F6F1EA 0%, #EFE6DB 52%, #E9DED0 100%)",
       position: "relative" as const,
-      padding: `${theme.spacing.xl}px ${theme.spacing.xl}px ${theme.spacing.xl * 1.25}px`,
+      boxSizing: "border-box" as const,
+      padding: `60px ${theme.spacing.xl}px ${theme.spacing.xl * 1.25}px`,
       overflow: "hidden"
     },
     backgroundGlowTop: {
@@ -116,12 +133,16 @@ const createStyles = (theme: AppTheme) => {
     },
     patternLayer: {
       position: "absolute" as const,
-      inset: 0,
-      opacity: 0.05,
+      left: "50%",
+      top: 84,
+      width: 280,
+      height: 190,
+      transform: "translateX(-50%)",
+      opacity: 0.04,
       backgroundImage:
-        "radial-gradient(circle at 24% 18%, rgba(140,90,43,0.9) 0 1.5px, transparent 1.5px), radial-gradient(circle at 76% 26%, rgba(140,90,43,0.85) 0 1.5px, transparent 1.5px), radial-gradient(circle at 34% 76%, rgba(140,90,43,0.85) 0 1.5px, transparent 1.5px), linear-gradient(rgba(140,90,43,0.6), rgba(140,90,43,0.6)), linear-gradient(rgba(140,90,43,0.6), rgba(140,90,43,0.6)), linear-gradient(rgba(140,90,43,0.55), rgba(140,90,43,0.55))",
-      backgroundSize: "100% 100%, 100% 100%, 100% 100%, 120px 1px, 1px 96px, 132px 1px",
-      backgroundPosition: "0 0, 0 0, 0 0, 24% 18%, 24% 18%, 24% 42%",
+        "radial-gradient(circle at 24% 28%, rgba(140,90,43,0.9) 0 1.5px, transparent 1.5px), radial-gradient(circle at 76% 22%, rgba(140,90,43,0.9) 0 1.5px, transparent 1.5px), radial-gradient(circle at 34% 78%, rgba(140,90,43,0.9) 0 1.5px, transparent 1.5px), linear-gradient(rgba(140,90,43,0.55), rgba(140,90,43,0.55)), linear-gradient(rgba(140,90,43,0.55), rgba(140,90,43,0.55)), linear-gradient(rgba(140,90,43,0.5), rgba(140,90,43,0.5))",
+      backgroundSize: "100% 100%, 100% 100%, 100% 100%, 108px 1px, 1px 84px, 116px 1px",
+      backgroundPosition: "0 0, 0 0, 0 0, 24% 28%, 24% 28%, 24% 52%",
       backgroundRepeat: "no-repeat",
       zIndex: 0
     },
@@ -130,30 +151,31 @@ const createStyles = (theme: AppTheme) => {
       zIndex: 1
     },
     main: {
-      width: contentWidth,
+      width: "100%",
+      maxWidth: contentMaxWidth,
       display: "flex",
       flexDirection: "column" as const,
       alignItems: "center",
-      justifyContent: "center",
-      gap: theme.spacing.xl,
+      justifyContent: "flex-start",
+      gap: 32,
       flex: 1,
       zIndex: 1,
-      transform: "translateY(-30px)"
+      boxSizing: "border-box" as const
     },
     heroSection: {
       display: "flex",
       flexDirection: "column" as const,
       alignItems: "center",
-      gap: theme.spacing.lg,
+      gap: 16,
       textAlign: "center" as const
     },
     title: {
       margin: 0,
       color: "#2B2B2B",
       fontSize: 40,
-      fontWeight: 700,
-      lineHeight: 0.98,
-      letterSpacing: -1.4,
+      fontWeight: 650,
+      lineHeight: 1.08,
+      letterSpacing: 0.2,
       textAlign: "center" as const,
       fontFamily: 'Georgia, "Times New Roman", serif',
       textWrap: "balance" as const
@@ -161,16 +183,18 @@ const createStyles = (theme: AppTheme) => {
     subtitle: {
       margin: 0,
       color: "rgba(43,43,43,0.82)",
-      fontSize: 17,
-      lineHeight: 1.5,
-      maxWidth: 330,
+      fontSize: 16,
+      lineHeight: 1.45,
+      width: "75vw",
+      maxWidth: 294,
       textAlign: "center" as const
     },
     featuresSection: {
       width: "100%",
       display: "flex",
       flexDirection: "column" as const,
-      gap: theme.spacing.md
+      gap: 16,
+      marginTop: 0
     },
     featureCard: {
       width: "100%",
@@ -180,15 +204,25 @@ const createStyles = (theme: AppTheme) => {
       gap: theme.spacing.md,
       padding: `${theme.spacing.lg}px ${theme.spacing.lg}px`,
       borderRadius: 20,
-      background: "rgba(255,255,255,0.54)",
-      border: "1px solid rgba(255,255,255,0.48)",
-      boxShadow: "0 14px 32px rgba(92, 70, 45, 0.08)",
+      background: "#F8F6F3",
+      border: "1px solid rgba(255,255,255,0.58)",
+      boxShadow: "0 8px 22px rgba(0,0,0,0.05)",
       backdropFilter: "blur(12px)"
     },
+    featureIconPlate: {
+      width: 48,
+      height: 48,
+      minWidth: 48,
+      borderRadius: "50%",
+      background: "#EFE7DD",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    },
     featureIconWrap: {
-      width: 44,
-      height: 44,
-      minWidth: 44,
+      width: 40,
+      height: 40,
+      minWidth: 40,
       color: "#8C5A2B",
       display: "flex",
       alignItems: "center",
@@ -205,7 +239,7 @@ const createStyles = (theme: AppTheme) => {
       color: "#2B2B2B",
       fontSize: 16,
       fontWeight: 700,
-      lineHeight: 1.2
+      lineHeight: 1.25
     },
     featureDescription: {
       margin: 0,
@@ -214,31 +248,39 @@ const createStyles = (theme: AppTheme) => {
       lineHeight: 1.45
     },
     ctaShell: {
-      position: "absolute" as const,
-      left: "50%",
-      bottom: theme.spacing.xl * 1.4,
-      transform: "translateX(-50%)",
-      width: "min(100%, 332px)",
+      width: "100%",
+      maxWidth: contentMaxWidth,
       display: "flex",
       flexDirection: "column" as const,
       alignItems: "center",
-      gap: theme.spacing.sm,
-      zIndex: 1
+      gap: 12,
+      marginTop: 44,
+      zIndex: 1,
+      boxSizing: "border-box" as const
     },
     ctaButton: {
       width: "100%",
       boxSizing: "border-box" as const,
       minWidth: 0,
-      borderRadius: 18,
+      height: 58,
+      borderRadius: 30,
       background: "#C38A4A",
-      boxShadow: "0 14px 28px rgba(195,138,74,0.24)"
+      boxShadow: "0 12px 28px rgba(195,138,74,0.30)"
     },
     trustLine: {
       margin: 0,
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
       color: "rgba(43,43,43,0.62)",
       fontSize: 12,
       fontWeight: 500,
       letterSpacing: 0.1
+    },
+    lockIcon: {
+      width: 14,
+      height: 14,
+      color: "rgba(43,43,43,0.56)"
     },
     footer: {
       display: "none"
