@@ -137,7 +137,8 @@ const createStyles = (theme: AppTheme) => {
       justifyContent: "center",
       gap: theme.spacing.xl,
       flex: 1,
-      zIndex: 1
+      zIndex: 1,
+      transform: "translateY(-30px)"
     },
     heroSection: {
       display: "flex",
@@ -149,10 +150,10 @@ const createStyles = (theme: AppTheme) => {
     title: {
       margin: 0,
       color: "#2B2B2B",
-      fontSize: 46,
+      fontSize: 40,
       fontWeight: 700,
-      lineHeight: 0.96,
-      letterSpacing: -1.8,
+      lineHeight: 0.98,
+      letterSpacing: -1.4,
       textAlign: "center" as const,
       fontFamily: 'Georgia, "Times New Roman", serif',
       textWrap: "balance" as const
@@ -216,7 +217,7 @@ const createStyles = (theme: AppTheme) => {
       left: "50%",
       bottom: theme.spacing.xl * 1.4,
       transform: "translateX(-50%)",
-      width: contentWidth,
+      width: "min(100%, 332px)",
       display: "flex",
       flexDirection: "column" as const,
       alignItems: "center",
