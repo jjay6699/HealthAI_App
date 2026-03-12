@@ -10,20 +10,6 @@ import { analyzeBloodworkFile, analyzeBloodworkPdf } from "../../services/openai
 import { persistentStorage } from "../../services/persistentStorage";
 import { useI18n } from "../../i18n";
 
-const wearableIntegrations = [
-  { id: "apple-watch", name: "Apple Watch", description: "Sync heart rate, sleep, activity rings, and recovery trends." },
-  { id: "garmin-watch", name: "Garmin Watch", description: "Import training readiness, HRV, sleep, and daily movement." },
-  { id: "fitbit", name: "Fitbit", description: "Bring in steps, resting heart rate, sleep score, and wellness trends." },
-  { id: "galaxy-watch", name: "Samsung Galaxy Watch", description: "Connect daily activity, heart metrics, and sleep data." }
-] as const;
-
-const fitnessApps = [
-  { id: "apple-health", name: "Apple Health", description: "Combine labs with vitals, sleep, and broader health records." },
-  { id: "google-fit", name: "Google Fit", description: "Add movement, cardio points, and daily activity context." },
-  { id: "strava", name: "Strava", description: "Layer training load and workout intensity onto your biomarker timeline." },
-  { id: "myfitnesspal", name: "MyFitnessPal", description: "Pair nutrition logging with biomarker and recovery insights." }
-] as const;
-
 type IntegrationTab = "wearables" | "apps";
 
 const UploadScreen = () => {
@@ -38,6 +24,18 @@ const UploadScreen = () => {
   const [showDeviceConnect, setShowDeviceConnect] = useState(false);
   const [connectedIntegrations, setConnectedIntegrations] = useState<string[]>([]);
   const [activeIntegrationTab, setActiveIntegrationTab] = useState<IntegrationTab>("wearables");
+  const wearableIntegrations = [
+    { id: "apple-watch", name: "Apple Watch", description: t("upload.modal.integration.appleWatch") },
+    { id: "garmin-watch", name: "Garmin Watch", description: t("upload.modal.integration.garminWatch") },
+    { id: "fitbit", name: "Fitbit", description: t("upload.modal.integration.fitbit") },
+    { id: "galaxy-watch", name: "Samsung Galaxy Watch", description: t("upload.modal.integration.galaxyWatch") }
+  ] as const;
+  const fitnessApps = [
+    { id: "apple-health", name: "Apple Health", description: t("upload.modal.integration.appleHealth") },
+    { id: "google-fit", name: "Google Fit", description: t("upload.modal.integration.googleFit") },
+    { id: "strava", name: "Strava", description: t("upload.modal.integration.strava") },
+    { id: "myfitnesspal", name: "MyFitnessPal", description: t("upload.modal.integration.myfitnesspal") }
+  ] as const;
 
   const localizedStepLabels = [
     t("upload.analyzing.step.reading"),
