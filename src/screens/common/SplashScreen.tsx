@@ -105,7 +105,7 @@ const createStyles = (theme: AppTheme) => {
         "linear-gradient(180deg, #F6F1EA 0%, #EFE6DB 52%, #E9DED0 100%)",
       position: "relative" as const,
       boxSizing: "border-box" as const,
-      padding: `60px ${theme.spacing.xl}px ${theme.spacing.xl * 1.25}px`,
+      padding: `${theme.spacing.xl}px ${theme.spacing.xl}px ${theme.spacing.xl * 1.25}px`,
       overflow: "hidden"
     },
     backgroundGlowTop: {
@@ -156,7 +156,7 @@ const createStyles = (theme: AppTheme) => {
       display: "flex",
       flexDirection: "column" as const,
       alignItems: "center",
-      justifyContent: "flex-start",
+      justifyContent: "center",
       gap: 32,
       flex: 1,
       zIndex: 1,
@@ -167,7 +167,9 @@ const createStyles = (theme: AppTheme) => {
       flexDirection: "column" as const,
       alignItems: "center",
       gap: 16,
-      textAlign: "center" as const
+      textAlign: "center" as const,
+      width: "100%",
+      maxWidth: 320
     },
     title: {
       margin: 0,
@@ -183,10 +185,10 @@ const createStyles = (theme: AppTheme) => {
     subtitle: {
       margin: 0,
       color: "rgba(43,43,43,0.82)",
-      fontSize: 16,
+      fontSize: 15,
       lineHeight: 1.45,
-      width: "75vw",
-      maxWidth: 294,
+      width: "100%",
+      maxWidth: "100%",
       textAlign: "center" as const
     },
     featuresSection: {
@@ -200,7 +202,7 @@ const createStyles = (theme: AppTheme) => {
       width: "100%",
       boxSizing: "border-box" as const,
       display: "flex",
-      alignItems: "flex-start",
+      alignItems: "center",
       gap: theme.spacing.md,
       padding: `${theme.spacing.lg}px ${theme.spacing.lg}px`,
       borderRadius: 20,
@@ -231,13 +233,12 @@ const createStyles = (theme: AppTheme) => {
     featureCopy: {
       display: "flex",
       flexDirection: "column" as const,
-      gap: 6,
-      paddingTop: 2
+      gap: 6
     },
     featureTitle: {
       margin: 0,
       color: "#2B2B2B",
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: 700,
       lineHeight: 1.25
     },
