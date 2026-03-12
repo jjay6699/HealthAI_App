@@ -76,7 +76,7 @@ const SplashScreen = () => {
 };
 
 const createStyles = (theme: AppTheme) => {
-  const contentWidth = `min(100%, 360px)`;
+  const contentWidth = `min(100%, 332px)`;
 
   return {
     page: {
@@ -174,6 +174,7 @@ const createStyles = (theme: AppTheme) => {
     },
     featureCard: {
       width: "100%",
+      boxSizing: "border-box" as const,
       display: "flex",
       alignItems: "flex-start",
       gap: theme.spacing.md,
@@ -226,6 +227,7 @@ const createStyles = (theme: AppTheme) => {
     },
     ctaButton: {
       width: "100%",
+      boxSizing: "border-box" as const,
       minWidth: 0,
       borderRadius: 18,
       background: "#C38A4A",
