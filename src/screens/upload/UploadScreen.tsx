@@ -4,9 +4,26 @@ import Card from "../../components/Card";
 import SectionHeader from "../../components/SectionHeader";
 import Button from "../../components/Button";
 import AIChat from "../../components/AIChat";
+import Dialog from "../../components/Dialog";
 import { AppTheme, useTheme } from "../../theme";
 import { analyzeBloodworkFile, analyzeBloodworkPdf } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
+
+const wearableIntegrations = [
+  { id: "apple-watch", name: "Apple Watch", description: "Sync heart rate, sleep, activity rings, and recovery trends." },
+  { id: "garmin-watch", name: "Garmin Watch", description: "Import training readiness, HRV, sleep, and daily movement." },
+  { id: "fitbit", name: "Fitbit", description: "Bring in steps, resting heart rate, sleep score, and wellness trends." },
+  { id: "galaxy-watch", name: "Samsung Galaxy Watch", description: "Connect daily activity, heart metrics, and sleep data." }
+] as const;
+
+const fitnessApps = [
+  { id: "apple-health", name: "Apple Health", description: "Combine labs with vitals, sleep, and broader health records." },
+  { id: "google-fit", name: "Google Fit", description: "Add movement, cardio points, and daily activity context." },
+  { id: "strava", name: "Strava", description: "Layer training load and workout intensity onto your biomarker timeline." },
+  { id: "myfitnesspal", name: "MyFitnessPal", description: "Pair nutrition logging with biomarker and recovery insights." }
+] as const;
+
+type IntegrationTab = "wearables" | "apps";
 
 const UploadScreen = () => {
   const theme = useTheme();
@@ -16,6 +33,9 @@ const UploadScreen = () => {
   const [error, setError] = useState<string | null>(null);
   const [showAIChat, setShowAIChat] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [showDeviceConnect, setShowDeviceConnect] = useState(false);
+  const [connectedIntegrations, setConnectedIntegrations] = useState<string[]>([]);
+  const [activeIntegrationTab, setActiveIntegrationTab] = useState<IntegrationTab>("wearables");
 
   const analysisSteps = [
     { icon: "📄", text: "Reading document", color: "#8B5CF6" },
@@ -135,6 +155,12 @@ const UploadScreen = () => {
     });
   };
 
+  const toggleIntegration = (id: string) => {
+    setConnectedIntegrations((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    );
+  };
+
 
 
   // Show analyzing screen when processing
@@ -244,9 +270,16 @@ const UploadScreen = () => {
             Chat with trusted medical professionals for tailored advice, treatment insights, and support—right when you need it.
           </span>
         </button>
-        <button type="button" style={{ ...styles.optionButton, ...styles.disabled }} disabled>
-          <span style={{ ...styles.optionTitle, ...styles.disabledText }}>Connect with your smartwatch (coming soon)</span>
-          <span style={{ ...styles.optionDescription, ...styles.disabledText }}>
+        <button
+          type="button"
+          style={{
+            ...styles.optionButton,
+            ...(showDeviceConnect ? styles.optionButtonActive : {})
+          }}
+          onClick={() => setShowDeviceConnect(true)}
+        >
+          <span style={styles.optionTitle}>Connect with your smartwatch</span>
+          <span style={styles.optionDescription}>
             Sync wearable data to enrich your timeline and personalize recommendations.
           </span>
         </button>
@@ -281,6 +314,104 @@ const UploadScreen = () => {
       </Card>
 
       {showAIChat && <AIChat onClose={() => setShowAIChat(false)} />}
+      {showDeviceConnect ? (
+        <Dialog
+          title="Connect your devices"
+          description="Link a smartwatch or fitness app to add recovery, movement, sleep, and training context to your biomarker timeline."
+          onClose={() => {
+            setShowDeviceConnect(false);
+            setActiveIntegrationTab("wearables");
+          }}
+          cancelLabel="Done"
+        >
+          <div style={styles.integrationSection}>
+            <div style={styles.integrationTabs}>
+              <button
+                type="button"
+                style={{
+                  ...styles.integrationTabButton,
+                  ...(activeIntegrationTab === "wearables" ? styles.integrationTabButtonActive : {})
+                }}
+                onClick={() => setActiveIntegrationTab("wearables")}
+              >
+                Wearables
+              </button>
+              <button
+                type="button"
+                style={{
+                  ...styles.integrationTabButton,
+                  ...(activeIntegrationTab === "apps" ? styles.integrationTabButtonActive : {})
+                }}
+                onClick={() => setActiveIntegrationTab("apps")}
+              >
+                Fitness apps
+              </button>
+            </div>
+
+            {activeIntegrationTab === "wearables" ? (
+              <div style={styles.integrationGroup}>
+                <div>
+                  <h3 style={styles.integrationTitle}>Wearable devices</h3>
+                  <p style={styles.integrationIntro}>Choose a smartwatch or fitness tracker to connect.</p>
+                </div>
+                <div style={styles.integrationList}>
+                  {wearableIntegrations.map((integration) => {
+                    const isConnected = connectedIntegrations.includes(integration.id);
+                    return (
+                      <div key={integration.id} style={styles.integrationRow}>
+                        <div style={styles.integrationCopy}>
+                          <span style={styles.integrationName}>{integration.name}</span>
+                          <span style={styles.integrationDescription}>{integration.description}</span>
+                        </div>
+                        <button
+                          type="button"
+                          style={{
+                            ...styles.integrationButton,
+                            ...(isConnected ? styles.integrationButtonConnected : {})
+                          }}
+                          onClick={() => toggleIntegration(integration.id)}
+                        >
+                          {isConnected ? "Connected" : "Connect"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div style={styles.integrationGroup}>
+                <div>
+                  <h3 style={styles.integrationTitle}>Fitness apps</h3>
+                  <p style={styles.integrationIntro}>Bring in workout, movement, and nutrition data from your apps.</p>
+                </div>
+                <div style={styles.integrationList}>
+                  {fitnessApps.map((integration) => {
+                    const isConnected = connectedIntegrations.includes(integration.id);
+                    return (
+                      <div key={integration.id} style={styles.integrationRow}>
+                        <div style={styles.integrationCopy}>
+                          <span style={styles.integrationName}>{integration.name}</span>
+                          <span style={styles.integrationDescription}>{integration.description}</span>
+                        </div>
+                        <button
+                          type="button"
+                          style={{
+                            ...styles.integrationButton,
+                            ...(isConnected ? styles.integrationButtonConnected : {})
+                          }}
+                          onClick={() => toggleIntegration(integration.id)}
+                        >
+                          {isConnected ? "Connected" : "Connect"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </Dialog>
+      ) : null}
     </div>
   );
 };
@@ -330,6 +461,10 @@ const createStyles = (theme: AppTheme) => ({
     gap: theme.spacing.xs,
     fontFamily: "inherit"
   },
+  optionButtonActive: {
+    borderColor: theme.colors.primary,
+    boxShadow: "0 10px 24px rgba(197,138,74,0.14)"
+  },
   optionTitle: {
     fontSize: 16,
     fontWeight: 600,
@@ -345,6 +480,100 @@ const createStyles = (theme: AppTheme) => ({
   },
   disabledText: {
     color: theme.colors.textSecondary
+  },
+  integrationSection: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: theme.spacing.lg,
+    maxHeight: "58vh",
+    overflowY: "auto" as const,
+    paddingRight: 4
+  },
+  integrationTabs: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: theme.spacing.sm
+  },
+  integrationTabButton: {
+    borderRadius: theme.radii.pill,
+    border: `1px solid ${theme.colors.divider}`,
+    background: theme.colors.surface,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: 700,
+    padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+    cursor: "pointer"
+  },
+  integrationTabButtonActive: {
+    borderColor: theme.colors.primary,
+    background: `${theme.colors.primary}18`,
+    color: theme.colors.primary
+  },
+  integrationGroup: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: theme.spacing.md,
+    borderRadius: theme.radii.xl,
+    background: theme.colors.surface,
+    border: `1px solid ${theme.colors.divider}`,
+    padding: theme.spacing.md
+  },
+  integrationTitle: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: theme.colors.text,
+    margin: 0
+  },
+  integrationIntro: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    margin: `${theme.spacing.xs}px 0 0`
+  },
+  integrationList: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: theme.spacing.sm
+  },
+  integrationRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: theme.spacing.md,
+    padding: `${theme.spacing.md}px`,
+    borderRadius: theme.radii.lg,
+    border: `1px solid ${theme.colors.divider}`,
+    background: theme.colors.background
+  },
+  integrationCopy: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 4,
+    minWidth: 0
+  },
+  integrationName: {
+    fontSize: 15,
+    fontWeight: 600,
+    color: theme.colors.text
+  },
+  integrationDescription: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    lineHeight: "18px"
+  },
+  integrationButton: {
+    borderRadius: theme.radii.pill,
+    border: `1px solid ${theme.colors.primary}`,
+    background: theme.colors.surface,
+    color: theme.colors.primary,
+    fontSize: 13,
+    fontWeight: 700,
+    padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+    cursor: "pointer",
+    whiteSpace: "nowrap" as const
+  },
+  integrationButtonConnected: {
+    background: theme.colors.primary,
+    color: theme.colors.background
   },
   timeline: {
     margin: 0,
