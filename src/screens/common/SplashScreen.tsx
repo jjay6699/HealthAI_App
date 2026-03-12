@@ -172,7 +172,7 @@ const createStyles = (theme: AppTheme) => {
     title: {
       margin: 0,
       color: "#2B2B2B",
-      fontSize: 40,
+      fontSize: 35,
       fontWeight: 650,
       lineHeight: 1.08,
       letterSpacing: 0.2,
