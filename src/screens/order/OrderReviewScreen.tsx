@@ -1,8 +1,9 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "../../components/Card";
 import Button from "../../components/Button";
 import SectionHeader from "../../components/SectionHeader";
+import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 import { BloodworkAnalysis } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
@@ -10,6 +11,7 @@ import { persistentStorage } from "../../services/persistentStorage";
 const OrderReviewScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [selectedPlan, setSelectedPlan] = useState<"one-bottle" | "one-month" | "three-months">("one-month");
   const [analysis, setAnalysis] = useState<BloodworkAnalysis | null>(null);
@@ -18,25 +20,24 @@ const OrderReviewScreen = () => {
 
   useEffect(() => {
     const storedAnalysis = persistentStorage.getItem("bloodworkAnalysis");
-    if (storedAnalysis) {
-      try {
-        setAnalysis(JSON.parse(storedAnalysis));
-      } catch (error) {
-        console.error("Failed to parse analysis:", error);
-      }
+    if (!storedAnalysis) return;
+
+    try {
+      setAnalysis(JSON.parse(storedAnalysis));
+    } catch (error) {
+      console.error("Failed to parse analysis:", error);
     }
   }, []);
 
   const plans = [
-    { id: "one-bottle", label: "One Bottle Order", price: 45, savings: null, description: "1 bottle" },
-    { id: "one-month", label: "One Month Order", price: 85, savings: null, description: "2 bottles" },
-    { id: "three-months", label: "3-Months Order", price: 240, savings: null, description: "6 bottles" }
+    { id: "one-bottle", label: t("order.review.oneBottle"), price: 45, description: t("order.review.oneBottleDesc") },
+    { id: "one-month", label: t("order.review.oneMonth"), price: 85, description: t("order.review.oneMonthDesc") },
+    { id: "three-months", label: t("order.review.threeMonths"), price: 240, description: t("order.review.threeMonthsDesc") }
   ];
 
-  const selectedPlanDetails = plans.find(p => p.id === selectedPlan);
+  const selectedPlanDetails = plans.find((plan) => plan.id === selectedPlan);
 
   const handleContinue = () => {
-    // Save order details to localStorage
     persistentStorage.setItem("orderDetails", JSON.stringify({
       plan: selectedPlan,
       planLabel: selectedPlanDetails?.label,
@@ -58,43 +59,44 @@ const OrderReviewScreen = () => {
   if (!analysis) {
     return (
       <div style={styles.page}>
-        <h1 style={styles.heading}>No recommendations found</h1>
-        <p style={styles.subheading}>Please complete a bloodwork analysis first.</p>
-        <Button title="Upload Bloodwork" onClick={() => navigate("/upload")} />
+        <h1 style={styles.heading}>{t("order.review.noOrder")}</h1>
+        <p style={styles.subheading}>{t("order.review.noOrderBody")}</p>
+        <Button title={t("insights.uploadBloodwork")} onClick={() => navigate("/upload")} />
       </div>
     );
   }
 
   return (
     <div style={styles.page}>
-      {/* Back Button */}
       <button onClick={() => navigate("/supplements")} style={styles.backButton}>
         <span style={styles.backArrow}>←</span>
-        <span>Back to Nutrition</span>
+        <span>{t("order.review.back")}</span>
       </button>
 
-      <h1 style={styles.heading}>Review Your Order</h1>
-      <p style={styles.subheading}>Choose your plan and confirm your custom nutrition blend</p>
+      <h1 style={styles.heading}>{t("order.review.heading")}</h1>
+      <p style={styles.subheading}>{t("order.review.subheading")}</p>
 
-      {/* Custom Blend Summary */}
       <Card style={styles.card}>
-        <SectionHeader title="Your Custom Blend" />
+        <SectionHeader title={t("order.review.customBlend")} />
         <div style={styles.supplementList}>
-          {analysis.recommendations.map((rec, index) => (
+          {analysis.recommendations.map((recommendation, index) => (
             <div key={index} style={styles.supplementItem}>
               <div style={styles.supplementIcon}>💊</div>
               <div style={styles.supplementInfo}>
-                <span style={styles.supplementName}>{rec.supplementName}</span>
-                <span style={styles.supplementDosage}>{(rec.dosage || "").replace(/per day/gi, "per serving size").replace(/g\/day/gi, "g per serving size")}</span>
+                <span style={styles.supplementName}>{recommendation.supplementName}</span>
+                <span style={styles.supplementDosage}>
+                  {(recommendation.dosage || "")
+                    .replace(/per day/gi, "per serving size")
+                    .replace(/g\/day/gi, "g per serving size")}
+                </span>
               </div>
             </div>
           ))}
         </div>
       </Card>
 
-      {/* Plan Selection */}
       <Card style={styles.card}>
-        <SectionHeader title="Choose Your Plan" />
+        <SectionHeader title={t("order.review.choosePlan")} />
         <div style={styles.planList}>
           {plans.map((plan) => {
             const isSelected = selectedPlan === plan.id;
@@ -106,28 +108,22 @@ const OrderReviewScreen = () => {
                   borderColor: isSelected ? theme.colors.primary : theme.colors.divider,
                   boxShadow: isSelected ? "0 2px 8px rgba(239, 68, 68, 0.1)" : "none"
                 }}
-                onClick={() => setSelectedPlan(plan.id as any)}
+                onClick={() => setSelectedPlan(plan.id as typeof selectedPlan)}
               >
-              <div style={styles.radioContainer}>
-                <div style={{
-                  ...styles.radio,
-                  ...(selectedPlan === plan.id ? styles.radioSelected : {})
-                }}>
-                  {selectedPlan === plan.id && <div style={styles.radioDot} />}
+                <div style={styles.radioContainer}>
+                  <div style={{ ...styles.radio, ...(isSelected ? styles.radioSelected : {}) }}>
+                    {isSelected ? <div style={styles.radioDot} /> : null}
+                  </div>
                 </div>
-              </div>
-              <div style={styles.planInfo}>
-                <div style={styles.planHeader}>
-                  <span style={styles.planLabel}>{plan.label}</span>
-                  {plan.savings && (
-                    <span style={styles.savingsBadge}>Save {plan.savings}%</span>
-                  )}
+                <div style={styles.planInfo}>
+                  <div style={styles.planHeader}>
+                    <span style={styles.planLabel}>{plan.label}</span>
+                  </div>
+                  <span style={styles.planDescription}>{plan.description}</span>
                 </div>
-                <span style={styles.planDescription}>{plan.description}</span>
-              </div>
-              <div style={styles.planPrice}>
-                <span style={styles.priceAmount}>RM{plan.price}</span>
-              </div>
+                <div style={styles.planPrice}>
+                  <span style={styles.priceAmount}>RM{plan.price}</span>
+                </div>
               </button>
             );
           })}
@@ -135,29 +131,28 @@ const OrderReviewScreen = () => {
       </Card>
 
       <Card style={styles.card}>
-        <SectionHeader title="Coupon code" />
+        <SectionHeader title={t("order.review.coupon")} />
         <div style={styles.couponRow}>
           <input
             value={couponCode}
-            onChange={(e) => setCouponCode(e.target.value)}
-            placeholder="Enter code"
+            onChange={(event) => setCouponCode(event.target.value)}
+            placeholder={t("order.review.enterCode")}
             style={styles.couponInput}
           />
-          <Button title="Apply" variant="secondary" onClick={handleApplyCoupon} />
+          <Button title={t("order.review.apply")} variant="secondary" onClick={handleApplyCoupon} />
         </div>
         {couponApplied ? (
-          <span style={styles.couponApplied}>Applied: {couponApplied}</span>
+          <span style={styles.couponApplied}>{t("order.review.applied", { code: couponApplied })}</span>
         ) : (
-          <span style={styles.couponHelper}>You can apply a promo code at checkout.</span>
+          <span style={styles.couponHelper}>{t("order.review.couponHelper")}</span>
         )}
       </Card>
 
-      {/* Continue Button */}
       <div style={styles.footerSpacer} />
       <div style={styles.footer}>
         <div style={styles.footerContent}>
           <Button
-            title={`Continue to Checkout - RM${selectedPlanDetails?.price}`}
+            title={t("order.review.continue", { price: selectedPlanDetails?.price ?? 0 })}
             onClick={handleContinue}
             fullWidth
           />
@@ -304,15 +299,6 @@ const createStyles = (theme: AppTheme) => ({
     fontWeight: 600,
     color: theme.colors.text
   },
-  savingsBadge: {
-    fontSize: 11,
-    fontWeight: 600,
-    color: theme.colors.success,
-    background: "#F0FDF4",
-    padding: "2px 8px",
-    borderRadius: theme.radii.sm,
-    border: `1px solid ${theme.colors.success}`
-  },
   planDescription: {
     fontSize: 13,
     color: theme.colors.textSecondary
@@ -326,21 +312,6 @@ const createStyles = (theme: AppTheme) => ({
     fontSize: 20,
     fontWeight: 700,
     color: theme.colors.text
-  },
-  priceFrequency: {
-    fontSize: 13,
-    color: theme.colors.textSecondary
-  },
-  select: {
-    width: "100%",
-    padding: theme.spacing.md,
-    fontSize: 15,
-    borderRadius: theme.radii.md,
-    border: `1px solid ${theme.colors.divider}`,
-    background: theme.colors.background,
-    color: theme.colors.text,
-    fontFamily: "inherit",
-    cursor: "pointer"
   },
   couponRow: {
     display: "flex",
@@ -389,4 +360,3 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default OrderReviewScreen;
-

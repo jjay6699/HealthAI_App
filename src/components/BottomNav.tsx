@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import classNames from "classnames";
 import { useTheme } from "../theme";
 import { HomeIcon, UploadIcon, InsightsIcon, SupplementsIcon, HistoryIcon, ProfileIcon } from "./icons";
+import { useI18n } from "../i18n";
 
 export const BOTTOM_NAV_HEIGHT = 68;
 
@@ -10,18 +11,18 @@ type BottomNavProps = {
   width?: string;
 };
 
-const tabs = [
-  { to: "/home", label: "Home", icon: HomeIcon },
-  { to: "/upload", label: "Upload", icon: UploadIcon },
-  { to: "/insights", label: "Insights", icon: InsightsIcon },
-  { to: "/supplements", label: "Nutrition", icon: SupplementsIcon },
-  { to: "/history", label: "History", icon: HistoryIcon },
-  { to: "/profile", label: "Profile", icon: ProfileIcon }
-];
-
 const BottomNav: React.FC<BottomNavProps> = ({ width }) => {
   const theme = useTheme();
+  const { t } = useI18n();
   const computedWidth = width ?? `min(440px, calc(100% - ${theme.spacing.xl * 2}px))`;
+  const tabs = [
+    { to: "/home", label: t("nav.home"), icon: HomeIcon },
+    { to: "/upload", label: t("nav.upload"), icon: UploadIcon },
+    { to: "/insights", label: t("nav.insights"), icon: InsightsIcon },
+    { to: "/supplements", label: t("nav.nutrition"), icon: SupplementsIcon },
+    { to: "/history", label: t("nav.history"), icon: HistoryIcon },
+    { to: "/profile", label: t("nav.profile"), icon: ProfileIcon }
+  ];
 
   return (
     <nav

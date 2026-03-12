@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
 import { pdfToImages, extractTextFromPdf } from "../utils/pdfProcessor";
 import { persistentStorage } from "./persistentStorage";
+import type { Language } from "../i18n";
 
 const openai = new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
@@ -10,6 +11,7 @@ const openai = new OpenAI({
 
 const ANALYSIS_CACHE_VERSION = "v4";
 const ANALYSIS_TEMPERATURE = 0;
+const LANGUAGE_STORAGE_KEY = "appLanguage";
 
 const ANALYSIS_MODEL = "gpt-4o";
 
@@ -199,9 +201,11 @@ const buildAnalysisCacheKey = (kind: string, payload: unknown): string => {
 export async function analyzeBloodwork(
   bloodworkData: BloodworkData
 ): Promise<BloodworkAnalysis> {
+  const language = getCurrentLanguage();
   const cacheKey = buildAnalysisCacheKey("bloodwork", {
     bloodworkData,
-    supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id)
+    supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id),
+    language
   });
   const cached = getCachedAnalysis(cacheKey);
   if (cached) {
@@ -292,7 +296,9 @@ Respond in JSON format with this structure:
       "impact": "What this means for health"
     }
   ]
-}`;
+}
+
+${getLanguageInstruction(language)}`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -318,8 +324,9 @@ Respond in JSON format with this structure:
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
     const normalized = normalizeRecommendations(analysis);
-    setCachedAnalysis(cacheKey, normalized);
-    return normalized;
+    const localized = await localizeBloodworkAnalysis(normalized, language);
+    setCachedAnalysis(cacheKey, localized);
+    return localized;
   } catch (error) {
     console.error("Error analyzing bloodwork:", error);
     throw new Error("Failed to analyze bloodwork. Please try again.");
@@ -330,6 +337,7 @@ Respond in JSON format with this structure:
  * Analyzes bloodwork from a PDF file by converting it to images
  */
 export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis> {
+  const language = getCurrentLanguage();
   const pdfFingerprint = `${file.name}:${file.size}:${file.lastModified}`;
 
   const supplementsList = AVAILABLE_SUPPLEMENTS.map(
@@ -350,7 +358,8 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
     const cacheKey = buildAnalysisCacheKey("pdf", {
       pdfFingerprint,
       pageImageHashes: allPages.map((img) => hashString(img)),
-      supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id)
+      supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id),
+      language
     });
     const cached = getCachedAnalysis(cacheKey);
     if (cached) {
@@ -447,7 +456,9 @@ Respond in JSON format with this structure:
       "impact": "What this means for health"
     }
   ]
-}`
+}
+
+${getLanguageInstruction(language)}`
             },
             ...allPages.map((pageImage) => ({
               type: "image_url" as const,
@@ -470,8 +481,9 @@ Respond in JSON format with this structure:
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
     const normalized = normalizeRecommendations(analysis);
-    setCachedAnalysis(cacheKey, normalized);
-    return normalized;
+    const localized = await localizeBloodworkAnalysis(normalized, language);
+    setCachedAnalysis(cacheKey, localized);
+    return localized;
   } catch (error) {
     console.error("Error analyzing PDF bloodwork file:", error);
     throw new Error("Failed to analyze PDF file. Please ensure the PDF contains clear bloodwork data.");
@@ -485,10 +497,12 @@ export async function analyzeBloodworkFile(
   base64Image: string,
   fileType: string
 ): Promise<BloodworkAnalysis> {
+  const language = getCurrentLanguage();
   const cacheKey = buildAnalysisCacheKey("image", {
     imageHash: hashString(base64Image),
     fileType,
-    supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id)
+    supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id),
+    language
   });
   const cached = getCachedAnalysis(cacheKey);
   if (cached) {
@@ -598,7 +612,9 @@ Respond in JSON format with this structure:
       "impact": "What this means for health"
     }
   ]
-}`
+}
+
+${getLanguageInstruction(language)}`
             },
             {
               type: "image_url",
@@ -621,8 +637,9 @@ Respond in JSON format with this structure:
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
     const normalized = normalizeRecommendations(analysis);
-    setCachedAnalysis(cacheKey, normalized);
-    return normalized;
+    const localized = await localizeBloodworkAnalysis(normalized, language);
+    setCachedAnalysis(cacheKey, localized);
+    return localized;
   } catch (error) {
     console.error("Error analyzing bloodwork file:", error);
     throw new Error("Failed to analyze bloodwork file. Please ensure the image is clear and contains bloodwork data.");
@@ -635,10 +652,12 @@ Respond in JSON format with this structure:
 export async function analyzeBloodworkImages(
   images: { base64: string; fileType: string }[]
 ): Promise<BloodworkAnalysis> {
+  const language = getCurrentLanguage();
   const cacheKey = buildAnalysisCacheKey("images", {
     imageHashes: images.map((img) => hashString(img.base64)),
     fileTypes: images.map((img) => img.fileType),
-    supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id)
+    supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id),
+    language
   });
   const cached = getCachedAnalysis(cacheKey);
   if (cached) {
@@ -735,7 +754,9 @@ Respond in JSON format with this structure:
       "impact": "What this means for health"
     }
   ]
-}`
+}
+
+${getLanguageInstruction(language)}`
             },
             ...imageParts
           ]
@@ -753,8 +774,9 @@ Respond in JSON format with this structure:
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
     const normalized = normalizeRecommendations(analysis);
-    setCachedAnalysis(cacheKey, normalized);
-    return normalized;
+    const localized = await localizeBloodworkAnalysis(normalized, language);
+    setCachedAnalysis(cacheKey, localized);
+    return localized;
   } catch (error) {
     console.error("Error analyzing bloodwork images:", error);
     throw new Error("Failed to analyze bloodwork images. Please ensure the images are clear and contain bloodwork data.");
@@ -826,10 +848,205 @@ export interface DailyProfileSummary {
   motivation: string;
 }
 
+export interface SupplementContentTranslation {
+  benefits: string[];
+  keyNutrients: string[];
+  description?: string;
+}
+
+const getCurrentLanguage = (): Language => {
+  const stored = persistentStorage.getItem(LANGUAGE_STORAGE_KEY);
+  return stored === "zh" ? "zh" : "en";
+};
+
+const getLanguageInstruction = (language: Language): string =>
+  language === "zh"
+    ? "Respond entirely in Simplified Chinese. Keep supplementName and supplementId unchanged."
+    : "Respond in English.";
+
+const localizeBloodworkAnalysis = async (
+  analysis: BloodworkAnalysis,
+  language: Language
+): Promise<BloodworkAnalysis> => {
+  if (language === "en") return analysis;
+
+  try {
+    return await translateBloodworkAnalysis(analysis, language);
+  } catch (error) {
+    console.error("Error localizing bloodwork analysis:", error);
+    return analysis;
+  }
+};
+
+export async function translateBloodworkAnalysis(
+  analysis: BloodworkAnalysis,
+  language: Language
+): Promise<BloodworkAnalysis> {
+  if (language === "en") return analysis;
+
+  const cacheKey = buildAnalysisCacheKey("bloodwork-translation", {
+    language,
+    analysis
+  });
+  const cached = getCachedAnalysis(cacheKey);
+  if (cached) return cached;
+
+  const response = await openai.chat.completions.create({
+    model: ANALYSIS_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          `You translate bloodwork analysis JSON for app display. ${getLanguageInstruction(language)} Translate only human-readable text fields. Keep JSON structure, supplementId, supplementName, priority, dosageGramsPerDay, and dosage unchanged. Always return valid JSON.`
+      },
+      {
+        role: "user",
+        content: JSON.stringify(analysis)
+      }
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) {
+    throw new Error("No translation response from OpenAI");
+  }
+
+  const translated = JSON.parse(content) as BloodworkAnalysis;
+  if (
+    !translated ||
+    typeof translated.summary !== "string" ||
+    !Array.isArray(translated.concerns) ||
+    !Array.isArray(translated.strengths) ||
+    !Array.isArray(translated.recommendations) ||
+    !Array.isArray(translated.detailedInsights)
+  ) {
+    throw new Error("Invalid bloodwork translation payload");
+  }
+  setCachedAnalysis(cacheKey, translated);
+  return translated;
+}
+
+export async function translateDailyProfileSummary(
+  summary: DailyProfileSummary,
+  language: Language
+): Promise<DailyProfileSummary> {
+  if (language === "en") return summary;
+
+  const cacheKey = buildAnalysisCacheKey("profile-summary-translation", {
+    language,
+    summary
+  });
+
+  if (typeof window !== "undefined") {
+    try {
+      const cachedRaw = persistentStorage.getItem(cacheKey);
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw) as DailyProfileSummary;
+        if (cached?.summary && cached?.motivation) return cached;
+      }
+    } catch {
+      // Ignore cache parse/storage errors.
+    }
+  }
+
+  const response = await openai.chat.completions.create({
+    model: ANALYSIS_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          `You translate profile summary JSON for app display. ${getLanguageInstruction(language)} Keep JSON keys unchanged and return valid JSON.`
+      },
+      {
+        role: "user",
+        content: JSON.stringify(summary)
+      }
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) {
+    throw new Error("No translation response from OpenAI");
+  }
+
+  const translated = JSON.parse(content) as DailyProfileSummary;
+  if (typeof window !== "undefined") {
+    try {
+      persistentStorage.setItem(cacheKey, JSON.stringify(translated));
+    } catch {
+      // Ignore storage errors.
+    }
+  }
+  return translated;
+}
+
+export async function translateSupplementContent(
+  content: SupplementContentTranslation,
+  language: Language
+): Promise<SupplementContentTranslation> {
+  if (language === "en") return content;
+
+  const cacheKey = buildAnalysisCacheKey("supplement-content-translation", {
+    language,
+    content
+  });
+
+  if (typeof window !== "undefined") {
+    try {
+      const cachedRaw = persistentStorage.getItem(cacheKey);
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw) as SupplementContentTranslation;
+        if (Array.isArray(cached?.benefits) && Array.isArray(cached?.keyNutrients)) return cached;
+      }
+    } catch {
+      // Ignore cache parse/storage errors.
+    }
+  }
+
+  const response = await openai.chat.completions.create({
+    model: ANALYSIS_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          `You translate supplement metadata JSON for app display. ${getLanguageInstruction(language)} Keep JSON keys unchanged and return valid JSON.`
+      },
+      {
+        role: "user",
+        content: JSON.stringify(content)
+      }
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0
+  });
+
+  const translatedRaw = response.choices[0].message.content;
+  if (!translatedRaw) {
+    throw new Error("No supplement translation response from OpenAI");
+  }
+
+  const translated = JSON.parse(translatedRaw) as SupplementContentTranslation;
+
+  if (typeof window !== "undefined") {
+    try {
+      persistentStorage.setItem(cacheKey, JSON.stringify(translated));
+    } catch {
+      // Ignore storage errors.
+    }
+  }
+
+  return translated;
+}
+
 export async function generateProfileSummary(
   input: DailyProfileSummaryInput
 ): Promise<DailyProfileSummary> {
-  const cacheKey = buildAnalysisCacheKey("profile-summary", input);
+  const language = getCurrentLanguage();
+  const cacheKey = buildAnalysisCacheKey("profile-summary", { input, language });
   if (typeof window !== "undefined") {
     try {
       const cachedRaw = persistentStorage.getItem(cacheKey);
@@ -859,7 +1076,9 @@ Requirements:
 - Include one clear action for today.
 - Return strict JSON with keys: summary, motivation.
 - summary: 2-4 short sentences.
-- motivation: 1 short encouraging sentence.`;
+- motivation: 1 short encouraging sentence.
+
+${getLanguageInstruction(language)}`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -890,19 +1109,18 @@ Requirements:
       summary: parsed.summary?.trim() || "Your profile looks stable today. Keep tracking your metrics and stay consistent with your plan.",
       motivation: parsed.motivation?.trim() || "Small consistent actions today will build stronger results over time."
     };
+    const localized = await translateDailyProfileSummary(result, language);
 
     if (typeof window !== "undefined") {
       try {
-        persistentStorage.setItem(cacheKey, JSON.stringify(result));
+        persistentStorage.setItem(cacheKey, JSON.stringify(localized));
       } catch {
         // Ignore storage errors.
       }
     }
-    return result;
+    return localized;
   } catch (error) {
     console.error("Error generating profile summary:", error);
     throw new Error("Failed to generate profile summary.");
   }
 }
-
-

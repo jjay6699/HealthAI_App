@@ -1,53 +1,131 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Badge from "../../components/Badge";
 import Button from "../../components/Button";
 import Card from "../../components/Card";
 import Dialog from "../../components/Dialog";
 import SectionHeader from "../../components/SectionHeader";
+import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
-import { BloodworkAnalysis, SupplementRecommendation } from "../../services/openai";
+import {
+  BloodworkAnalysis,
+  SupplementRecommendation,
+  translateBloodworkAnalysis,
+  translateSupplementContent
+} from "../../services/openai";
 import { AVAILABLE_SUPPLEMENTS, Supplement } from "../../data/supplements";
 import { SUPPLEMENT_DESCRIPTIONS } from "../../data/supplementDescriptions";
 import { persistentStorage } from "../../services/persistentStorage";
 
+type DisplaySupplementContent = {
+  benefits: string[];
+  keyNutrients: string[];
+  description?: string;
+};
+
 const SupplementsScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { language, t } = useI18n();
   const navigate = useNavigate();
   const [recommendations, setRecommendations] = useState<SupplementRecommendation[]>([]);
+  const [displayRecommendations, setDisplayRecommendations] = useState<SupplementRecommendation[]>([]);
+  const [translatedContent, setTranslatedContent] = useState<Record<string, DisplaySupplementContent>>({});
   const [activeSupplementId, setActiveSupplementId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load recommendations from localStorage
     const storedAnalysis = persistentStorage.getItem("bloodworkAnalysis");
-    if (storedAnalysis) {
-      try {
-        const analysis: BloodworkAnalysis = JSON.parse(storedAnalysis);
-        setRecommendations(analysis.recommendations || []);
-      } catch (error) {
-        console.error("Failed to parse bloodwork analysis:", error);
-      }
+    if (!storedAnalysis) return;
+
+    try {
+      const analysis: BloodworkAnalysis = JSON.parse(storedAnalysis);
+      setRecommendations(analysis.recommendations || []);
+    } catch (error) {
+      console.error("Failed to parse bloodwork analysis:", error);
     }
   }, []);
 
-  // Get full supplement details for each recommendation
-  const getSupplementDetails = (supplementId: string): Supplement | undefined => {
-    return AVAILABLE_SUPPLEMENTS.find(s => s.id === supplementId);
-  };
+  useEffect(() => {
+    let cancelled = false;
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "high":
-        return theme.colors.error;
-      case "medium":
-        return theme.colors.warning;
-      case "low":
-        return theme.colors.info;
-      default:
-        return theme.colors.textSecondary;
-    }
-  };
+    const run = async () => {
+      if (language === "en") {
+        setDisplayRecommendations(recommendations);
+        return;
+      }
+
+      const translated = await translateBloodworkAnalysis(
+        {
+          summary: "",
+          concerns: [],
+          strengths: [],
+          recommendations,
+          detailedInsights: []
+        },
+        language
+      );
+
+      if (!cancelled) {
+        setDisplayRecommendations(translated.recommendations || []);
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [language, recommendations]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      if (language === "en") {
+        setTranslatedContent(
+          Object.fromEntries(
+            AVAILABLE_SUPPLEMENTS.map((supplement) => [
+              supplement.id,
+              {
+                benefits: supplement.benefits,
+                keyNutrients: supplement.keyNutrients,
+                description: SUPPLEMENT_DESCRIPTIONS[supplement.id]
+              }
+            ])
+          )
+        );
+        return;
+      }
+
+      const translatedEntries = await Promise.all(
+        AVAILABLE_SUPPLEMENTS.map(async (supplement) => {
+          const translated = await translateSupplementContent(
+            {
+              benefits: supplement.benefits,
+              keyNutrients: supplement.keyNutrients,
+              description: SUPPLEMENT_DESCRIPTIONS[supplement.id]
+            },
+            language
+          );
+
+          return [supplement.id, translated] as const;
+        })
+      );
+
+      if (!cancelled) {
+        setTranslatedContent(Object.fromEntries(translatedEntries));
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [language]);
+
+  const getSupplementDetails = (supplementId: string): Supplement | undefined =>
+    AVAILABLE_SUPPLEMENTS.find((supplement) => supplement.id === supplementId);
 
   const getPriorityBadgeTone = (priority: string): "success" | "warning" | "info" => {
     switch (priority) {
@@ -60,39 +138,23 @@ const SupplementsScreen = () => {
     }
   };
 
-  // If no recommendations, show empty state
-  if (recommendations.length === 0) {
-    return (
-      <div style={styles.page}>
-        <h1 style={styles.heading}>Nutrition recommendations</h1>
-        <p style={styles.subheading}>Get personalized nutrition recommendations based on your bloodwork.</p>
-
-        <Card style={styles.emptyCard}>
-          <h3 style={styles.emptyTitle}>No recommendations yet</h3>
-          <p style={styles.emptyBody}>
-            Upload your bloodwork to receive AI-powered nutrition recommendations tailored to your health needs.
-          </p>
-          <Link to="/upload">
-            <Button title="Upload Bloodwork" fullWidth />
-          </Link>
-        </Card>
-
-        <Card style={styles.notice} shadow={false}>
-          <h3 style={styles.noticeTitle}>Our Nutrition Collection</h3>
-          <p style={styles.noticeBody}>
-            We offer {AVAILABLE_SUPPLEMENTS.length} premium superfood nutrition products including wheatgrass, spirulina, turmeric, and more.
-          </p>
-        </Card>
-      </div>
-    );
-  }
+  const getPriorityLabel = (priority: string) => {
+    switch (priority) {
+      case "high":
+        return t("supplements.priority.high");
+      case "medium":
+        return t("supplements.priority.medium");
+      default:
+        return t("supplements.priority.low");
+    }
+  };
 
   const parseDosageGrams = (dosage?: string) => {
     if (!dosage) return undefined;
-    const matches = [...dosage.matchAll(/(\d+(\.\d+)?)\s*g/gi)].map((m) => Number(m[1]));
+    const matches = [...dosage.matchAll(/(\d+(\.\d+)?)\s*g/gi)].map((match) => Number(match[1]));
     if (matches.length === 0) return undefined;
     if (matches.length === 1) return matches[0];
-    const sum = matches.reduce((acc, val) => acc + val, 0);
+    const sum = matches.reduce((accumulator, value) => accumulator + value, 0);
     return sum / matches.length;
   };
 
@@ -100,140 +162,152 @@ const SupplementsScreen = () => {
   const servingsPerBottle = 14;
   const servingsPerMonth = 28;
   const bottlesPerMonth = 2;
-  const bottlePrice = 45;
   const monthPrice = 85;
 
-  const totalGrams = recommendations.reduce((sum, rec) => {
-    const grams = rec.dosageGramsPerDay ?? parseDosageGrams(rec.dosage);
+  const totalGrams = displayRecommendations.reduce((sum, recommendation) => {
+    const grams = recommendation.dosageGramsPerDay ?? parseDosageGrams(recommendation.dosage);
     return grams ? sum + grams : sum;
   }, 0);
 
-  const scaledGrams = recommendations.map((rec) => {
-    const grams = rec.dosageGramsPerDay ?? parseDosageGrams(rec.dosage);
+  const scaledGrams = displayRecommendations.map((recommendation) => {
+    const grams = recommendation.dosageGramsPerDay ?? parseDosageGrams(recommendation.dosage);
     if (!grams || totalGrams === 0) {
-      return { id: rec.supplementId, grams: undefined };
+      return { id: recommendation.supplementId, grams: undefined };
     }
-    const scaled = (grams / totalGrams) * servingGrams;
-    return { id: rec.supplementId, grams: Number(scaled.toFixed(2)) };
+    return {
+      id: recommendation.supplementId,
+      grams: Number(((grams / totalGrams) * servingGrams).toFixed(2))
+    };
   });
 
-
-  // Generate combined summary
   const getBaseSelections = () => {
     const proteinBases = ["Pea Protein Original", "Pea Protein Cacao"];
     const fiberBases = ["Australian Instant Oats", "Organic Psyllium Husk"];
-    const protein = recommendations.find((rec) => proteinBases.includes(rec.supplementName))?.supplementName;
-    const fiber = recommendations.find((rec) => fiberBases.includes(rec.supplementName))?.supplementName;
+    const protein = displayRecommendations.find((recommendation) => proteinBases.includes(recommendation.supplementName))?.supplementName;
+    const fiber = displayRecommendations.find((recommendation) => fiberBases.includes(recommendation.supplementName))?.supplementName;
     return { protein, fiber };
   };
 
   const generateSummary = () => {
-    const supplementNames = recommendations.map(rec => rec.supplementName).join(", ");
+    const supplementNames = displayRecommendations.map((recommendation) => recommendation.supplementName).join(", ");
     const base = getBaseSelections();
-    const baseText = base.protein && base.fiber ? ` Base blend: ${base.protein} + ${base.fiber}.` : "";
-    const gramsText = `Total serving size blend: ${servingGrams.toFixed(1)} g.`;
-    return `Your personalized blend includes ${supplementNames}.${baseText} ${gramsText}`.trim();
+    const baseText = base.protein && base.fiber
+      ? t("supplements.baseBlend", { protein: base.protein, fiber: base.fiber })
+      : "";
+    const gramsText = t("supplements.servingBlend", { grams: servingGrams.toFixed(1) });
+
+    return t("supplements.blendIncludes", {
+      names: supplementNames,
+      baseText,
+      gramsText
+    }).trim();
   };
+
+  if (displayRecommendations.length === 0) {
+    return (
+      <div style={styles.page}>
+        <h1 style={styles.heading}>{t("supplements.emptyHeading")}</h1>
+        <p style={styles.subheading}>{t("supplements.emptySubheading")}</p>
+
+        <Card style={styles.emptyCard}>
+          <h3 style={styles.emptyTitle}>{t("supplements.emptyTitle")}</h3>
+          <p style={styles.emptyBody}>{t("supplements.emptyBody")}</p>
+          <Link to="/upload">
+            <Button title={t("supplements.uploadBloodwork")} fullWidth />
+          </Link>
+        </Card>
+
+        <Card style={styles.notice} shadow={false}>
+          <h3 style={styles.noticeTitle}>{t("supplements.collectionTitle")}</h3>
+          <p style={styles.noticeBody}>{t("supplements.collectionBody", { count: AVAILABLE_SUPPLEMENTS.length })}</p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.page}>
-      <h1 style={styles.heading}>Your personalized nutrition plan</h1>
-      <p style={styles.subheading}>
-        Based on your bloodwork analysis, we recommend the following nutrition products from our collection.
-      </p>
+      <h1 style={styles.heading}>{t("supplements.heading")}</h1>
+      <p style={styles.subheading}>{t("supplements.subheading")}</p>
 
-      {/* Combined Summary Card */}
       <Card style={styles.summaryCard}>
-        <SectionHeader title="Your Custom Blend" />
+        <SectionHeader title={t("supplements.customBlend")} />
         <p style={styles.summaryText}>{generateSummary()}</p>
         <div style={styles.blendMeta}>
-          <span>Serving size: {servingGrams} g (2 tbsp)</span>
-          <span>{servingsPerBottle} servings per bottle • {servingsPerMonth} servings per month</span>
-          <span>{bottlesPerMonth} bottles/month</span>
+          <span>{t("supplements.servingSize", { grams: servingGrams })}</span>
+          <span>{t("supplements.servingsBottleMonth", { perBottle: servingsPerBottle, perMonth: servingsPerMonth })}</span>
+          <span>{t("supplements.bottlesPerMonth", { count: bottlesPerMonth })}</span>
         </div>
         <div style={styles.pricingRow}>
           <div>
-            <p style={styles.priceLabel}>Monthly Supply</p>
+            <p style={styles.priceLabel}>{t("supplements.monthlySupply")}</p>
             <p style={styles.priceAmount}>RM{monthPrice}</p>
-            <p style={styles.priceSub}>{bottlesPerMonth} bottles/month bundle</p>
+            <p style={styles.priceSub}>{t("supplements.monthBundle", { count: bottlesPerMonth })}</p>
           </div>
-          <Button
-            title="Order Now"
-            fullWidth={false}
-            onClick={() => navigate("/order-review")}
-          />
+          <Button title={t("supplements.orderNow")} fullWidth={false} onClick={() => navigate("/order-review")} />
         </div>
       </Card>
 
       <div style={styles.cardList}>
-        {recommendations.map((rec, index) => {
-          const supplementDetails = getSupplementDetails(rec.supplementId);
-          const description = SUPPLEMENT_DESCRIPTIONS[rec.supplementId];
+        {displayRecommendations.map((recommendation, index) => {
+          const supplementDetails = getSupplementDetails(recommendation.supplementId);
+          const content = translatedContent[recommendation.supplementId];
+          const description = content?.description ?? SUPPLEMENT_DESCRIPTIONS[recommendation.supplementId];
+          const grams =
+            scaledGrams.find((item) => item.id === recommendation.supplementId)?.grams ??
+            recommendation.dosageGramsPerDay ??
+            parseDosageGrams(recommendation.dosage);
 
           return (
             <Card key={index} style={styles.card}>
               <div style={styles.headerRow}>
-                <div>
-                  <SectionHeader
-                    title={rec.supplementName}
-                    subtitle=""
-                  />
-                </div>
-                <Badge
-                  label={`${rec.priority} priority`}
-                  tone={getPriorityBadgeTone(rec.priority)}
-                />
+                <SectionHeader title={recommendation.supplementName} subtitle="" />
+                <Badge label={getPriorityLabel(recommendation.priority)} tone={getPriorityBadgeTone(recommendation.priority)} />
               </div>
 
               <div style={styles.section}>
-                <span style={styles.label}>Why we recommend this</span>
-                <p style={styles.body}>{rec.reason}</p>
+                <span style={styles.label}>{t("supplements.why")}</span>
+                <p style={styles.body}>{recommendation.reason}</p>
               </div>
 
-              {(rec.dosageGramsPerDay || parseDosageGrams(rec.dosage)) && (
+              {grams ? (
                 <div style={styles.section}>
-                  <span style={styles.label}>Serving size grams</span>
-                  <p style={styles.body}>
-                    {(
-                      scaledGrams.find((item) => item.id === rec.supplementId)?.grams ??
-                      rec.dosageGramsPerDay ??
-                      parseDosageGrams(rec.dosage)
-                    )} g per serving size
-                  </p>
+                  <span style={styles.label}>{t("supplements.servingGrams")}</span>
+                  <p style={styles.body}>{t("supplements.perServing", { grams })}</p>
                 </div>
-              )}
+              ) : null}
 
-              {supplementDetails && (
+              {supplementDetails ? (
                 <>
                   <div style={styles.section}>
-                    <span style={styles.label}>Key benefits</span>
+                    <span style={styles.label}>{t("supplements.keyBenefits")}</span>
                     <ul style={styles.benefitsList}>
-                      {supplementDetails.benefits.map((benefit, i) => (
-                        <li key={i} style={styles.benefitItem}>{benefit}</li>
+                      {(content?.benefits ?? supplementDetails.benefits).map((benefit, benefitIndex) => (
+                        <li key={benefitIndex} style={styles.benefitItem}>{benefit}</li>
                       ))}
                     </ul>
                   </div>
 
                   <div style={styles.section}>
-                    <span style={styles.label}>Key nutrients</span>
+                    <span style={styles.label}>{t("supplements.keyNutrients")}</span>
                     <div style={styles.nutrientTags}>
-                      {supplementDetails.keyNutrients.map((nutrient, i) => (
-                        <span key={i} style={styles.nutrientTag}>{nutrient}</span>
+                      {(content?.keyNutrients ?? supplementDetails.keyNutrients).map((nutrient, nutrientIndex) => (
+                        <span key={nutrientIndex} style={styles.nutrientTag}>{nutrient}</span>
                       ))}
                     </div>
                   </div>
                 </>
-              )}
+              ) : null}
 
               <div style={styles.learnMoreRow}>
                 <button
                   type="button"
                   style={styles.learnMoreButton}
-                  onClick={() => setActiveSupplementId(rec.supplementId)}
+                  onClick={() => setActiveSupplementId(recommendation.supplementId)}
                 >
-                  Learn more
+                  {t("supplements.learnMore")}
                 </button>
-                {!description ? <span style={styles.learnMoreHint}>Details coming soon</span> : null}
+                {!description ? <span style={styles.learnMoreHint}>{t("supplements.detailsSoon")}</span> : null}
               </div>
             </Card>
           );
@@ -242,10 +316,10 @@ const SupplementsScreen = () => {
 
       {activeSupplementId ? (
         <Dialog
-          title={getSupplementDetails(activeSupplementId)?.name ?? "Nutrition details"}
-          description={SUPPLEMENT_DESCRIPTIONS[activeSupplementId] ?? "Details coming soon."}
+          title={getSupplementDetails(activeSupplementId)?.name ?? t("supplements.nutritionDetails")}
+          description={translatedContent[activeSupplementId]?.description ?? SUPPLEMENT_DESCRIPTIONS[activeSupplementId] ?? t("supplements.detailsSoon")}
           onClose={() => setActiveSupplementId(null)}
-          cancelLabel="Close"
+          cancelLabel={t("supplements.close")}
         />
       ) : null}
     </div>
@@ -423,4 +497,3 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default SupplementsScreen;
-

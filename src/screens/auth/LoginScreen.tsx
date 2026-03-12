@@ -1,6 +1,7 @@
 import React, { FormEvent, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
+import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 
 const demoCredentials = {
@@ -11,6 +12,7 @@ const demoCredentials = {
 const LoginScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [email, setEmail] = useState(""
 );
@@ -37,17 +39,17 @@ const LoginScreen = () => {
 
   return (
     <div style={styles.wrapper}>
-      <h1 style={styles.heading}>Welcome back</h1>
-      <p style={styles.subheading}>Log in to continue your personalized insights.</p>
+      <h1 style={styles.heading}>{t("auth.login.heading")}</h1>
+      <p style={styles.subheading}>{t("auth.login.subheading")}</p>
       <div style={styles.demoBox}>
         <div>
-          <p style={styles.demoTitle}>Demo access</p>
+          <p style={styles.demoTitle}>{t("auth.login.demoTitle")}</p>
           <p style={styles.demoCopy}>
             Email: <strong>{demoCredentials.email}</strong>
             <br />Password: <strong>{demoCredentials.password}</strong>
           </p>
         </div>
-        <Button title="Fill details" variant="secondary" onClick={handleUseDemo} style={{ alignSelf: "flex-start" }} />
+        <Button title={t("auth.login.fillDetails")} variant="secondary" onClick={handleUseDemo} style={{ alignSelf: "flex-start" }} />
       </div>
       <form style={styles.form} onSubmit={handleSubmit}>
         <label style={styles.label} htmlFor="email">
@@ -64,7 +66,7 @@ const LoginScreen = () => {
         />
 
         <label style={styles.label} htmlFor="password">
-          Password
+          {t("auth.login.password")}
         </label>
         <input
           id="password"
@@ -78,16 +80,16 @@ const LoginScreen = () => {
 
         <div style={styles.forgotRow}>
           <button type="button" style={styles.linkButton}>
-            Forgot password?
+            {t("auth.login.forgot")}
           </button>
         </div>
 
-        <Button title="Login" type="submit" fullWidth loading={isLoading} style={{ marginTop: theme.spacing.sm }} />
+        <Button title={t("auth.login.submit")} type="submit" fullWidth loading={isLoading} style={{ marginTop: theme.spacing.sm }} />
       </form>
 
       <div style={styles.dividerRow}>
         <span style={styles.divider} />
-        <span style={styles.dividerLabel}>or continue with</span>
+        <span style={styles.dividerLabel}>{t("auth.login.orContinue")}</span>
         <span style={styles.divider} />
       </div>
 
@@ -98,13 +100,13 @@ const LoginScreen = () => {
       </div>
 
       <div style={styles.footerRow}>
-        <span style={styles.footerText}>New here?</span>
+        <span style={styles.footerText}>{t("auth.login.newHere")}</span>
         <Link to="/register" style={styles.link}>
-          Create an account
+          {t("auth.login.createAccount")}
         </Link>
       </div>
 
-      <p style={styles.legal}>By logging in you agree to our Terms of Service and Privacy Policy.</p>
+      <p style={styles.legal}>{t("auth.login.legal")}</p>
     </div>
   );
 };

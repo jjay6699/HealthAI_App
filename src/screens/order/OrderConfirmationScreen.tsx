@@ -1,7 +1,8 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "../../components/Card";
 import Button from "../../components/Button";
+import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
 
@@ -17,25 +18,26 @@ interface LastOrder {
 const OrderConfirmationScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { language, t } = useI18n();
   const navigate = useNavigate();
   const [order, setOrder] = useState<LastOrder | null>(null);
 
   useEffect(() => {
     const stored = persistentStorage.getItem("lastOrder");
-    if (stored) {
-      try {
-        setOrder(JSON.parse(stored));
-      } catch (error) {
-        console.error("Failed to parse order:", error);
-      }
+    if (!stored) return;
+
+    try {
+      setOrder(JSON.parse(stored));
+    } catch (error) {
+      console.error("Failed to parse order:", error);
     }
   }, []);
 
   if (!order) {
     return (
       <div style={styles.page}>
-        <h1 style={styles.heading}>No order found</h1>
-        <Button title="Go Home" onClick={() => navigate("/")} />
+        <h1 style={styles.heading}>{t("order.confirm.noOrder")}</h1>
+        <Button title={t("order.confirm.goHome")} onClick={() => navigate("/")} />
       </div>
     );
   }
@@ -45,99 +47,88 @@ const OrderConfirmationScreen = () => {
 
   return (
     <div style={styles.page}>
-      {/* Success Animation */}
       <div style={styles.successContainer}>
         <div style={styles.checkmarkCircle}>
           <span style={styles.checkmark}>✓</span>
         </div>
-        <h1 style={styles.successTitle}>Order Placed Successfully!</h1>
-        <p style={styles.successText}>
-          Thank you for your order. We've sent a confirmation email with your order details.
-        </p>
+        <h1 style={styles.successTitle}>{t("order.confirm.success")}</h1>
+        <p style={styles.successText}>{t("order.confirm.successBody")}</p>
       </div>
 
-      {/* Order Details */}
       <Card style={styles.card}>
         <div style={styles.orderHeader}>
           <div>
-            <p style={styles.orderLabel}>Order Number</p>
+            <p style={styles.orderLabel}>{t("order.confirm.orderNumber")}</p>
             <p style={styles.orderNumber}>#{order.orderNumber}</p>
           </div>
           <div style={styles.estimatedDelivery}>
-            <p style={styles.deliveryLabel}>Estimated Delivery</p>
+            <p style={styles.deliveryLabel}>{t("order.confirm.estimatedDelivery")}</p>
             <p style={styles.deliveryDate}>
-              {estimatedDelivery.toLocaleDateString('en-MY', { 
-                day: 'numeric', 
-                month: 'short', 
-                year: 'numeric' 
+              {estimatedDelivery.toLocaleDateString(language === "zh" ? "zh-CN" : "en-MY", {
+                day: "numeric",
+                month: "short",
+                year: "numeric"
               })}
             </p>
           </div>
         </div>
       </Card>
 
-      {/* Order Summary */}
       <Card style={styles.card}>
-        <h3 style={styles.cardTitle}>Order Summary</h3>
+        <h3 style={styles.cardTitle}>{t("order.confirm.summary")}</h3>
         <div style={styles.summaryRow}>
-          <span style={styles.summaryLabel}>Custom Blend ({order.planLabel || order.plan})</span>
+          <span style={styles.summaryLabel}>{t("order.confirm.customBlend", { plan: order.planLabel || order.plan })}</span>
           <span style={styles.summaryValue}>RM{order.price.toFixed(2)}</span>
         </div>
         <div style={styles.summaryRow}>
-          <span style={styles.summaryLabel}>Shipping</span>
-          <span style={styles.summaryValueFree}>FREE</span>
+          <span style={styles.summaryLabel}>{t("order.confirm.shipping")}</span>
+          <span style={styles.summaryValueFree}>{t("order.confirm.free")}</span>
         </div>
         <div style={styles.divider} />
         <div style={styles.summaryRow}>
-          <span style={styles.summaryLabelTotal}>Total Paid</span>
+          <span style={styles.summaryLabelTotal}>{t("order.confirm.totalPaid")}</span>
           <span style={styles.summaryValueTotal}>RM{order.price.toFixed(2)}</span>
         </div>
       </Card>
 
-      {/* What's Next */}
       <Card style={styles.card}>
-        <h3 style={styles.cardTitle}>What's Next?</h3>
+        <h3 style={styles.cardTitle}>{t("order.confirm.whatsNext")}</h3>
         <div style={styles.stepsList}>
           <div style={styles.step}>
             <div style={styles.stepIcon}>📧</div>
             <div style={styles.stepContent}>
-              <p style={styles.stepTitle}>Confirmation Email</p>
-              <p style={styles.stepText}>Check your inbox for order details</p>
+              <p style={styles.stepTitle}>{t("order.confirm.confirmationEmail")}</p>
+              <p style={styles.stepText}>{t("order.confirm.confirmationEmailBody")}</p>
             </div>
           </div>
           <div style={styles.step}>
             <div style={styles.stepIcon}>📦</div>
             <div style={styles.stepContent}>
-              <p style={styles.stepTitle}>Preparing Your Blend</p>
-              <p style={styles.stepText}>We'll prepare your custom nutrition blend</p>
+              <p style={styles.stepTitle}>{t("order.confirm.preparingBlend")}</p>
+              <p style={styles.stepText}>{t("order.confirm.preparingBlendBody")}</p>
             </div>
           </div>
           <div style={styles.step}>
             <div style={styles.stepIcon}>🚚</div>
             <div style={styles.stepContent}>
-              <p style={styles.stepTitle}>Shipping Updates</p>
-              <p style={styles.stepText}>Track your order via email and WhatsApp</p>
+              <p style={styles.stepTitle}>{t("order.confirm.shippingUpdates")}</p>
+              <p style={styles.stepText}>{t("order.confirm.shippingUpdatesBody")}</p>
             </div>
           </div>
           <div style={styles.step}>
             <div style={styles.stepIcon}>🏠</div>
             <div style={styles.stepContent}>
-              <p style={styles.stepTitle}>Delivery</p>
-              <p style={styles.stepText}>Receive your nutrition products in 3-5 days</p>
+              <p style={styles.stepTitle}>{t("order.confirm.delivery")}</p>
+              <p style={styles.stepText}>{t("order.confirm.deliveryBody")}</p>
             </div>
           </div>
         </div>
       </Card>
 
-      {/* Action Buttons */}
       <div style={styles.buttonGroup}>
+        <Button title={t("order.confirm.trackOrder")} onClick={() => navigate("/history")} fullWidth />
         <Button
-          title="Track Order"
-          onClick={() => navigate("/history")}
-          fullWidth
-        />
-        <Button
-          title="Back to Home"
+          title={t("order.confirm.backHome")}
           onClick={() => navigate("/")}
           fullWidth
           style={{ background: theme.colors.background, color: theme.colors.text }}
@@ -319,5 +310,3 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default OrderConfirmationScreen;
-
-

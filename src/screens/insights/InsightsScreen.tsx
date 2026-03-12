@@ -5,8 +5,9 @@ import Card from "../../components/Card";
 import SectionHeader from "../../components/SectionHeader";
 import Button from "../../components/Button";
 import { AppTheme, useTheme } from "../../theme";
-import { BloodworkAnalysis } from "../../services/openai";
+import { BloodworkAnalysis, translateBloodworkAnalysis } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
+import { useI18n } from "../../i18n";
 
 const domainScores = [
   { id: "energy", label: "Energy", score: 62, status: "On watch", description: "Ferritin and B12 suggest an opportunity to optimise energy production." },
@@ -34,7 +35,9 @@ const primaryTakeaways = [
 const InsightsScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { language, t } = useI18n();
   const [analysis, setAnalysis] = useState<BloodworkAnalysis | null>(null);
+  const [displayAnalysis, setDisplayAnalysis] = useState<BloodworkAnalysis | null>(null);
 
   useEffect(() => {
     // Load analysis from localStorage
@@ -48,20 +51,44 @@ const InsightsScreen = () => {
     }
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!analysis) {
+      setDisplayAnalysis(null);
+      return;
+    }
+
+    if (language === "en") {
+      setDisplayAnalysis(analysis);
+      return;
+    }
+
+    translateBloodworkAnalysis(analysis, language)
+      .then((translated) => {
+        if (!cancelled) setDisplayAnalysis(translated);
+      })
+      .catch(() => {
+        if (!cancelled) setDisplayAnalysis(analysis);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [analysis, language]);
+
   // If no analysis available, show default content
-  if (!analysis) {
+  if (!displayAnalysis) {
     return (
       <div style={styles.page}>
-        <h1 style={styles.heading}>Your insights</h1>
-        <p style={styles.subheading}>Upload your bloodwork to get personalized AI-powered insights.</p>
+        <h1 style={styles.heading}>{t("insights.heading")}</h1>
+        <p style={styles.subheading}>{t("insights.emptySubheading")}</p>
 
         <Card style={styles.emptyCard}>
-          <h3 style={styles.emptyTitle}>No analysis yet</h3>
-          <p style={styles.emptyBody}>
-            Upload your lab results to receive personalized health insights and nutrition recommendations powered by AI.
-          </p>
+          <h3 style={styles.emptyTitle}>{t("insights.emptyTitle")}</h3>
+          <p style={styles.emptyBody}>{t("insights.emptyBody")}</p>
           <Link to="/upload">
-            <Button title="Upload Bloodwork" fullWidth />
+            <Button title={t("insights.uploadBloodwork")} fullWidth />
           </Link>
         </Card>
 
@@ -71,21 +98,21 @@ const InsightsScreen = () => {
 
   return (
     <div style={styles.page}>
-      <h1 style={styles.heading}>Your insights</h1>
-      <p style={styles.subheading}>AI-powered analysis of your bloodwork results.</p>
+      <h1 style={styles.heading}>{t("insights.heading")}</h1>
+      <p style={styles.subheading}>{t("insights.subheading")}</p>
 
       {/* Summary Card */}
       <Card style={styles.summaryCard}>
-        <SectionHeader title="Overall Summary" />
-        <p style={styles.summaryText}>{analysis.summary}</p>
+        <SectionHeader title={t("insights.summary")} />
+        <p style={styles.summaryText}>{displayAnalysis.summary}</p>
       </Card>
 
       {/* Concerns */}
-      {analysis.concerns && analysis.concerns.length > 0 && (
+      {displayAnalysis.concerns && displayAnalysis.concerns.length > 0 && (
         <Card style={styles.concernsCard}>
-          <SectionHeader title="Areas of Attention" />
+          <SectionHeader title={t("insights.attention")} />
           <div style={styles.listContainer}>
-            {analysis.concerns.map((concern, index) => (
+            {displayAnalysis.concerns.map((concern, index) => (
               <div key={index} style={styles.listItem}>
                 <span style={styles.bullet}>⚠️</span>
                 <p style={styles.listText}>{concern}</p>
@@ -96,11 +123,11 @@ const InsightsScreen = () => {
       )}
 
       {/* Strengths */}
-      {analysis.strengths && analysis.strengths.length > 0 && (
+      {displayAnalysis.strengths && displayAnalysis.strengths.length > 0 && (
         <Card style={styles.strengthsCard}>
-          <SectionHeader title="Positive Findings" />
+          <SectionHeader title={t("insights.positive")} />
           <div style={styles.listContainer}>
-            {analysis.strengths.map((strength, index) => (
+            {displayAnalysis.strengths.map((strength, index) => (
               <div key={index} style={styles.listItem}>
                 <span style={styles.bullet}>✓</span>
                 <p style={styles.listText}>{strength}</p>
@@ -111,15 +138,15 @@ const InsightsScreen = () => {
       )}
 
       {/* Detailed Insights */}
-      {analysis.detailedInsights && analysis.detailedInsights.length > 0 && (
+      {displayAnalysis.detailedInsights && displayAnalysis.detailedInsights.length > 0 && (
         <Card style={styles.takeawayCard}>
-          <SectionHeader title="Detailed Insights" />
+          <SectionHeader title={t("insights.detailed")} />
           <div style={styles.takeawayList}>
-            {analysis.detailedInsights.map((insight, index) => (
+            {displayAnalysis.detailedInsights.map((insight, index) => (
               <div key={index} style={styles.takeaway}>
                 <span style={styles.takeawayLabel}>{insight.category}</span>
-                <p style={styles.takeawayText}><strong>Findings:</strong> {insight.findings}</p>
-                <p style={styles.takeawayText}><strong>Impact:</strong> {insight.impact}</p>
+                <p style={styles.takeawayText}><strong>{t("insights.findings")}</strong> {insight.findings}</p>
+                <p style={styles.takeawayText}><strong>{t("insights.impact")}</strong> {insight.impact}</p>
               </div>
             ))}
           </div>
@@ -127,14 +154,12 @@ const InsightsScreen = () => {
       )}
 
       {/* Nutrition Recommendations */}
-      {analysis.recommendations && analysis.recommendations.length > 0 && (
+      {displayAnalysis.recommendations && displayAnalysis.recommendations.length > 0 && (
         <Card style={styles.recommendationsCard}>
-          <SectionHeader title="Recommended Nutrition" />
-          <p style={styles.recommendationsSubtext}>
-            Based on your bloodwork, we recommend the following nutrition products from our collection:
-          </p>
+          <SectionHeader title={t("insights.recommended")} />
+          <p style={styles.recommendationsSubtext}>{t("insights.recommendedSubtext")}</p>
           <Link to="/supplements">
-            <Button title="View All Recommendations" fullWidth />
+            <Button title={t("insights.viewRecommendations")} fullWidth />
           </Link>
         </Card>
       )}
@@ -279,4 +304,3 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default InsightsScreen;
-

@@ -1,8 +1,9 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "../../components/Card";
 import Button from "../../components/Button";
 import SectionHeader from "../../components/SectionHeader";
+import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
 
@@ -16,10 +17,9 @@ interface OrderDetails {
 const CheckoutScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
-  
-  // Form state
   const [formData, setFormData] = useState({
     fullName: "",
     phone: "",
@@ -41,11 +41,10 @@ const CheckoutScreen = () => {
       }
     }
 
-    // Load saved address if exists
     const savedAddress = persistentStorage.getItem("deliveryAddress");
     if (savedAddress) {
       try {
-        setFormData(prev => ({ ...prev, ...JSON.parse(savedAddress) }));
+        setFormData((prev) => ({ ...prev, ...JSON.parse(savedAddress) }));
       } catch (error) {
         console.error("Failed to parse saved address:", error);
       }
@@ -53,47 +52,40 @@ const CheckoutScreen = () => {
   }, []);
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleContinue = () => {
-    // Validate form
-    if (!formData.fullName || !formData.phone || !formData.addressLine1 ||
-        !formData.city || !formData.postcode || !formData.state) {
-      alert("Please fill in all required fields");
+    if (!formData.fullName || !formData.phone || !formData.addressLine1 || !formData.city || !formData.postcode || !formData.state) {
+      alert(t("order.checkout.requiredFields"));
       return;
     }
 
-    // Save delivery address
     persistentStorage.setItem("deliveryAddress", JSON.stringify(formData));
 
-    // Add to shipping addresses if not already exists
     const shippingAddresses = JSON.parse(persistentStorage.getItem("shippingAddresses") || "[]");
-    const addressExists = shippingAddresses.some((addr: any) =>
-      addr.addressLine1 === formData.addressLine1 &&
-      addr.postcode === formData.postcode
+    const addressExists = shippingAddresses.some((address: any) =>
+      address.addressLine1 === formData.addressLine1 && address.postcode === formData.postcode
     );
 
     if (!addressExists) {
-      const newAddress = {
+      shippingAddresses.push({
         id: `addr_${Date.now()}`,
         ...formData,
-        isDefault: shippingAddresses.length === 0 // First address is default
-      };
-      shippingAddresses.push(newAddress);
+        isDefault: shippingAddresses.length === 0
+      });
       persistentStorage.setItem("shippingAddresses", JSON.stringify(shippingAddresses));
     }
 
-    // Navigate to payment
     navigate("/payment");
   };
 
   if (!orderDetails) {
     return (
       <div style={styles.page}>
-        <h1 style={styles.heading}>No order found</h1>
-        <p style={styles.subheading}>Please review your order first.</p>
-        <Button title="Back to Order Review" onClick={() => navigate("/order-review")} />
+        <h1 style={styles.heading}>{t("order.checkout.noOrder")}</h1>
+        <p style={styles.subheading}>{t("order.checkout.noOrderBody")}</p>
+        <Button title={t("order.checkout.backToReview")} onClick={() => navigate("/order-review")} />
       </div>
     );
   }
@@ -105,58 +97,56 @@ const CheckoutScreen = () => {
 
   return (
     <div style={styles.page}>
-      {/* Back Button */}
       <button onClick={() => navigate("/order-review")} style={styles.backButton}>
         <span style={styles.backArrow}>←</span>
-        <span>Back to Cart</span>
+        <span>{t("order.checkout.backToCart")}</span>
       </button>
 
-      <h1 style={styles.heading}>Delivery Details</h1>
-      <p style={styles.subheading}>Where should we send your custom blend?</p>
+      <h1 style={styles.heading}>{t("order.checkout.heading")}</h1>
+      <p style={styles.subheading}>{t("order.checkout.subheading")}</p>
 
-      {/* Delivery Address Form */}
       <Card style={styles.card}>
-        <SectionHeader title="Delivery Address" />
-        
+        <SectionHeader title={t("order.checkout.deliveryAddress")} />
+
         <div style={styles.formGroup}>
-          <label style={styles.label}>Full Name *</label>
+          <label style={styles.label}>{t("order.checkout.fullName")}</label>
           <input
             type="text"
             value={formData.fullName}
-            onChange={(e) => handleInputChange("fullName", e.target.value)}
+            onChange={(event) => handleInputChange("fullName", event.target.value)}
             placeholder="John Doe"
             style={styles.input}
           />
         </div>
 
         <div style={styles.formGroup}>
-          <label style={styles.label}>Phone Number *</label>
+          <label style={styles.label}>{t("order.checkout.phone")}</label>
           <input
             type="tel"
             value={formData.phone}
-            onChange={(e) => handleInputChange("phone", e.target.value)}
+            onChange={(event) => handleInputChange("phone", event.target.value)}
             placeholder="+60 12-345 6789"
             style={styles.input}
           />
         </div>
 
         <div style={styles.formGroup}>
-          <label style={styles.label}>Address Line 1 *</label>
+          <label style={styles.label}>{t("order.checkout.address1")}</label>
           <input
             type="text"
             value={formData.addressLine1}
-            onChange={(e) => handleInputChange("addressLine1", e.target.value)}
+            onChange={(event) => handleInputChange("addressLine1", event.target.value)}
             placeholder="Street address, P.O. box"
             style={styles.input}
           />
         </div>
 
         <div style={styles.formGroup}>
-          <label style={styles.label}>Address Line 2</label>
+          <label style={styles.label}>{t("order.checkout.address2")}</label>
           <input
             type="text"
             value={formData.addressLine2}
-            onChange={(e) => handleInputChange("addressLine2", e.target.value)}
+            onChange={(event) => handleInputChange("addressLine2", event.target.value)}
             placeholder="Apartment, suite, unit, building, floor, etc."
             style={styles.input}
           />
@@ -164,22 +154,22 @@ const CheckoutScreen = () => {
 
         <div style={styles.formRow}>
           <div style={styles.formGroup}>
-            <label style={styles.label}>City *</label>
+            <label style={styles.label}>{t("order.checkout.city")}</label>
             <input
               type="text"
               value={formData.city}
-              onChange={(e) => handleInputChange("city", e.target.value)}
+              onChange={(event) => handleInputChange("city", event.target.value)}
               placeholder="Kuala Lumpur"
               style={styles.input}
             />
           </div>
 
           <div style={styles.formGroup}>
-            <label style={styles.label}>Postcode *</label>
+            <label style={styles.label}>{t("order.checkout.postcode")}</label>
             <input
               type="text"
               value={formData.postcode}
-              onChange={(e) => handleInputChange("postcode", e.target.value)}
+              onChange={(event) => handleInputChange("postcode", event.target.value)}
               placeholder="50000"
               style={styles.input}
             />
@@ -187,24 +177,24 @@ const CheckoutScreen = () => {
         </div>
 
         <div style={styles.formGroup}>
-          <label style={styles.label}>State *</label>
+          <label style={styles.label}>{t("order.checkout.state")}</label>
           <select
             value={formData.state}
-            onChange={(e) => handleInputChange("state", e.target.value)}
+            onChange={(event) => handleInputChange("state", event.target.value)}
             style={styles.select}
           >
-            <option value="">Select state</option>
-            {malaysianStates.map(state => (
+            <option value="">{t("order.checkout.selectState")}</option>
+            {malaysianStates.map((state) => (
               <option key={state} value={state}>{state}</option>
             ))}
           </select>
         </div>
 
         <div style={styles.formGroup}>
-          <label style={styles.label}>Special Instructions (Optional)</label>
+          <label style={styles.label}>{t("order.checkout.instructions")}</label>
           <textarea
             value={formData.specialInstructions}
-            onChange={(e) => handleInputChange("specialInstructions", e.target.value)}
+            onChange={(event) => handleInputChange("specialInstructions", event.target.value)}
             placeholder="Any special delivery instructions..."
             style={styles.textarea}
             rows={3}
@@ -212,35 +202,32 @@ const CheckoutScreen = () => {
         </div>
       </Card>
 
-      {/* Order Summary */}
       <Card style={styles.card}>
-        <SectionHeader title="Order Summary" />
+        <SectionHeader title={t("order.checkout.summary")} />
         <div style={styles.summaryRow}>
           <span style={styles.summaryLabel}>
-            {orderDetails.recommendations.length} nutrition items ({orderDetails.planLabel || orderDetails.plan})
+            {t("order.checkout.items", {
+              count: orderDetails.recommendations.length,
+              plan: orderDetails.planLabel || orderDetails.plan
+            })}
           </span>
           <span style={styles.summaryValue}>RM{orderDetails.price.toFixed(2)}</span>
         </div>
         <div style={styles.summaryRow}>
-          <span style={styles.summaryLabel}>Shipping</span>
-          <span style={styles.summaryValueFree}>FREE</span>
+          <span style={styles.summaryLabel}>{t("order.checkout.shipping")}</span>
+          <span style={styles.summaryValueFree}>{t("order.checkout.free")}</span>
         </div>
         <div style={styles.divider} />
         <div style={styles.summaryRow}>
-          <span style={styles.summaryLabelTotal}>Total</span>
+          <span style={styles.summaryLabelTotal}>{t("order.checkout.total")}</span>
           <span style={styles.summaryValueTotal}>RM{orderDetails.price.toFixed(2)}</span>
         </div>
       </Card>
 
-      {/* Continue Button */}
       <div style={styles.footerSpacer} />
       <div style={styles.footer}>
         <div style={styles.footerContent}>
-          <Button
-            title="Continue to Payment"
-            onClick={handleContinue}
-            fullWidth
-          />
+          <Button title={t("order.checkout.continue")} onClick={handleContinue} fullWidth />
         </div>
       </div>
     </div>
@@ -388,5 +375,3 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default CheckoutScreen;
-
-

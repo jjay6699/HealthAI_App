@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Card from "../../components/Card";
 import SectionHeader from "../../components/SectionHeader";
+import { useI18n } from "../../i18n";
+import { translateBloodworkAnalysis, type BloodworkAnalysis } from "../../services/openai";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
 
@@ -32,7 +34,9 @@ type HistoryEntry = {
 const HistoryScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { language, t } = useI18n();
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [displayHistory, setDisplayHistory] = useState<HistoryEntry[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,16 +52,76 @@ const HistoryScreen = () => {
     }
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      if (language === "en") {
+        setDisplayHistory(history);
+        return;
+      }
+
+      const translated = await Promise.all(
+        history.map(async (entry) => {
+          const translatedAnalysis = await translateBloodworkAnalysis({
+            summary: entry.summary || "",
+            concerns: entry.concerns || [],
+            strengths: entry.strengths || [],
+            recommendations: (entry.recommendations || []).map((item) => ({
+              supplementId: item.supplementName || "",
+              supplementName: item.supplementName || "",
+              reason: item.reason || "",
+              dosage: item.dosage || "",
+              priority: "medium"
+            })),
+            detailedInsights: (entry.detailedInsights || []).map((item) => ({
+              category: item.category || "",
+              findings: item.findings || "",
+              impact: item.impact || ""
+            }))
+          } as BloodworkAnalysis, language);
+
+          return {
+            ...entry,
+            summary: translatedAnalysis.summary,
+            concerns: translatedAnalysis.concerns,
+            strengths: translatedAnalysis.strengths,
+            recommendations: translatedAnalysis.recommendations.map((item) => ({
+              supplementName: item.supplementName,
+              reason: item.reason,
+              dosage: item.dosage
+            })),
+            detailedInsights: translatedAnalysis.detailedInsights
+          } satisfies HistoryEntry;
+        })
+      );
+
+      if (!cancelled) {
+        setDisplayHistory(translated);
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [history, language]);
+
   const selectedEntry = useMemo(
-    () => history.find((entry) => entry.id === selectedId) || null,
-    [history, selectedId]
+    () => displayHistory.find((entry) => entry.id === selectedId) || null,
+    [displayHistory, selectedId]
   );
 
   const formatDate = (iso?: string) => {
-    if (!iso) return "Unknown date";
+    if (!iso) return t("history.unknownDate");
     const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return "Unknown date";
-    return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    if (Number.isNaN(date.getTime())) return t("history.unknownDate");
+    return date.toLocaleDateString(language === "zh" ? "zh-CN" : undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
   };
 
   const formatFileMeta = (entry: HistoryEntry) => {
@@ -77,38 +141,38 @@ const HistoryScreen = () => {
       <div style={styles.page}>
         <button type="button" style={styles.backButton} onClick={() => setSelectedId(null)}>
           <span style={styles.backArrow}>{"<-"}</span>
-          <span>Back to all history</span>
+          <span>{t("history.back")}</span>
         </button>
 
-        <h1 style={styles.heading}>History Detail</h1>
-        <p style={styles.subheading}>Full review from {formatDate(selectedEntry.uploadedAt)}.</p>
+        <h1 style={styles.heading}>{t("history.detailTitle")}</h1>
+        <p style={styles.subheading}>{t("history.detailSubtitle", { date: formatDate(selectedEntry.uploadedAt) })}</p>
 
         <Card style={styles.card}>
           <SectionHeader
             title={formatDate(selectedEntry.uploadedAt)}
-            rightSlot={<span style={styles.badge}>{concernCount > 0 ? "Needs review" : "In range"}</span>}
+            rightSlot={<span style={styles.badge}>{concernCount > 0 ? t("history.needsReview") : t("history.inRange")}</span>}
           />
           <p style={styles.cardSubtitle}>{formatFileMeta(selectedEntry)}</p>
           {selectedEntry.summary ? <p style={styles.summary}>{selectedEntry.summary}</p> : null}
 
           <div style={styles.statsGrid}>
             <div>
-              <span style={styles.statLabel}>Concerns</span>
+              <span style={styles.statLabel}>{t("history.concerns")}</span>
               <p style={styles.statValue}>{concernCount}</p>
             </div>
             <div>
-              <span style={styles.statLabel}>Strengths</span>
+              <span style={styles.statLabel}>{t("history.strengths")}</span>
               <p style={styles.statValue}>{strengthCount}</p>
             </div>
             <div>
-              <span style={styles.statLabel}>Recommendations</span>
+              <span style={styles.statLabel}>{t("history.recommendations")}</span>
               <p style={styles.statValue}>{recommendationCount}</p>
             </div>
           </div>
 
           {selectedEntry.concerns && selectedEntry.concerns.length > 0 ? (
             <div style={styles.listBlock}>
-              <span style={styles.listLabel}>Top concerns</span>
+              <span style={styles.listLabel}>{t("history.topConcerns")}</span>
               <ul style={styles.list}>
                 {selectedEntry.concerns.map((item, index) => (
                   <li key={`${selectedEntry.id}-concern-${index}`} style={styles.listItem}>
@@ -121,7 +185,7 @@ const HistoryScreen = () => {
 
           {selectedEntry.strengths && selectedEntry.strengths.length > 0 ? (
             <div style={styles.listBlock}>
-              <span style={styles.listLabel}>Positive findings</span>
+              <span style={styles.listLabel}>{t("history.positiveFindings")}</span>
               <ul style={styles.list}>
                 {selectedEntry.strengths.map((item, index) => (
                   <li key={`${selectedEntry.id}-strength-${index}`} style={styles.listItem}>
@@ -134,11 +198,11 @@ const HistoryScreen = () => {
 
           {selectedEntry.recommendations && selectedEntry.recommendations.length > 0 ? (
             <div style={styles.listBlock}>
-              <span style={styles.listLabel}>Recommended nutrition</span>
+              <span style={styles.listLabel}>{t("history.recommendedNutrition")}</span>
               <div style={styles.insightList}>
                 {selectedEntry.recommendations.map((item, index) => (
                   <div key={`${selectedEntry.id}-recommendation-${index}`} style={styles.insightItem}>
-                    <span style={styles.insightLabel}>{item.supplementName || "Nutrition product"}</span>
+                    <span style={styles.insightLabel}>{item.supplementName || t("history.nutritionProduct")}</span>
                     {item.reason ? <p style={styles.insightText}>{item.reason}</p> : null}
                     {item.dosage ? <p style={styles.insightTextMuted}>{item.dosage}</p> : null}
                   </div>
@@ -149,7 +213,7 @@ const HistoryScreen = () => {
 
           {selectedEntry.detailedInsights && selectedEntry.detailedInsights.length > 0 ? (
             <div style={styles.listBlock}>
-              <span style={styles.listLabel}>Key insights</span>
+              <span style={styles.listLabel}>{t("history.keyInsights")}</span>
               <div style={styles.insightList}>
                 {selectedEntry.detailedInsights.map((insight, index) => (
                   <div key={`${selectedEntry.id}-insight-${index}`} style={styles.insightItem}>
@@ -168,12 +232,12 @@ const HistoryScreen = () => {
 
   return (
     <div style={styles.page}>
-      <h1 style={styles.heading}>History</h1>
-      <p style={styles.subheading}>Track biomarker trends and see how your recommendations evolved.</p>
+      <h1 style={styles.heading}>{t("history.title")}</h1>
+      <p style={styles.subheading}>{t("history.subheading")}</p>
 
       <div style={styles.cardList}>
         {history.length > 0 ? (
-          history.map((entry) => {
+          displayHistory.map((entry) => {
             const concernCount = entry.concerns?.length ?? 0;
             const strengthCount = entry.strengths?.length ?? 0;
             const recommendationCount = entry.recommendations?.length ?? 0;
@@ -188,29 +252,29 @@ const HistoryScreen = () => {
                 >
                   <SectionHeader
                     title={formatDate(entry.uploadedAt)}
-                    rightSlot={<span style={styles.badge}>{concernCount > 0 ? "Needs review" : "In range"}</span>}
+                    rightSlot={<span style={styles.badge}>{concernCount > 0 ? t("history.needsReview") : t("history.inRange")}</span>}
                   />
                   <p style={styles.cardSubtitle}>{formatFileMeta(entry)}</p>
                   {entry.summary ? <p style={styles.summary}>{entry.summary}</p> : null}
 
                   <div style={styles.statsGrid}>
                     <div>
-                      <span style={styles.statLabel}>Concerns</span>
+                      <span style={styles.statLabel}>{t("history.concerns")}</span>
                       <p style={styles.statValue}>{concernCount}</p>
                     </div>
                     <div>
-                      <span style={styles.statLabel}>Strengths</span>
+                      <span style={styles.statLabel}>{t("history.strengths")}</span>
                       <p style={styles.statValue}>{strengthCount}</p>
                     </div>
                     <div>
-                      <span style={styles.statLabel}>Recommendations</span>
+                      <span style={styles.statLabel}>{t("history.recommendations")}</span>
                       <p style={styles.statValue}>{recommendationCount}</p>
                     </div>
                   </div>
 
                   {entry.concerns && entry.concerns.length > 0 ? (
                     <div style={styles.listBlock}>
-                      <span style={styles.listLabel}>Top concerns</span>
+                      <span style={styles.listLabel}>{t("history.topConcerns")}</span>
                       <ul style={styles.list}>
                         {entry.concerns.slice(0, 2).map((item, index) => (
                           <li key={`${entry.id}-top-concern-${index}`} style={styles.listItem}>
@@ -223,7 +287,7 @@ const HistoryScreen = () => {
 
                   {entry.strengths && entry.strengths.length > 0 ? (
                     <div style={styles.listBlock}>
-                      <span style={styles.listLabel}>Positive findings</span>
+                      <span style={styles.listLabel}>{t("history.positiveFindings")}</span>
                       <ul style={styles.list}>
                         {entry.strengths.slice(0, 2).map((item, index) => (
                           <li key={`${entry.id}-top-strength-${index}`} style={styles.listItem}>
@@ -236,7 +300,7 @@ const HistoryScreen = () => {
 
                   {topInsights.length > 0 ? (
                     <div style={styles.listBlock}>
-                      <span style={styles.listLabel}>Key insights</span>
+                      <span style={styles.listLabel}>{t("history.keyInsights")}</span>
                       <div style={styles.insightList}>
                         {topInsights.map((insight, index) => (
                           <div key={`${entry.id}-top-insight-${index}`} style={styles.insightItem}>
@@ -250,7 +314,7 @@ const HistoryScreen = () => {
                   ) : null}
 
                   <div style={styles.detailCtaRow}>
-                    <span style={styles.detailCta}>View full detail</span>
+                    <span style={styles.detailCta}>{t("history.viewFullDetail")}</span>
                   </div>
                 </button>
               </Card>
@@ -258,16 +322,16 @@ const HistoryScreen = () => {
           })
         ) : (
           <Card style={styles.emptyCard} shadow={false}>
-            <h3 style={styles.emptyTitle}>No uploads yet</h3>
-            <p style={styles.emptyCopy}>Upload labs to build your history and track changes over time.</p>
+            <h3 style={styles.emptyTitle}>{t("history.emptyTitle")}</h3>
+            <p style={styles.emptyCopy}>{t("history.emptyBody")}</p>
           </Card>
         )}
       </div>
 
       {history.length > 0 ? (
         <Card style={styles.emptyCard} shadow={false}>
-          <h3 style={styles.emptyTitle}>Need more data points?</h3>
-          <p style={styles.emptyCopy}>Upload labs every 3-6 months to unlock full trend charts and exportable reports.</p>
+          <h3 style={styles.emptyTitle}>{t("history.moreDataTitle")}</h3>
+          <p style={styles.emptyCopy}>{t("history.moreDataBody")}</p>
         </Card>
       ) : null}
     </div>

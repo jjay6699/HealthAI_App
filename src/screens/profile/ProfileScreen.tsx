@@ -5,8 +5,9 @@ import SectionHeader from "../../components/SectionHeader";
 import Button from "../../components/Button";
 import Dialog from "../../components/Dialog";
 import { AppTheme, useTheme } from "../../theme";
-import { generateProfileSummary } from "../../services/openai";
+import { generateProfileSummary, translateDailyProfileSummary } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
+import { Language, useI18n } from "../../i18n";
 
 type ProfileState = {
   avatarImage: string | null;
@@ -110,6 +111,7 @@ const getInitials = (name: string): string => {
 const ProfileScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
   const defaultProfile: ProfileState = {
     avatarImage: null,
@@ -260,6 +262,10 @@ const ProfileScreen = () => {
   const [aiMotivation, setAiMotivation] = useState("");
   const [isAiSummaryLoading, setIsAiSummaryLoading] = useState(false);
   const [aiSummaryError, setAiSummaryError] = useState("");
+  const languageOptions: { value: Language; label: string }[] = [
+    { value: "en", label: t("common.language.en") },
+    { value: "zh", label: t("common.language.zh") }
+  ];
 
   // Temporary state for measurement editor
   const [tempHeight, setTempHeight] = useState(profile.height);
@@ -302,36 +308,36 @@ const ProfileScreen = () => {
 
   const editConfig: Record<EditKey, EditConfig> = {
     avatarImage: { label: "Profile photo" },
-    name: { label: "Full name" },
+    name: { label: t("profile.fullName") },
     email: { label: "Email address", type: "email" },
-    dob: { label: "Date of birth", type: "date" },
-    gender: { label: "Gender", options: ["Female", "Male"] },
+    dob: { label: t("profile.dateOfBirth"), type: "date" },
+    gender: { label: t("profile.gender"), options: ["Female", "Male"] },
     height: { label: "Height (cm)", type: "number", inputMode: "numeric" },
     weight: { label: "Weight (kg)", type: "number", inputMode: "numeric" },
-    activityLevel: { label: "Activity level", options: ["Sedentary", "Lightly active", "Moderately active", "Very active"] },
+    activityLevel: { label: t("profile.activityLevel"), options: ["Sedentary", "Lightly active", "Moderately active", "Very active"] },
     exerciseDays: { label: "Exercise days (per week)", type: "number", inputMode: "numeric" },
-    minutesPerSession: { label: "Minutes per session", type: "number", inputMode: "numeric" },
-    sleepDuration: { label: "Sleep duration", options: ["Under 5 hrs", "5-6 hrs", "6-7 hrs", "7-8 hrs", "8+ hrs"] },
-    stressLevel: { label: "Stress level", options: ["Low", "Moderate", "High"] },
-    bloodPressure: { label: "Blood pressure", helper: "Format: 120/80" },
-    fastingGlucose: { label: "Fasting glucose (mg/dL)", type: "number", inputMode: "numeric" },
+    minutesPerSession: { label: t("profile.minutesPerSession"), type: "number", inputMode: "numeric" },
+    sleepDuration: { label: t("profile.sleepDuration"), options: ["Under 5 hrs", "5-6 hrs", "6-7 hrs", "7-8 hrs", "8+ hrs"] },
+    stressLevel: { label: t("profile.stressLevel"), options: ["Low", "Moderate", "High"] },
+    bloodPressure: { label: t("profile.bloodPressure"), helper: "Format: 120/80" },
+    fastingGlucose: { label: `${t("profile.fastingGlucose")} (mg/dL)`, type: "number", inputMode: "numeric" },
     hba1c: { label: "HbA1c (%)", type: "number", inputMode: "decimal" },
     restingHeartRate: { label: "Resting HR (bpm)", type: "number", inputMode: "numeric" },
-    waistCircumference: { label: "Waist circumference (cm)", type: "number", inputMode: "numeric" },
-    bodyFat: { label: "Body fat (%)", type: "number", inputMode: "decimal" },
-    dietPattern: { label: "Diet pattern", options: ["Balanced", "Mediterranean", "Plant-based", "Vegetarian", "Vegan", "Low-carb", "Keto", "Paleo"] },
-    mealsPerDay: { label: "Meals per day", type: "number", inputMode: "numeric" },
-    caffeineIntake: { label: "Caffeine intake", options: ["None", "Low (1 cup)", "Moderate (2-3 cups)", "High (4+ cups)"] },
-    waterIntake: { label: "Water intake (cups/day)", type: "number", inputMode: "numeric" },
-    allergies: { label: "Medications or supplements allergy history" },
-    conditions: { label: "Conditions" },
-    surgeries: { label: "Surgeries history" },
-    medications: { label: "Medications history" },
-    supplements: { label: "Current nutrition" },
-    topPriorities: { label: "Top priorities" },
-    dataProcessingConsent: { label: "Data processing consent" },
-    dataProcessing: { label: "Data processing" },
-    dataStorage: { label: "Health data storage" },
+    waistCircumference: { label: `${t("profile.waistCircumference")} (cm)`, type: "number", inputMode: "numeric" },
+    bodyFat: { label: `${t("profile.bodyFat")} (%)`, type: "number", inputMode: "decimal" },
+    dietPattern: { label: t("profile.dietPattern"), options: ["Balanced", "Mediterranean", "Plant-based", "Vegetarian", "Vegan", "Low-carb", "Keto", "Paleo"] },
+    mealsPerDay: { label: t("profile.mealsPerDay"), type: "number", inputMode: "numeric" },
+    caffeineIntake: { label: t("profile.caffeineIntake"), options: ["None", "Low (1 cup)", "Moderate (2-3 cups)", "High (4+ cups)"] },
+    waterIntake: { label: `${t("profile.waterIntake")} (cups/day)`, type: "number", inputMode: "numeric" },
+    allergies: { label: t("profile.allergies") },
+    conditions: { label: t("profile.conditions") },
+    surgeries: { label: t("profile.surgeries") },
+    medications: { label: t("profile.medications") },
+    supplements: { label: t("profile.currentNutrition") },
+    topPriorities: { label: t("profile.topPriorities") },
+    dataProcessingConsent: { label: t("profile.dataConsent") },
+    dataProcessing: { label: t("profile.dataProcessing") },
+    dataStorage: { label: t("profile.healthDataStorage") },
     research: { label: "Research participation" },
     appleHealth: { label: "Apple Health status" },
     googleFit: { label: "Google Fit status" }
@@ -645,6 +651,32 @@ const ProfileScreen = () => {
   };
 
   useEffect(() => {
+    let cancelled = false;
+
+    if ((!aiSummary && !aiMotivation) || language === "en") {
+      return;
+    }
+
+    translateDailyProfileSummary(
+      {
+        summary: aiSummary,
+        motivation: aiMotivation
+      },
+      language
+    )
+      .then((translated) => {
+        if (cancelled) return;
+        setAiSummary(translated.summary);
+        setAiMotivation(translated.motivation);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [language]);
+
+  useEffect(() => {
     const hasData =
       Boolean(profile.name.trim()) ||
       profile.weight > 0 ||
@@ -654,7 +686,7 @@ const ProfileScreen = () => {
     fetchProfileSummary();
     // Only rerun when the core summary inputs change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile.name, profile.weight, latestBpValue, latestGlucoseValue]);
+  }, [profile.name, profile.weight, latestBpValue, latestGlucoseValue, language]);
 
   return (
     <div style={styles.page}>
@@ -672,7 +704,7 @@ const ProfileScreen = () => {
               <>
                 <span style={styles.avatarInitials}>{avatarInitials}</span>
                 <div className="profile-avatar-overlay" style={styles.avatarOverlay}>
-                  <span style={styles.avatarOverlayText}>Upload</span>
+                  <span style={styles.avatarOverlayText}>{t("profile.uploadAvatar")}</span>
                 </div>
               </>
             )}
@@ -681,107 +713,126 @@ const ProfileScreen = () => {
         <div style={styles.heroInfo}>
           <h1 style={styles.name}>{profile.name}</h1>
           <p style={styles.email}>{profile.email}</p>
-          <button type="button" style={styles.editProfileButton} onClick={() => openEdit("name", "Full name")}>
-            Edit profile
+          <button type="button" style={styles.editProfileButton} onClick={() => openEdit("name", t("profile.fullName"))}>
+            {t("profile.editProfile")}
           </button>
         </div>
       </header>
       <Card style={styles.card}>
         <div style={styles.aiSummaryHeader}>
-          <SectionHeader title="Your daily insight" />
+          <SectionHeader title={t("profile.dailyInsight")} />
           <button
             type="button"
             style={styles.aiRefreshButton}
             onClick={fetchProfileSummary}
             disabled={isAiSummaryLoading}
           >
-            {isAiSummaryLoading ? "Analyzing..." : "Refresh"}
+            {isAiSummaryLoading ? t("profile.analyzing") : t("profile.refresh")}
           </button>
         </div>
         {aiSummaryError ? <p style={styles.aiSummaryError}>{aiSummaryError}</p> : null}
         {!aiSummaryError ? (
           <p style={styles.aiSummaryText}>
             {isAiSummaryLoading && !aiSummary
-              ? "Analyzing your profile data to build your daily summary..."
-              : aiSummary || "Add your vitals to get a personalized AI summary."}
+              ? t("profile.analyzingBody")
+              : aiSummary || t("profile.emptyAiSummary")}
           </p>
         ) : null}
         {!aiSummaryError && aiMotivation ? <p style={styles.aiMotivationText}>{aiMotivation}</p> : null}
       </Card>
       <Card style={styles.card}>
-        <SectionHeader title="Personal info" />
-        <ProfileRow label="Full name" value={profile.name} action="Edit" onEdit={() => openEdit("name")} />
-        <ProfileRow label="Email" value={profile.email} action="Edit" onEdit={() => openEdit("email")} />
-        <ProfileRow label="Date of birth" value={profile.dob} action="Edit" onEdit={() => openEdit("dob")} />
-        <ProfileRow label="Gender" value={formatValue(profile.gender)} action="Edit" onEdit={() => openEdit("gender")} />
+        <SectionHeader title={t("profile.languageTitle")} />
+        <p style={styles.languageIntro}>{t("profile.languageIntro")}</p>
+        <div style={styles.languageSwitcher}>
+          {languageOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              style={{
+                ...styles.languageButton,
+                ...(language === option.value ? styles.languageButtonActive : {})
+              }}
+              onClick={() => setLanguage(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </Card>
+      <Card style={styles.card}>
+        <SectionHeader title={t("profile.personalInfo")} />
+        <ProfileRow label={t("profile.fullName")} value={profile.name} action={t("profile.edit")} onEdit={() => openEdit("name")} />
+        <ProfileRow label={t("profile.email")} value={profile.email} action={t("profile.edit")} onEdit={() => openEdit("email")} />
+        <ProfileRow label={t("profile.dateOfBirth")} value={profile.dob} action={t("profile.edit")} onEdit={() => openEdit("dob")} />
+        <ProfileRow label={t("profile.gender")} value={formatValue(profile.gender)} action={t("profile.edit")} onEdit={() => openEdit("gender")} />
       </Card>
 
       <Card style={styles.card}>
-        <SectionHeader title="Health data" />
+        <SectionHeader title={t("profile.healthData")} />
         <ProfileRow label="Measurements" value={`${profile.height} cm • ${profile.weight} kg`} action="Update" onEdit={() => setIsEditingMeasurements(true)} />
-        <ProfileRow label="Daily weight" value={getLatestWeight()} action="Track" onEdit={() => setActiveTracker("weight")} />
-        <ProfileRow label="Activity level" value={formatValue(profile.activityLevel)} action="Update" onEdit={() => openEdit("activityLevel")} />
+        <ProfileRow label={t("profile.dailyWeight")} value={getLatestWeight()} action="Track" onEdit={() => setActiveTracker("weight")} />
+        <ProfileRow label={t("profile.activityLevel")} value={formatValue(profile.activityLevel)} action="Update" onEdit={() => openEdit("activityLevel")} />
       </Card>
 
       <Card style={styles.card}>
-        <SectionHeader title="Vitals & markers" />
+        <SectionHeader title={t("profile.vitals")} />
         <div style={styles.infoGrid}>
-          <InfoItem label="Blood pressure" value={getLatestBp()} action="Track" onEdit={() => setActiveTracker("bloodPressure")} />
-          <InfoItem label="Fasting glucose" value={getLatestGlucose()} action="Track" onEdit={() => setActiveTracker("fastingGlucose")} />
+          <InfoItem label={t("profile.bloodPressure")} value={getLatestBp()} action="Track" onEdit={() => setActiveTracker("bloodPressure")} />
+          <InfoItem label={t("profile.fastingGlucose")} value={getLatestGlucose()} action="Track" onEdit={() => setActiveTracker("fastingGlucose")} />
           <InfoItem label="HbA1c" value={formatNumber(profile.hba1c, "%")} action="Set" onEdit={() => openEdit("hba1c")} />
-          <InfoItem label="Resting HR" value={formatNumber(profile.restingHeartRate, "bpm")} action="Set" onEdit={() => openEdit("restingHeartRate")} />
-          <InfoItem label="Waist circumference" value={formatNumber(profile.waistCircumference, "cm")} action="Set" onEdit={() => openEdit("waistCircumference")} />
-          <InfoItem label="Body fat" value={formatNumber(profile.bodyFat, "%")} action="Set" onEdit={() => openEdit("bodyFat")} />
+          <InfoItem label={t("profile.restingHr")} value={formatNumber(profile.restingHeartRate, "bpm")} action="Set" onEdit={() => openEdit("restingHeartRate")} />
+          <InfoItem label={t("profile.waistCircumference")} value={formatNumber(profile.waistCircumference, "cm")} action="Set" onEdit={() => openEdit("waistCircumference")} />
+          <InfoItem label={t("profile.bodyFat")} value={formatNumber(profile.bodyFat, "%")} action="Set" onEdit={() => openEdit("bodyFat")} />
         </div>
       </Card>
 
       <Card style={styles.card}>
-        <SectionHeader title="Lifestyle & diet" />
+        <SectionHeader title={t("profile.lifestyle")} />
         <div style={styles.infoGrid}>
-          <InfoItem label="Exercise days" value={formatNumber(profile.exerciseDays, "days/week")} action="Set" onEdit={() => openEdit("exerciseDays")} />
-          <InfoItem label="Minutes per session" value={formatNumber(profile.minutesPerSession, "min")} action="Set" onEdit={() => openEdit("minutesPerSession")} />
-          <InfoItem label="Sleep duration" value={formatValue(profile.sleepDuration)} action="Set" onEdit={() => openEdit("sleepDuration")} />
-          <InfoItem label="Stress level" value={formatValue(profile.stressLevel)} action="Set" onEdit={() => openEdit("stressLevel")} />
-          <InfoItem label="Diet pattern" value={formatValue(profile.dietPattern)} action="Set" onEdit={() => openEdit("dietPattern")} />
-          <InfoItem label="Meals per day" value={formatNumber(profile.mealsPerDay)} action="Set" onEdit={() => openEdit("mealsPerDay")} />
-          <InfoItem label="Caffeine intake" value={formatValue(profile.caffeineIntake)} action="Set" onEdit={() => openEdit("caffeineIntake")} />
-          <InfoItem label="Water intake" value={formatNumber(profile.waterIntake, "cups/day")} action="Set" onEdit={() => openEdit("waterIntake")} />
-          <InfoItem label="Medications or supplements allergy history" value={formatValue(profile.allergies)} action="Set" onEdit={() => openEdit("allergies")} />
+          <InfoItem label={t("profile.exerciseDays")} value={formatNumber(profile.exerciseDays, "days/week")} action="Set" onEdit={() => openEdit("exerciseDays")} />
+          <InfoItem label={t("profile.minutesPerSession")} value={formatNumber(profile.minutesPerSession, "min")} action="Set" onEdit={() => openEdit("minutesPerSession")} />
+          <InfoItem label={t("profile.sleepDuration")} value={formatValue(profile.sleepDuration)} action="Set" onEdit={() => openEdit("sleepDuration")} />
+          <InfoItem label={t("profile.stressLevel")} value={formatValue(profile.stressLevel)} action="Set" onEdit={() => openEdit("stressLevel")} />
+          <InfoItem label={t("profile.dietPattern")} value={formatValue(profile.dietPattern)} action="Set" onEdit={() => openEdit("dietPattern")} />
+          <InfoItem label={t("profile.mealsPerDay")} value={formatNumber(profile.mealsPerDay)} action="Set" onEdit={() => openEdit("mealsPerDay")} />
+          <InfoItem label={t("profile.caffeineIntake")} value={formatValue(profile.caffeineIntake)} action="Set" onEdit={() => openEdit("caffeineIntake")} />
+          <InfoItem label={t("profile.waterIntake")} value={formatNumber(profile.waterIntake, "cups/day")} action="Set" onEdit={() => openEdit("waterIntake")} />
+          <InfoItem label={t("profile.allergies")} value={formatValue(profile.allergies)} action="Set" onEdit={() => openEdit("allergies")} />
         </div>
       </Card>
 
       <Card style={styles.card}>
-        <SectionHeader title="Medical History" />
+        <SectionHeader title={t("profile.medicalHistory")} />
         <div style={styles.infoGrid}>
-          <InfoItem label="Conditions" value={formatValue(profile.conditions)} action="Set" onEdit={() => openEdit("conditions")} />
-          <InfoItem label="Surgeries history" value={formatValue(profile.surgeries)} action="Set" onEdit={() => openEdit("surgeries")} />
-          <InfoItem label="Medications history" value={formatValue(profile.medications)} action="Set" onEdit={() => openEdit("medications")} />
-          <InfoItem label="Current nutrition" value={formatValue(profile.supplements)} action="Set" onEdit={() => openEdit("supplements")} />
+          <InfoItem label={t("profile.conditions")} value={formatValue(profile.conditions)} action="Set" onEdit={() => openEdit("conditions")} />
+          <InfoItem label={t("profile.surgeries")} value={formatValue(profile.surgeries)} action="Set" onEdit={() => openEdit("surgeries")} />
+          <InfoItem label={t("profile.medications")} value={formatValue(profile.medications)} action="Set" onEdit={() => openEdit("medications")} />
+          <InfoItem label={t("profile.currentNutrition")} value={formatValue(profile.supplements)} action="Set" onEdit={() => openEdit("supplements")} />
         </div>
       </Card>
 
       <Card style={styles.card}>
-        <SectionHeader title="Goals & consent" />
+        <SectionHeader title={t("profile.goalsConsent")} />
         <div style={styles.infoGrid}>
-          <InfoItem label="Top priorities" value={formatValue(profile.topPriorities)} action="Set" onEdit={() => openEdit("topPriorities")} />
-          <InfoItem label="Data consent" value={formatValue(profile.dataProcessingConsent)} action="Set" onEdit={() => openEdit("dataProcessingConsent")} />
+          <InfoItem label={t("profile.topPriorities")} value={formatValue(profile.topPriorities)} action="Set" onEdit={() => openEdit("topPriorities")} />
+          <InfoItem label={t("profile.dataConsent")} value={formatValue(profile.dataProcessingConsent)} action="Set" onEdit={() => openEdit("dataProcessingConsent")} />
         </div>
       </Card>
 
       {/* Order History */}
       <Card style={styles.card}>
         <div style={styles.sectionHeaderRow}>
-          <SectionHeader title="Order History" />
+          <SectionHeader title={t("profile.orderHistory")} />
           {orders.length > 0 && (
             <button style={styles.viewAllButton} onClick={() => navigate("/orders")}>
-              View All
+              {t("home.insights.viewAll")}
             </button>
           )}
         </div>
         {orders.length === 0 ? (
           <div style={styles.emptyState}>
-            <p style={styles.emptyText}>No orders yet</p>
-            <Button title="Start Shopping" onClick={() => navigate("/upload")} variant="secondary" />
+            <p style={styles.emptyText}>{t("profile.noOrders")}</p>
+            <Button title={t("profile.startShopping")} onClick={() => navigate("/upload")} variant="secondary" />
           </div>
         ) : (
           orders.slice(0, 3).map((order) => (
@@ -802,14 +853,14 @@ const ProfileScreen = () => {
       {/* Payment Methods */}
       <Card style={styles.card}>
         <div style={styles.sectionHeaderRow}>
-          <SectionHeader title="Payment Methods" />
+          <SectionHeader title={t("profile.paymentMethods")} />
           <button style={styles.addButton} onClick={() => navigate("/add-payment")}>
-            + Add
+            + {t("upload.modal.connect")}
           </button>
         </div>
         {paymentMethods.length === 0 ? (
           <div style={styles.emptyState}>
-            <p style={styles.emptyText}>No payment methods added</p>
+            <p style={styles.emptyText}>{t("profile.noPaymentMethods")}</p>
           </div>
         ) : (
           paymentMethods.map((method) => (
@@ -821,7 +872,7 @@ const ProfileScreen = () => {
                   {method.last4 && <p style={styles.paymentLast4}>•••• {method.last4}</p>}
                 </div>
               </div>
-              {method.isDefault && <span style={styles.defaultBadge}>Default</span>}
+              {method.isDefault && <span style={styles.defaultBadge}>{t("profile.default")}</span>}
             </div>
           ))
         )}
@@ -830,14 +881,14 @@ const ProfileScreen = () => {
       {/* Shipping Addresses */}
       <Card style={styles.card}>
         <div style={styles.sectionHeaderRow}>
-          <SectionHeader title="Shipping Addresses" />
+          <SectionHeader title={t("profile.shippingAddresses")} />
           <button style={styles.addButton} onClick={() => navigate("/add-address")}>
-            + Add
+            + {t("upload.modal.connect")}
           </button>
         </div>
         {shippingAddresses.length === 0 ? (
           <div style={styles.emptyState}>
-            <p style={styles.emptyText}>No shipping addresses added</p>
+            <p style={styles.emptyText}>{t("profile.noShippingAddresses")}</p>
           </div>
         ) : (
           shippingAddresses.map((address) => (
@@ -853,33 +904,33 @@ const ProfileScreen = () => {
                 </p>
                 <p style={styles.addressPhone}>{address.phone}</p>
               </div>
-              {address.isDefault && <span style={styles.defaultBadge}>Default</span>}
+              {address.isDefault && <span style={styles.defaultBadge}>{t("profile.default")}</span>}
             </div>
           ))
         )}
       </Card>
 
       <Card style={styles.card}>
-        <SectionHeader title="Privacy & connections" />
-        <ProfileRow label="Data processing" value={profile.dataProcessing} action="Manage" onEdit={() => openEdit("dataProcessing") } />
-        <ProfileRow label="Health data storage" value={profile.dataStorage} action="Manage" onEdit={() => openEdit("dataStorage") } />
-        <ProfileRow label="Research participation" value={profile.research} action="Manage" onEdit={() => openEdit("research") } />
+        <SectionHeader title={t("profile.privacyConnections")} />
+        <ProfileRow label={t("profile.dataProcessing")} value={profile.dataProcessing} action="Manage" onEdit={() => openEdit("dataProcessing") } />
+        <ProfileRow label={t("profile.healthDataStorage")} value={profile.dataStorage} action="Manage" onEdit={() => openEdit("dataStorage") } />
+        <ProfileRow label={t("profile.researchParticipation")} value={profile.research} action="Manage" onEdit={() => openEdit("research") } />
       </Card>
 
       <Card style={styles.card}>
-        <SectionHeader title="Linked services" />
+        <SectionHeader title={t("profile.linkedServices")} />
         <ProfileRow label="Apple Health" value={profile.appleHealth} action="Connect" onEdit={() => openEdit("appleHealth") } />
         <ProfileRow label="Google Fit" value={profile.googleFit} action="Connect" onEdit={() => openEdit("googleFit") } />
       </Card>
 
       <div style={styles.logoutStack}>
-        <Button title="Log out" variant="secondary" fullWidth onClick={handleLogout} />
-        <button type="button" style={styles.dangerButton}>Delete my account</button>
+        <Button title={t("profile.logOut")} variant="secondary" fullWidth onClick={handleLogout} />
+        <button type="button" style={styles.dangerButton}>{t("profile.deleteAccount")}</button>
       </div>
 
       {editState ? (
         <Dialog
-          title={`Edit ${editState.label.toLowerCase()}`}
+          title={t("profile.editTitle", { label: editState.label.toLowerCase() })}
           description={editState.helper}
           onClose={() => setEditState(null)}
           onConfirm={handleConfirm}
@@ -1419,6 +1470,35 @@ const createStyles = (theme: AppTheme) => ({
     fontSize: 14,
     cursor: "pointer"
   },
+  languageIntro: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    margin: 0
+  },
+  languageSwitcher: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    padding: 4,
+    borderRadius: theme.radii.pill,
+    background: theme.colors.surface,
+    border: `1px solid ${theme.colors.divider}`
+  },
+  languageButton: {
+    border: "none",
+    background: "transparent",
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: 700,
+    borderRadius: theme.radii.pill,
+    padding: "6px 10px",
+    cursor: "pointer",
+    fontFamily: "inherit"
+  },
+  languageButtonActive: {
+    background: theme.colors.primary,
+    color: theme.colors.background
+  },
   card: {
     display: "flex",
     flexDirection: "column" as const,
@@ -1780,4 +1860,3 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default ProfileScreen;
-

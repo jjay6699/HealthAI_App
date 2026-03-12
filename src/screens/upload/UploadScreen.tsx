@@ -8,6 +8,7 @@ import Dialog from "../../components/Dialog";
 import { AppTheme, useTheme } from "../../theme";
 import { analyzeBloodworkFile, analyzeBloodworkPdf } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
+import { useI18n } from "../../i18n";
 
 const wearableIntegrations = [
   { id: "apple-watch", name: "Apple Watch", description: "Sync heart rate, sleep, activity rings, and recovery trends." },
@@ -28,6 +29,7 @@ type IntegrationTab = "wearables" | "apps";
 const UploadScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +38,13 @@ const UploadScreen = () => {
   const [showDeviceConnect, setShowDeviceConnect] = useState(false);
   const [connectedIntegrations, setConnectedIntegrations] = useState<string[]>([]);
   const [activeIntegrationTab, setActiveIntegrationTab] = useState<IntegrationTab>("wearables");
+
+  const localizedStepLabels = [
+    t("upload.analyzing.step.reading"),
+    t("upload.analyzing.step.extracting"),
+    t("upload.analyzing.step.values"),
+    t("upload.analyzing.step.recommending")
+  ];
 
   const analysisSteps = [
     { icon: "📄", text: "Reading document", color: "#8B5CF6" },
@@ -169,9 +178,9 @@ const UploadScreen = () => {
       <div style={styles.analyzingContainer}>
         <div style={styles.analyzingContent}>
           <div style={styles.spinner}></div>
-          <h2 style={styles.analyzingTitle}>Analyzing Your Bloodwork</h2>
+          <h2 style={styles.analyzingTitle}>{t("upload.analyzing.title")}</h2>
           <p style={styles.analyzingText}>
-            Our AI is reading your bloodwork report and generating personalized nutrition recommendations...
+            {t("upload.analyzing.body")}
           </p>
           <div style={styles.progressSteps}>
             {analysisSteps.map((step, index) => {
@@ -205,7 +214,7 @@ const UploadScreen = () => {
                     fontWeight: isActive ? 600 : 500,
                     color: isActive ? theme.colors.text : isPending ? theme.colors.textSecondary : theme.colors.text
                   }}>
-                    {step.text}
+                    {localizedStepLabels[index] ?? step.text}
                   </span>
                   {isActive && (
                     <div style={styles.activeIndicator}>
@@ -223,9 +232,9 @@ const UploadScreen = () => {
 
   return (
     <div style={styles.page}>
-      <h1 style={styles.heading}>From Lab Results to Personalized Nutrition Guidance</h1>
+      <h1 style={styles.heading}>{t("upload.heading")}</h1>
       <p style={styles.subheading}>
-        Upload your bloodwork or DNA to see what your biomarkers mean and receive personalized nutrition recommendations.
+        {t("upload.subheading")}
       </p>
 
       {error && (
@@ -234,24 +243,24 @@ const UploadScreen = () => {
         </Card>
       )}
       <Card style={styles.card}>
-        <SectionHeader title="How it works" />
+        <SectionHeader title={t("upload.howItWorks")} />
         <ol style={styles.timeline}>
-          <li style={styles.timelineItem}>Upload your lab report or DNA file.</li>
-          <li style={styles.timelineItem}>We analyze your results and highlight anything that stands out.</li>
-          <li style={styles.timelineItem}>You receive clear explanations and personalized nutrition recommendations.</li>
+          <li style={styles.timelineItem}>{t("upload.step1")}</li>
+          <li style={styles.timelineItem}>{t("upload.step2")}</li>
+          <li style={styles.timelineItem}>{t("upload.step3")}</li>
         </ol>
       </Card>
 
       <Card style={styles.card}>
-        <SectionHeader title="Choose source" />
+        <SectionHeader title={t("upload.chooseSource")} />
         <button
           type="button"
           style={styles.optionButton}
           onClick={() => setShowAIChat(true)}
           disabled={isAnalyzing}
         >
-          <span style={styles.optionTitle}>Ask our AI Health Advisor</span>
-          <span style={styles.optionDescription}>Our AI Health Advisor is trained with hundreds of thousands medical journals.</span>
+          <span style={styles.optionTitle}>{t("upload.ai.title")}</span>
+          <span style={styles.optionDescription}>{t("upload.ai.description")}</span>
         </button>
         <label style={styles.optionButton}>
           <input
@@ -261,14 +270,12 @@ const UploadScreen = () => {
             style={{ display: "none" }}
             disabled={isAnalyzing}
           />
-          <span style={styles.optionTitle}>Upload blood test report, genetic report, imaging and scans report</span>
-          <span style={styles.optionDescription}>Supports PDF, JPG, PNG, WEBP. Upload your reports or take a clear photo.</span>
+          <span style={styles.optionTitle}>{t("upload.file.title")}</span>
+          <span style={styles.optionDescription}>{t("upload.file.description")}</span>
         </label>
         <button type="button" style={{ ...styles.optionButton, ...styles.disabled }} disabled>
-          <span style={{ ...styles.optionTitle, ...styles.disabledText }}>Connect with our doctors and pharmacists (coming soon)</span>
-          <span style={{ ...styles.optionDescription, ...styles.disabledText }}>
-            Chat with trusted medical professionals for tailored advice, treatment insights, and support—right when you need it.
-          </span>
+          <span style={{ ...styles.optionTitle, ...styles.disabledText }}>{t("upload.doctors.title")}</span>
+          <span style={{ ...styles.optionDescription, ...styles.disabledText }}>{t("upload.doctors.description")}</span>
         </button>
         <button
           type="button"
@@ -278,23 +285,23 @@ const UploadScreen = () => {
           }}
           onClick={() => setShowDeviceConnect(true)}
         >
-          <span style={styles.optionTitle}>Connect with your smartwatch</span>
+          <span style={styles.optionTitle}>{t("upload.watch.title")}</span>
           <span style={styles.optionDescription}>
-            Sync wearable data to enrich your timeline and personalize recommendations.
+            {t("upload.watch.description")}
           </span>
         </button>
       </Card>
 
 
       <Card style={styles.card}>
-        <SectionHeader title="Past uploads" />
+        <SectionHeader title={t("upload.pastUploads")} />
         <div style={styles.pastRow}>
           <div>
             <p style={styles.pastTitle}>July 2025 - Complete blood count</p>
             <span style={styles.pastMeta}>18 markers - 95% parser confidence</span>
           </div>
           <Link to="/history" style={styles.link}>
-            View
+            {t("upload.history.view")}
           </Link>
         </div>
         <hr style={styles.divider} />
@@ -304,25 +311,25 @@ const UploadScreen = () => {
             <span style={styles.pastMeta}>12 markers - Manual review</span>
           </div>
           <Link to="/history" style={styles.link}>
-            View
+            {t("upload.history.view")}
           </Link>
         </div>
         <div style={styles.emptyState}>
-          <h4 style={styles.emptyTitle}>No labs yet?</h4>
-          <p style={styles.emptyCopy}>Upload your first lab report to unlock personalised trends.</p>
+          <h4 style={styles.emptyTitle}>{t("upload.emptyTitle")}</h4>
+          <p style={styles.emptyCopy}>{t("upload.emptyBody")}</p>
         </div>
       </Card>
 
       {showAIChat && <AIChat onClose={() => setShowAIChat(false)} />}
       {showDeviceConnect ? (
         <Dialog
-          title="Connect your devices"
-          description="Link a smartwatch or fitness app to add recovery, movement, sleep, and training context to your biomarker timeline."
+          title={t("upload.modal.title")}
+          description={t("upload.modal.description")}
           onClose={() => {
             setShowDeviceConnect(false);
             setActiveIntegrationTab("wearables");
           }}
-          cancelLabel="Done"
+          cancelLabel={t("upload.modal.done")}
         >
           <div style={styles.integrationSection}>
             <div style={styles.integrationTabs}>
@@ -334,7 +341,7 @@ const UploadScreen = () => {
                 }}
                 onClick={() => setActiveIntegrationTab("wearables")}
               >
-                Wearables
+                {t("upload.modal.wearables")}
               </button>
               <button
                 type="button"
@@ -344,15 +351,15 @@ const UploadScreen = () => {
                 }}
                 onClick={() => setActiveIntegrationTab("apps")}
               >
-                Fitness apps
+                {t("upload.modal.fitnessApps")}
               </button>
             </div>
 
             {activeIntegrationTab === "wearables" ? (
               <div style={styles.integrationGroup}>
                 <div>
-                  <h3 style={styles.integrationTitle}>Wearable devices</h3>
-                  <p style={styles.integrationIntro}>Choose a smartwatch or fitness tracker to connect.</p>
+                  <h3 style={styles.integrationTitle}>{t("upload.modal.wearablesTitle")}</h3>
+                  <p style={styles.integrationIntro}>{t("upload.modal.wearablesIntro")}</p>
                 </div>
                 <div style={styles.integrationList}>
                   {wearableIntegrations.map((integration) => {
@@ -371,7 +378,7 @@ const UploadScreen = () => {
                           }}
                           onClick={() => toggleIntegration(integration.id)}
                         >
-                          {isConnected ? "Connected" : "Connect"}
+                          {isConnected ? t("upload.modal.connected") : t("upload.modal.connect")}
                         </button>
                       </div>
                     );
@@ -381,8 +388,8 @@ const UploadScreen = () => {
             ) : (
               <div style={styles.integrationGroup}>
                 <div>
-                  <h3 style={styles.integrationTitle}>Fitness apps</h3>
-                  <p style={styles.integrationIntro}>Bring in workout, movement, and nutrition data from your apps.</p>
+                  <h3 style={styles.integrationTitle}>{t("upload.modal.appsTitle")}</h3>
+                  <p style={styles.integrationIntro}>{t("upload.modal.appsIntro")}</p>
                 </div>
                 <div style={styles.integrationList}>
                   {fitnessApps.map((integration) => {
@@ -401,7 +408,7 @@ const UploadScreen = () => {
                           }}
                           onClick={() => toggleIntegration(integration.id)}
                         >
-                          {isConnected ? "Connected" : "Connect"}
+                          {isConnected ? t("upload.modal.connected") : t("upload.modal.connect")}
                         </button>
                       </div>
                     );

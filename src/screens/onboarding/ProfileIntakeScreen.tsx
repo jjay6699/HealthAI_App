@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
 import Card from "../../components/Card";
 import ProgressBar from "../../components/ProgressBar";
+import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
 
@@ -190,6 +191,7 @@ const steps: {
 const ProfileIntakeScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [stepIndex, setStepIndex] = useState(0);
   const [fieldValues, setFieldValues] = useState<Record<string, FieldValue>>({});
@@ -391,9 +393,9 @@ const ProfileIntakeScreen = () => {
   return (
     <div style={styles.page}>
       <header style={styles.header}>
-        <span style={styles.progressLabel}>Step {stepIndex + 1} of {steps.length}</span>
+        <span style={styles.progressLabel}>{t("intake.stepLabel", { current: stepIndex + 1, total: steps.length })}</span>
         <ProgressBar progress={progress} />
-        <h2 style={styles.heading}>Let's tailor your insights</h2>
+        <h2 style={styles.heading}>{t("intake.heading")}</h2>
       </header>
 
       <Card style={styles.card} shadow>
@@ -443,7 +445,7 @@ const ProfileIntakeScreen = () => {
                   onChange={(event) => handleFieldChange(field, event.target.value)}
                 >
                   <option value="" disabled>
-                    {field.placeholder || "Select"}
+                    {field.placeholder || t("intake.select")}
                   </option>
                   {field.options.map((option) => (
                     <option key={option} value={option}>
@@ -462,7 +464,7 @@ const ProfileIntakeScreen = () => {
                 />
               )}
               {field.helper ? <span style={styles.helperText}>{field.helper}</span> : null}
-              {showError ? <span style={styles.errorText}>Required.</span> : null}
+              {showError ? <span style={styles.errorText}>{t("intake.required")}</span> : null}
             </label>
           );})}
         </div>
@@ -470,13 +472,13 @@ const ProfileIntakeScreen = () => {
 
       <footer style={styles.footer}>
         <Button
-          title="Back"
+          title={t("intake.back")}
           variant="secondary"
           onClick={handleBack}
           fullWidth
         />
         <Button
-          title={stepIndex === steps.length - 1 ? "Finish" : "Next"}
+          title={stepIndex === steps.length - 1 ? t("intake.finish") : t("intake.next")}
           onClick={handleNext}
           disabled={!isStepValid()}
           fullWidth
@@ -612,4 +614,3 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default ProfileIntakeScreen;
-

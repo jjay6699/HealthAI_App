@@ -5,6 +5,7 @@ import Card from "../../components/Card";
 import Modal from "../../components/Modal";
 import ProgressBar from "../../components/ProgressBar";
 import SectionHeader from "../../components/SectionHeader";
+import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 
 const sections = [
@@ -104,6 +105,7 @@ const sections = [
 const QuestionnaireScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [sectionIndex, setSectionIndex] = useState(0);
   const [showComplete, setShowComplete] = useState(false);
@@ -134,10 +136,10 @@ const QuestionnaireScreen = () => {
   return (
     <div style={styles.page}>
       <header style={styles.header}>
-        <span style={styles.progressLabel}>Section {sectionIndex + 1} of {sections.length}</span>
+        <span style={styles.progressLabel}>{t("questionnaire.sectionLabel", { current: sectionIndex + 1, total: sections.length })}</span>
         <ProgressBar progress={progress} />
-        <h1 style={styles.heading}>Lifestyle questionnaire</h1>
-        <p style={styles.subheading}>Quick check-in so we can deliver precise, evidence-based guidance.</p>
+        <h1 style={styles.heading}>{t("questionnaire.heading")}</h1>
+        <p style={styles.subheading}>{t("questionnaire.subheading")}</p>
       </header>
 
       <Card style={styles.card} shadow>
@@ -146,16 +148,16 @@ const QuestionnaireScreen = () => {
           {current.items.map((item) => (
             <label key={item} style={styles.field}>
               <span style={styles.label}>{item}</span>
-              <input placeholder="Type response" style={styles.input} />
+              <input placeholder={t("questionnaire.typeResponse")} style={styles.input} />
             </label>
           ))}
         </div>
       </Card>
 
       <footer style={styles.footer}>
-        <Button title="Back" variant="secondary" disabled={sectionIndex === 0} onClick={handleBack} fullWidth />
+        <Button title={t("questionnaire.back")} variant="secondary" disabled={sectionIndex === 0} onClick={handleBack} fullWidth />
         <Button
-          title={sectionIndex === sections.length - 1 ? "Submit" : "Next"}
+          title={sectionIndex === sections.length - 1 ? t("questionnaire.submit") : t("questionnaire.next")}
           onClick={handleNext}
           fullWidth
         />
@@ -163,9 +165,9 @@ const QuestionnaireScreen = () => {
 
       {showComplete ? (
         <Modal
-          title="Thanks for registering!"
-          description="We'll start analysing your information and keep your recommendations up to date."
-          actionLabel="Go to home"
+          title={t("questionnaire.completeTitle")}
+          description={t("questionnaire.completeBody")}
+          actionLabel={t("questionnaire.goHome")}
           onAction={handleComplete}
         />
       ) : null}

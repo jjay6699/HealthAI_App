@@ -1,11 +1,13 @@
 import React, { FormEvent, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
+import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 
 const RegisterScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: "", email: "", password: "", country: "" });
   const [agreeTerms, setAgreeTerms] = useState(false);
@@ -27,12 +29,12 @@ const RegisterScreen = () => {
 
   return (
     <div style={styles.wrapper}>
-      <h1 style={styles.heading}>Create your account</h1>
-      <p style={styles.subheading}>It takes just a couple of minutes to personalise your experience.</p>
+      <h1 style={styles.heading}>{t("auth.register.heading")}</h1>
+      <p style={styles.subheading}>{t("auth.register.subheading")}</p>
 
       <form style={styles.form} onSubmit={handleSubmit}>
         <label style={styles.label} htmlFor="name">
-          Name
+          {t("auth.register.name")}
         </label>
         <input
           id="name"
@@ -55,7 +57,7 @@ const RegisterScreen = () => {
         />
 
         <label style={styles.label} htmlFor="register-password">
-          Password
+          {t("auth.login.password")}
         </label>
         <input
           id="register-password"
@@ -65,10 +67,10 @@ const RegisterScreen = () => {
           onChange={updateField("password")}
           style={styles.input}
         />
-        <span style={styles.helper}>Use at least 8 characters with one symbol.</span>
+        <span style={styles.helper}>{t("auth.register.helper")}</span>
 
         <label style={styles.label} htmlFor="register-country">
-          Country or region
+          {t("auth.register.country")}
         </label>
         <input
           id="register-country"
@@ -85,16 +87,16 @@ const RegisterScreen = () => {
             onChange={(event) => setAgreeTerms(event.target.checked)}
             style={styles.checkbox}
           />
-          <span style={styles.checkboxLabel}>I agree to the Terms of Service and Privacy Policy</span>
+          <span style={styles.checkboxLabel}>{t("auth.register.agree")}</span>
         </label>
 
-        <Button title="Next" type="submit" fullWidth disabled={!agreeTerms} loading={loading} />
+        <Button title={t("auth.register.next")} type="submit" fullWidth disabled={!agreeTerms} loading={loading} />
       </form>
 
       <div style={styles.footerRow}>
-        <span style={styles.footerText}>Already have an account?</span>
+        <span style={styles.footerText}>{t("auth.register.haveAccount")}</span>
         <Link to="/login" style={styles.link}>
-          Login
+          {t("auth.login.submit")}
         </Link>
       </div>
     </div>

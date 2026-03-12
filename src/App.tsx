@@ -21,36 +21,39 @@ import OrderReviewScreen from "./screens/order/OrderReviewScreen";
 import CheckoutScreen from "./screens/order/CheckoutScreen";
 import PaymentScreen from "./screens/order/PaymentScreen";
 import OrderConfirmationScreen from "./screens/order/OrderConfirmationScreen";
+import { I18nProvider } from "./i18n";
 
 const App = () => {
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   return (
     <ThemeProvider>
-      {isDesktop && <DesktopPrompt />}
-      <ScrollToTop />
-      <Routes>
-        <Route path="/" element={<SplashScreen />} />
-        <Route element={<AuthLayout />}>
-          <Route path="/login" element={<LoginScreen />} />
-          <Route path="/register" element={<RegisterScreen />} />
-        </Route>
-        <Route element={<AppLayout />}>
-          <Route path="/home" element={<HomeScreen />} />
-          <Route path="/upload" element={<UploadScreen />} />
-          <Route path="/insights" element={<InsightsScreen />} />
-          <Route path="/supplements" element={<SupplementsScreen />} />
-          <Route path="/profile" element={<ProfileScreen />} />
-          <Route path="/history" element={<HistoryScreen />} />
-          <Route path="/order-review" element={<OrderReviewScreen />} />
-          <Route path="/checkout" element={<CheckoutScreen />} />
-          <Route path="/payment" element={<PaymentScreen />} />
-          <Route path="/order-confirmation" element={<OrderConfirmationScreen />} />
-        </Route>
-        <Route path="/intake" element={<ProfileIntakeScreen />} />
-        <Route path="/questionnaire" element={<QuestionnaireScreen />} />
-        <Route path="*" element={<Navigate to="/home" replace />} />
-      </Routes>
+      <I18nProvider>
+        {isDesktop && <DesktopPrompt />}
+        <ScrollToTop />
+        <Routes>
+          <Route path="/" element={<SplashScreen />} />
+          <Route element={<AuthLayout />}>
+            <Route path="/login" element={<LoginScreen />} />
+            <Route path="/register" element={<RegisterScreen />} />
+          </Route>
+          <Route element={<AppLayout />}>
+            <Route path="/home" element={<HomeScreen />} />
+            <Route path="/upload" element={<UploadScreen />} />
+            <Route path="/insights" element={<InsightsScreen />} />
+            <Route path="/supplements" element={<SupplementsScreen />} />
+            <Route path="/profile" element={<ProfileScreen />} />
+            <Route path="/history" element={<HistoryScreen />} />
+            <Route path="/order-review" element={<OrderReviewScreen />} />
+            <Route path="/checkout" element={<CheckoutScreen />} />
+            <Route path="/payment" element={<PaymentScreen />} />
+            <Route path="/order-confirmation" element={<OrderConfirmationScreen />} />
+          </Route>
+          <Route path="/intake" element={<ProfileIntakeScreen />} />
+          <Route path="/questionnaire" element={<QuestionnaireScreen />} />
+          <Route path="*" element={<Navigate to="/home" replace />} />
+        </Routes>
+      </I18nProvider>
     </ThemeProvider>
   );
 };

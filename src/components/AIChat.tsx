@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useI18n } from "../i18n";
 import { useTheme } from "../theme";
 import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
 import OpenAI from "openai";
@@ -23,10 +24,73 @@ const openai = new OpenAI({
 const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const { language } = useI18n();
+  const isChinese = language === "zh";
+  const text = {
+    welcome: isChinese
+      ? "你好，我是你的 AI 健康顾问，基于大量医学期刊内容进行训练。今天想咨询什么健康问题？\n\n你可以问我健康、营养相关的问题，或上传血液报告获得个性化分析。"
+      : "Hello! I'm your AI Health Advisor, trained on hundreds of thousands of medical journals. How can I help you with your health questions today?\n\nYou can ask me anything about health, nutrition, or upload your bloodwork for personalized analysis!",
+    uploadedFiles: (count: number, names: string) =>
+      isChinese ? `已上传 ${count} 个文件：${names}` : `Uploaded ${count} file(s): ${names}`,
+    uploadPrompt: isChinese ? "这是你想分析的血液报告吗？" : "Is this a blood report you want analyzed?",
+    personalizePrompt: isChinese
+      ? "你愿意先回答一个简短问卷，让建议更个性化吗？"
+      : "Would you like to answer a short questionnaire to personalize your guidance?",
+    uploadBloodworkPrompt: isChinese
+      ? "你想上传血液报告，以获得更准确的建议和更详细的解读吗？"
+      : "Would you like to upload your bloodwork for more accurate recommendations and a detailed reading?",
+    declineQuestionnaire: isChinese ? "不用了，继续聊天即可。" : "No thanks, continue without the questionnaire.",
+    under18Notice: isChinese
+      ? "感谢告知。本问卷仅适用于 18 岁及以上用户。你仍然可以继续咨询其他健康问题。"
+      : "Thanks for letting me know. This questionnaire is only for users 18+. Feel free to ask any other questions.",
+    fileProcessError: isChinese
+      ? "处理你的文件时出现错误。请重试，或直接告诉我你的血液检测结果。"
+      : "I encountered an error processing your file. Please try again or describe your bloodwork results to me.",
+    mixedFileError: isChinese
+      ? "请上传单个 PDF，或上传多张图片，不要混合上传。"
+      : "Please upload either a single PDF or multiple images, not a mix of files.",
+    pdfInChatError: isChinese
+      ? "这里可以分析图片，但 PDF 需要使用血液报告分析器。请改为上传清晰图片。"
+      : "I can analyze images here, but PDFs need the blood report analyzer. Please upload a clear image instead.",
+    imageAnalyzePrompt: isChinese
+      ? "请分析这张图片，并用通俗易懂的语言说明你看到的内容。"
+      : "Analyze this image and explain what it shows in plain language.",
+    imageAnalyzeFallback: isChinese ? "我暂时无法分析这张图片。请换一张再试。" : "I couldn't analyze that image. Please try another one.",
+    imageAnalyzeError: isChinese ? "分析这张图片时出现错误，请再试一次。" : "I ran into an error analyzing that image. Please try again.",
+    imagesAnalyzePrompt: isChinese
+      ? "请综合分析所有图片，并用通俗易懂的语言给出一份整体说明。"
+      : "Analyze all images together and provide one overall report in plain language.",
+    imagesAnalyzeFallback: isChinese ? "我暂时无法分析这些图片。请换一组再试。" : "I couldn't analyze those images. Please try another set.",
+    imagesAnalyzeError: isChinese ? "分析这些图片时出现错误，请再试一次。" : "I ran into an error analyzing those images. Please try again.",
+    imagesProcessError: isChinese ? "处理这些图片时出现错误，请再试一次。" : "I encountered an error processing those images. Please try again.",
+    genericFallback: isChinese ? "抱歉，我暂时无法生成回复。请再试一次。" : "I apologize, I couldn't generate a response. Please try again.",
+    genericError: (message: string) =>
+      isChinese
+        ? `抱歉，我遇到了一些错误：${message}。请检查你的 OpenAI API key。`
+        : `I'm sorry, I encountered an error: ${message}. Please check your OpenAI API key.`,
+    title: isChinese ? "AI 健康顾问" : "AI Health Advisor",
+    subtitle: isChinese ? "基于医学期刊训练" : "Trained on medical journals",
+    bloodReportTitle: isChinese ? "这是血液报告吗？" : "Is this a blood report?",
+    yesAnalyze: isChinese ? "是，开始分析" : "Yes, analyze",
+    noNotBlood: isChinese ? "不是" : "No, it's not",
+    questionnaireTitle: isChinese ? "简短问卷？" : "Quick questionnaire?",
+    yes: isChinese ? "是" : "Yes",
+    no: isChinese ? "否" : "No",
+    back: isChinese ? "返回" : "Back",
+    next: isChinese ? "下一步" : "Next",
+    finish: isChinese ? "完成" : "Finish",
+    thinking: isChinese ? "思考中..." : "Thinking...",
+    attachTitle: isChinese ? "上传血液报告文件" : "Attach bloodwork file",
+    inputPlaceholder: isChinese ? "咨询健康、营养相关问题..." : "Ask about health, nutrition...",
+    send: isChinese ? "发送" : "Send",
+    aiLanguageInstruction: isChinese
+      ? "Respond entirely in Simplified Chinese. Keep the tone clear, natural, and medically responsible."
+      : "Respond entirely in English. Keep the tone clear, natural, and medically responsible."
+  };
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Hello! I'm your AI Health Advisor, trained on hundreds of thousands of medical journals. How can I help you with your health questions today?\n\nYou can ask me anything about health, nutrition, or upload your bloodwork for personalized analysis!"
+      content: text.welcome
     }
   ]);
   const [input, setInput] = useState("");
@@ -38,6 +102,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const [questionnaireActive, setQuestionnaireActive] = useState(false);
   const [questionnaireStep, setQuestionnaireStep] = useState(0);
   const [questionnaireCompleted, setQuestionnaireCompleted] = useState(false);
+  const [questionnaireDismissed, setQuestionnaireDismissed] = useState(false);
   const [questionnaire, setQuestionnaire] = useState({
     eligibility18Plus: "",
     ageRange: "",
@@ -69,6 +134,13 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    setMessages((prev) => {
+      if (prev.length !== 1 || prev[0]?.role !== "assistant") return prev;
+      return [{ role: "assistant", content: text.welcome }];
+    });
+  }, [text.welcome]);
+
 
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,7 +157,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
 
     setMessages(prev => [
       ...prev,
-      { role: "assistant", content: "Is this a blood report you want analyzed?" }
+      { role: "assistant", content: text.uploadPrompt }
     ]);
     setShowUploadPrompt(true);
   };
@@ -126,12 +198,12 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
         messages: [
           {
             role: "system",
-            content: "You are a helpful health assistant. Describe visible details precisely, mention plausible non-diagnostic possibilities, and suggest safe next steps. Be concise but complete (4-7 sentences). Avoid markdown/bold and do not end mid-sentence."
+            content: `You are a helpful health assistant. ${text.aiLanguageInstruction} Describe visible details precisely, mention plausible non-diagnostic possibilities, and suggest safe next steps. Be concise but complete (4-7 sentences). Avoid markdown/bold and do not end mid-sentence.`
           },
           {
             role: "user",
             content: [
-              { type: "text", text: "Analyze this image and explain what it shows in plain language." },
+              { type: "text", text: text.imageAnalyzePrompt },
               {
                 type: "image_url",
                 image_url: { url: `data:${file.type || "image/jpeg"};base64,${base64}` }
@@ -146,7 +218,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
       const assistantMessage: Message = {
         role: "assistant",
         content: stripDisclaimers(
-          response.choices[0].message.content || "I couldn't analyze that image. Please try another one."
+          response.choices[0].message.content || text.imageAnalyzeFallback
         )
       };
       setMessages(prev => [...prev, assistantMessage]);
@@ -154,7 +226,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
       console.error("Error analyzing image:", error);
       setMessages(prev => [
         ...prev,
-        { role: "assistant", content: "I ran into an error analyzing that image. Please try again." }
+        { role: "assistant", content: text.imageAnalyzeError }
       ]);
     } finally {
       setIsLoading(false);
@@ -191,7 +263,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
       console.error("Error analyzing file:", error);
       const errorMessage: Message = {
         role: "assistant",
-        content: "I encountered an error processing your file. Please try again or describe your bloodwork results to me."
+        content: text.fileProcessError
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -212,7 +284,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
         messages: [
           {
             role: "system",
-            content: `You are a knowledgeable health advisor trained on hundreds of thousands of medical journals. Provide evidence-based health advice, nutrition recommendations, and wellness guidance.
+            content: `You are a knowledgeable health advisor trained on hundreds of thousands of medical journals. ${text.aiLanguageInstruction} Provide evidence-based health advice, nutrition recommendations, and wellness guidance.
 
 IMPORTANT: When users ask about:
 - Their health status or concerns
@@ -225,7 +297,7 @@ You should PROACTIVELY suggest: "For the most accurate and personalized recommen
 
 If users mention bloodwork values or health concerns, provide specific advice. Be friendly, clear, and helpful.
 
-If you need more context before giving tailored guidance, ask: "Would you like to answer a short questionnaire to personalize this further?"
+If you need more context before giving tailored guidance, ask: "${text.personalizePrompt}"
 
 If you recommend nutrition products, ONLY use items from this list: ${supplementsList}.
 Do not recommend anything outside the list.
@@ -241,7 +313,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
       console.log("OpenAI response:", response);
 
       const cleanedContent = stripDisclaimers(
-        response.choices[0].message.content || "I apologize, I couldn't generate a response. Please try again."
+        response.choices[0].message.content || text.genericFallback
       );
 
       const assistantMessage: Message = {
@@ -255,7 +327,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
       console.error("Error details:", JSON.stringify(error, null, 2));
       const errorMessage: Message = {
         role: "assistant",
-        content: `I'm sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please check your OpenAI API key.`
+        content: text.genericError(error instanceof Error ? error.message : "Unknown error")
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -271,11 +343,11 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
     const currentInput = input;
     setInput("");
 
-    const isGreeting = /^(hi|hello|hey|good morning|good afternoon|good evening)\b/i.test(currentInput.trim());
-    if (isGreeting && !questionnaireCompleted && !questionnaireActive) {
+    const isGreeting = /^(hi|hello|hey|good morning|good afternoon|good evening|你好|您好)\b/i.test(currentInput.trim());
+    if (isGreeting && !questionnaireCompleted && !questionnaireDismissed && !questionnaireActive) {
       const promptMessage: Message = {
         role: "assistant",
-        content: "Would you like to answer a short questionnaire to personalize your guidance?"
+        content: text.personalizePrompt
       };
       setMessages(prev => [...prev, promptMessage]);
       setShowQuestionnairePrompt(true);
@@ -661,24 +733,27 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
 
   const handleQuestionnaireStart = () => {
     setShowQuestionnairePrompt(false);
+    setQuestionnaireDismissed(false);
     setQuestionnaireActive(true);
     setQuestionnaireStep(0);
   };
 
   const handleQuestionnaireDecline = () => {
     setShowQuestionnairePrompt(false);
+    setQuestionnaireDismissed(true);
     setMessages(prev => [
       ...prev,
-      { role: "user", content: "No thanks, continue without the questionnaire." }
+      { role: "user", content: text.declineQuestionnaire }
     ]);
   };
 
   const handleQuestionnaireNext = () => {
     if (questionnaireStep === 0 && questionnaire.eligibility18Plus === "No") {
       setQuestionnaireActive(false);
+      setQuestionnaireDismissed(true);
       setMessages(prev => [
         ...prev,
-        { role: "assistant", content: "Thanks for letting me know. This questionnaire is only for users 18+. Feel free to ask any other questions." }
+        { role: "assistant", content: text.under18Notice }
       ]);
       return;
     }
@@ -718,6 +793,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
   const handleQuestionnaireFinish = async () => {
     setQuestionnaireActive(false);
     setQuestionnaireCompleted(true);
+    setQuestionnaireDismissed(false);
     const summary = summarizeQuestionnaire();
     setMessages(prev => [...prev, { role: "user", content: summary }]);
     await sendMessageToAI(summary);
@@ -725,7 +801,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
       ...prev,
       {
         role: "assistant",
-        content: "Would you like to upload your bloodwork for more accurate recommendations and a detailed reading?"
+        content: text.uploadBloodworkPrompt
       }
     ]);
   };
@@ -737,7 +813,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
     if (hasPdf && pendingUploads.length > 1) {
       setMessages(prev => [
         ...prev,
-        { role: "assistant", content: "Please upload either a single PDF or multiple images, not a mix of files." }
+        { role: "assistant", content: text.mixedFileError }
       ]);
       setPendingUploads([]);
       return;
@@ -760,7 +836,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
     if (hasPdf) {
       setMessages(prev => [
         ...prev,
-        { role: "assistant", content: "I can analyze images here, but PDFs need the blood report analyzer. Please upload a clear image instead." }
+        { role: "assistant", content: text.pdfInChatError }
       ]);
       setPendingUploads([]);
       setUploadedFile(null);
@@ -798,7 +874,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
       console.error("Error analyzing images:", error);
       setMessages(prev => [
         ...prev,
-        { role: "assistant", content: "I encountered an error processing those images. Please try again." }
+        { role: "assistant", content: text.imagesProcessError }
       ]);
     } finally {
       setIsLoading(false);
@@ -825,12 +901,12 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
         messages: [
           {
             role: "system",
-            content: "You are a helpful health assistant. Analyze all provided images together and provide one overall report. Include: (1) Overview of what you see, (2) Notable findings, (3) Plausible non-diagnostic possibilities, (4) Safe next steps. Be concise but complete (6-10 sentences). Avoid markdown/bold and do not end mid-sentence."
+            content: `You are a helpful health assistant. ${text.aiLanguageInstruction} Analyze all provided images together and provide one overall report. Include: (1) Overview of what you see, (2) Notable findings, (3) Plausible non-diagnostic possibilities, (4) Safe next steps. Be concise but complete (6-10 sentences). Avoid markdown/bold and do not end mid-sentence.`
           },
           {
             role: "user",
             content: [
-              { type: "text", text: "Analyze all images together and provide one overall report in plain language." },
+              { type: "text", text: text.imagesAnalyzePrompt },
               ...imageParts
             ]
           }
@@ -842,7 +918,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
       const assistantMessage: Message = {
         role: "assistant",
         content: stripDisclaimers(
-          response.choices[0].message.content || "I couldn't analyze those images. Please try another set."
+          response.choices[0].message.content || text.imagesAnalyzeFallback
         )
       };
       setMessages(prev => [...prev, assistantMessage]);
@@ -850,7 +926,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
       console.error("Error analyzing images:", error);
       setMessages(prev => [
         ...prev,
-        { role: "assistant", content: "I ran into an error analyzing those images. Please try again." }
+        { role: "assistant", content: text.imagesAnalyzeError }
       ]);
     } finally {
       setIsLoading(false);
@@ -899,9 +975,9 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
           }}
         >
           <div>
-            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>AI Health Advisor</h2>
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>{text.title}</h2>
             <p style={{ margin: 0, fontSize: 13, color: theme.colors.textSecondary, marginTop: 4 }}>
-              Trained on medical journals
+              {text.subtitle}
             </p>
           </div>
           <button
@@ -962,10 +1038,10 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
           {showUploadPrompt && (
             <div style={{ display: "flex", justifyContent: "flex-start" }}>
               <div style={styles.questionnaireCard}>
-                <p style={styles.questionnaireTitle}>Is this a blood report?</p>
+                <p style={styles.questionnaireTitle}>{text.bloodReportTitle}</p>
                 <div style={styles.questionnaireActions}>
-                  <button onClick={handleUploadYes} style={styles.primaryButton}>Yes, analyze</button>
-                  <button onClick={handleUploadNo} style={styles.secondaryButton}>No, it's not</button>
+                  <button onClick={handleUploadYes} style={styles.primaryButton}>{text.yesAnalyze}</button>
+                  <button onClick={handleUploadNo} style={styles.secondaryButton}>{text.noNotBlood}</button>
                 </div>
               </div>
             </div>
@@ -973,10 +1049,10 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
           {showQuestionnairePrompt && !questionnaireActive && (
             <div style={{ display: "flex", justifyContent: "flex-start" }}>
               <div style={styles.questionnaireCard}>
-                <p style={styles.questionnaireTitle}>Quick questionnaire?</p>
+                <p style={styles.questionnaireTitle}>{text.questionnaireTitle}</p>
                 <div style={styles.questionnaireActions}>
-                  <button onClick={handleQuestionnaireStart} style={styles.primaryButton}>Yes</button>
-                  <button onClick={handleQuestionnaireDecline} style={styles.secondaryButton}>No</button>
+                  <button onClick={handleQuestionnaireStart} style={styles.primaryButton}>{text.yes}</button>
+                  <button onClick={handleQuestionnaireDecline} style={styles.secondaryButton}>{text.no}</button>
                 </div>
               </div>
             </div>
@@ -992,15 +1068,15 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
                     style={styles.secondaryButton}
                     disabled={questionnaireStep === 0}
                   >
-                    Back
+                    {text.back}
                   </button>
                   {questionnaireStep < questionnaireSteps.length - 1 ? (
                     <button onClick={handleQuestionnaireNext} style={styles.primaryButton}>
-                      Next
+                      {text.next}
                     </button>
                   ) : (
                     <button onClick={handleQuestionnaireFinish} style={styles.primaryButton}>
-                      Finish
+                      {text.finish}
                     </button>
                   )}
                 </div>
@@ -1018,7 +1094,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
                   fontSize: 15
                 }}
               >
-                Thinking...
+                {text.thinking}
               </div>
             </div>
           )}
@@ -1066,7 +1142,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
                 height: 40,
                 flexShrink: 0
               }}
-              title="Attach bloodwork file"
+              title={text.attachTitle}
             >
               📎
             </button>
@@ -1075,7 +1151,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask about health, nutrition..."
+              placeholder={text.inputPlaceholder}
               disabled={isLoading}
               style={{
                 flex: 1,
@@ -1105,7 +1181,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
                 whiteSpace: "nowrap" as const
               }}
             >
-              Send
+              {text.send}
             </button>
           </div>
         </div>

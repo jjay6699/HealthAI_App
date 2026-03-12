@@ -4,6 +4,7 @@ import Button from "../../components/Button";
 import { AppTheme, useTheme } from "../../theme";
 import checkBadgeIcon from "../../assets/icons/check-badge.svg?raw";
 import shieldCheckIcon from "../../assets/icons/shield-check.svg?raw";
+import { useI18n } from "../../i18n";
 
 type FeatureCardProps = {
   icon: string;
@@ -39,6 +40,7 @@ const LockIcon = ({ styles }: { styles: ReturnType<typeof createStyles> }) => (
 const SplashScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
   const navigate = useNavigate();
 
   return (
@@ -52,38 +54,38 @@ const SplashScreen = () => {
       <main style={styles.main}>
         <section style={styles.heroSection}>
           <h1 style={styles.title}>
-            Turn Lab Results
+            {t("splash.title.line1")}
             <br />
-            Into Clarity
+            {t("splash.title.line2")}
           </h1>
           <p style={styles.subtitle}>
-            Understand your biomarkers with clinician-grade insights while keeping your data completely private.
+            {t("splash.subtitle")}
           </p>
         </section>
 
         <section style={styles.featuresSection}>
           <FeatureCard
             icon={checkBadgeIcon}
-            title="Clinician Reviewed"
-            description="Your biomarkers are interpreted using clinical reference ranges."
+            title={t("splash.card.clinician.title")}
+            description={t("splash.card.clinician.description")}
             styles={styles}
           />
           <FeatureCard
             icon={shieldCheckIcon}
-            title="Device Private"
-            description="Your health data stays on your device and is never uploaded."
+            title={t("splash.card.private.title")}
+            description={t("splash.card.private.description")}
             styles={styles}
           />
         </section>
         <div style={styles.ctaShell}>
           <Button
-            title="Start Biomarker Analysis"
+            title={t("splash.cta")}
             onClick={() => navigate("/login")}
             style={styles.ctaButton}
           />
           <p style={styles.trustLine}>
             <LockIcon styles={styles} />
-            <span>Your data stays on your device.</span>
+            <span>{t("splash.privacy")}</span>
           </p>
         </div>
       </main>

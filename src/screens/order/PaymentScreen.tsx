@@ -1,8 +1,9 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "../../components/Card";
 import Button from "../../components/Button";
 import SectionHeader from "../../components/SectionHeader";
+import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
 
@@ -16,6 +17,7 @@ interface OrderDetails {
 const PaymentScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"card" | "fpx" | "ewallet">("card");
@@ -23,24 +25,20 @@ const PaymentScreen = () => {
 
   useEffect(() => {
     const stored = persistentStorage.getItem("orderDetails");
-    if (stored) {
-      try {
-        setOrderDetails(JSON.parse(stored));
-      } catch (error) {
-        console.error("Failed to parse order details:", error);
-      }
+    if (!stored) return;
+
+    try {
+      setOrderDetails(JSON.parse(stored));
+    } catch (error) {
+      console.error("Failed to parse order details:", error);
     }
   }, []);
 
   const handleCompleteOrder = async () => {
     setIsProcessing(true);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    // Simulate payment processing
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Generate order number
     const orderNumber = `NG${Date.now().toString().slice(-8)}`;
-
     const newOrder = {
       orderNumber,
       date: new Date().toISOString(),
@@ -48,68 +46,62 @@ const PaymentScreen = () => {
       status: "processing" as const
     };
 
-    // Save order confirmation
     persistentStorage.setItem("lastOrder", JSON.stringify(newOrder));
 
-    // Add to order history
     const orderHistory = JSON.parse(persistentStorage.getItem("orderHistory") || "[]");
-    orderHistory.unshift(newOrder); // Add to beginning of array
+    orderHistory.unshift(newOrder);
     persistentStorage.setItem("orderHistory", JSON.stringify(orderHistory));
 
-    // Navigate to confirmation
     navigate("/order-confirmation");
   };
 
   if (!orderDetails) {
     return (
       <div style={styles.page}>
-        <h1 style={styles.heading}>No order found</h1>
-        <p style={styles.subheading}>Please complete checkout first.</p>
-        <Button title="Back to Checkout" onClick={() => navigate("/checkout")} />
+        <h1 style={styles.heading}>{t("order.payment.noOrder")}</h1>
+        <p style={styles.subheading}>{t("order.payment.noOrderBody")}</p>
+        <Button title={t("order.payment.backToCheckout")} onClick={() => navigate("/checkout")} />
       </div>
     );
   }
 
   const paymentMethods = [
-    { id: "card", icon: "💳", label: "Credit / Debit Card", description: "Visa, Mastercard, Amex" },
-    { id: "fpx", icon: "🏦", label: "FPX Online Banking", description: "All Malaysian banks" },
-    { id: "ewallet", icon: "📱", label: "E-Wallet", description: "Touch 'n Go, GrabPay" }
+    { id: "card", icon: "💳", label: t("order.payment.card"), description: t("order.payment.cardDesc") },
+    { id: "fpx", icon: "🏦", label: t("order.payment.fpx"), description: t("order.payment.fpxDesc") },
+    { id: "ewallet", icon: "📱", label: t("order.payment.ewallet"), description: t("order.payment.ewalletDesc") }
   ];
 
   return (
     <div style={styles.page}>
-      {/* Back Button */}
       <button onClick={() => navigate("/checkout")} style={styles.backButton}>
         <span style={styles.backArrow}>←</span>
-        <span>Back to Checkout</span>
+        <span>{t("order.payment.backToCheckout")}</span>
       </button>
 
-      <h1 style={styles.heading}>Payment</h1>
-      <p style={styles.subheading}>Choose your payment method</p>
+      <h1 style={styles.heading}>{t("order.payment.heading")}</h1>
+      <p style={styles.subheading}>{t("order.payment.subheading")}</p>
 
-      {/* Order Summary */}
       <Card style={styles.card}>
-        <SectionHeader title="Order Summary" />
+        <SectionHeader title={t("order.payment.summary")} />
         <div style={styles.summaryRow}>
           <span style={styles.summaryLabel}>
-            Custom Blend ({orderDetails.planLabel || orderDetails.plan})
+            {t("order.payment.customBlend", { plan: orderDetails.planLabel || orderDetails.plan })}
           </span>
           <span style={styles.summaryValue}>RM{orderDetails.price.toFixed(2)}</span>
         </div>
         <div style={styles.summaryRow}>
-          <span style={styles.summaryLabel}>Shipping</span>
-          <span style={styles.summaryValueFree}>FREE</span>
+          <span style={styles.summaryLabel}>{t("order.payment.shipping")}</span>
+          <span style={styles.summaryValueFree}>{t("order.payment.free")}</span>
         </div>
         <div style={styles.divider} />
         <div style={styles.summaryRow}>
-          <span style={styles.summaryLabelTotal}>Total</span>
+          <span style={styles.summaryLabelTotal}>{t("order.payment.total")}</span>
           <span style={styles.summaryValueTotal}>RM{orderDetails.price.toFixed(2)}</span>
         </div>
       </Card>
 
-      {/* Payment Method Selection */}
       <Card style={styles.card}>
-        <SectionHeader title="Payment Method" />
+        <SectionHeader title={t("order.payment.method")} />
         <div style={styles.paymentList}>
           {paymentMethods.map((method) => {
             const isSelected = paymentMethod === method.id;
@@ -121,44 +113,39 @@ const PaymentScreen = () => {
                   borderColor: isSelected ? theme.colors.primary : theme.colors.divider,
                   boxShadow: isSelected ? "0 2px 8px rgba(239, 68, 68, 0.1)" : "none"
                 }}
-                onClick={() => setPaymentMethod(method.id as any)}
+                onClick={() => setPaymentMethod(method.id as typeof paymentMethod)}
               >
-              <div style={styles.radioContainer}>
-                <div style={{
-                  ...styles.radio,
-                  ...(paymentMethod === method.id ? styles.radioSelected : {})
-                }}>
-                  {paymentMethod === method.id && <div style={styles.radioDot} />}
+                <div style={styles.radioContainer}>
+                  <div style={{ ...styles.radio, ...(isSelected ? styles.radioSelected : {}) }}>
+                    {isSelected ? <div style={styles.radioDot} /> : null}
+                  </div>
                 </div>
-              </div>
-              <div style={styles.paymentIcon}>{method.icon}</div>
-              <div style={styles.paymentInfo}>
-                <span style={styles.paymentLabel}>{method.label}</span>
-                <span style={styles.paymentDescription}>{method.description}</span>
-              </div>
+                <div style={styles.paymentIcon}>{method.icon}</div>
+                <div style={styles.paymentInfo}>
+                  <span style={styles.paymentLabel}>{method.label}</span>
+                  <span style={styles.paymentDescription}>{method.description}</span>
+                </div>
               </button>
             );
           })}
         </div>
       </Card>
 
-      {/* Security Notice */}
       <Card style={styles.securityCard}>
         <div style={styles.securityContent}>
           <span style={styles.securityIcon}>🔒</span>
           <div>
-            <p style={styles.securityTitle}>Secure Payment</p>
-            <p style={styles.securityText}>Your payment information is encrypted and secure</p>
+            <p style={styles.securityTitle}>{t("order.payment.secureTitle")}</p>
+            <p style={styles.securityText}>{t("order.payment.secureBody")}</p>
           </div>
         </div>
       </Card>
 
-      {/* Complete Order Button */}
       <div style={styles.footerSpacer} />
       <div style={styles.footer}>
         <div style={styles.footerContent}>
           <Button
-            title={isProcessing ? "Processing..." : `Complete Order - RM${orderDetails.price}`}
+            title={isProcessing ? t("order.payment.processing") : t("order.payment.complete", { price: orderDetails.price })}
             onClick={handleCompleteOrder}
             loading={isProcessing}
             fullWidth
