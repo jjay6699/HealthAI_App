@@ -39,6 +39,8 @@ const InsightsScreen = () => {
   const [analysis, setAnalysis] = useState<BloodworkAnalysis | null>(null);
   const [displayAnalysis, setDisplayAnalysis] = useState<BloodworkAnalysis | null>(null);
   const [analysisMeta, setAnalysisMeta] = useState<{ fileType?: string; fileName?: string } | null>(null);
+  const [hasHydratedAnalysis, setHasHydratedAnalysis] = useState(false);
+  const [isAnalysisLoading, setIsAnalysisLoading] = useState(true);
 
   useEffect(() => {
     // Load analysis from localStorage
@@ -58,28 +60,53 @@ const InsightsScreen = () => {
         console.error("Failed to parse bloodwork analysis metadata:", error);
       }
     }
+    setHasHydratedAnalysis(true);
   }, []);
 
   useEffect(() => {
+    if (!hasHydratedAnalysis) return;
     let cancelled = false;
 
     if (!analysis) {
       setDisplayAnalysis(null);
+      setIsAnalysisLoading(false);
       return;
     }
 
+    setIsAnalysisLoading(true);
+
     translateBloodworkAnalysis(analysis, language)
       .then((translated) => {
-        if (!cancelled) setDisplayAnalysis(translated);
+        if (!cancelled) {
+          setDisplayAnalysis(translated);
+          setIsAnalysisLoading(false);
+        }
       })
       .catch(() => {
-        if (!cancelled) setDisplayAnalysis(analysis);
+        if (!cancelled) {
+          setDisplayAnalysis(analysis);
+          setIsAnalysisLoading(false);
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [analysis, language]);
+  }, [analysis, hasHydratedAnalysis, language]);
+
+  if (!hasHydratedAnalysis || isAnalysisLoading) {
+    return (
+      <div style={styles.page}>
+        <h1 style={styles.heading}>{t("insights.heading")}</h1>
+        <p style={styles.subheading}>{t("insights.subheading")}</p>
+
+        <Card style={styles.emptyCard}>
+          <h3 style={styles.emptyTitle}>Loading insights...</h3>
+          <p style={styles.emptyBody}>Preparing your analysis results.</p>
+        </Card>
+      </div>
+    );
+  }
 
   // If no analysis available, show default content
   if (!displayAnalysis) {
