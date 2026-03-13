@@ -38,15 +38,24 @@ const InsightsScreen = () => {
   const { language, t } = useI18n();
   const [analysis, setAnalysis] = useState<BloodworkAnalysis | null>(null);
   const [displayAnalysis, setDisplayAnalysis] = useState<BloodworkAnalysis | null>(null);
+  const [analysisMeta, setAnalysisMeta] = useState<{ fileType?: string; fileName?: string } | null>(null);
 
   useEffect(() => {
     // Load analysis from localStorage
     const storedAnalysis = persistentStorage.getItem("bloodworkAnalysis");
+    const storedMeta = persistentStorage.getItem("bloodworkAnalysisMeta");
     if (storedAnalysis) {
       try {
         setAnalysis(JSON.parse(storedAnalysis));
       } catch (error) {
         console.error("Failed to parse bloodwork analysis:", error);
+      }
+    }
+    if (storedMeta) {
+      try {
+        setAnalysisMeta(JSON.parse(storedMeta));
+      } catch (error) {
+        console.error("Failed to parse bloodwork analysis metadata:", error);
       }
     }
   }, []);
@@ -91,10 +100,22 @@ const InsightsScreen = () => {
     );
   }
 
+  const sourceLabel =
+    analysisMeta?.fileType === "image-analysis"
+      ? "Source: AI chat image analysis"
+      : analysisMeta?.fileType === "images"
+      ? "Source: uploaded image analysis"
+      : analysisMeta?.fileType === "application/pdf"
+      ? "Source: uploaded PDF bloodwork"
+      : analysisMeta?.fileName
+      ? `Source: ${analysisMeta.fileName}`
+      : null;
+
   return (
     <div style={styles.page}>
       <h1 style={styles.heading}>{t("insights.heading")}</h1>
       <p style={styles.subheading}>{t("insights.subheading")}</p>
+      {sourceLabel ? <p style={styles.sourceLabel}>{sourceLabel}</p> : null}
 
       {/* Summary Card */}
       <Card style={styles.summaryCard}>
@@ -178,6 +199,12 @@ const createStyles = (theme: AppTheme) => ({
     fontSize: 16,
     color: theme.colors.textSecondary,
     margin: 0
+  },
+  sourceLabel: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    margin: 0,
+    fontWeight: 600
   },
   emptyCard: {
     display: "flex",

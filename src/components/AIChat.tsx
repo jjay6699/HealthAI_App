@@ -261,6 +261,40 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
     }>;
   };
 
+  const persistChatImageAnalysis = (summary: string, files: File[]) => {
+    const analysis = {
+      summary,
+      concerns: [] as string[],
+      strengths: [] as string[],
+      recommendations: [] as {
+        supplementId: string;
+        supplementName: string;
+        reason: string;
+        priority: "high" | "medium" | "low";
+        dosage?: string;
+        dosageGramsPerDay?: number;
+      }[],
+      detailedInsights: [
+        {
+          category: "Image analysis",
+          findings: summary,
+          impact: "Generated from AI chat image analysis."
+        }
+      ]
+    };
+
+    persistentStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
+    persistentStorage.setItem(
+      "bloodworkAnalysisMeta",
+      JSON.stringify({
+        uploadedAt: new Date().toISOString(),
+        fileName: files.map((file) => file.name).join(", "),
+        fileType: files.length > 1 ? "images" : files[0]?.type || "image-analysis",
+        fileSize: files.reduce((sum, file) => sum + file.size, 0)
+      })
+    );
+  };
+
   const analyzeImageInChat = async (file: File) => {
     setIsLoading(true);
 
@@ -295,6 +329,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
         )
       };
       setMessages(prev => [...prev, assistantMessage]);
+      persistChatImageAnalysis(assistantMessage.content, [file]);
       setImageAnalysisSummary(assistantMessage.content);
       setShowSupplementPrompt(true);
     } catch (error) {
@@ -1005,6 +1040,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
         )
       };
       setMessages(prev => [...prev, assistantMessage]);
+      persistChatImageAnalysis(assistantMessage.content, files);
       setImageAnalysisSummary(assistantMessage.content);
       setShowSupplementPrompt(true);
     } catch (error) {
