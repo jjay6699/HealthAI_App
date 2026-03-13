@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useI18n } from "../i18n";
 import { useTheme } from "../theme";
 import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
-import OpenAI from "openai";
 import { analyzeBloodworkFile, analyzeBloodworkPdf, analyzeBloodworkImages } from "../services/openai";
 import { persistentStorage } from "../services/persistentStorage";
 
@@ -15,11 +14,6 @@ interface Message {
 interface AIChatProps {
   onClose: () => void;
 }
-
-const openai = new OpenAI({
-  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true
-});
 
 const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const theme = useTheme();
@@ -67,7 +61,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
     genericError: (message: string) =>
       isChinese
         ? `抱歉，我遇到了一些错误：${message}。请检查你的 OpenAI API key。`
-        : `I'm sorry, I encountered an error: ${message}. Please check your OpenAI API key.`,
+        : `I'm sorry, I encountered an error: ${message}. Please try again shortly.`,
     title: isChinese ? "AI 健康顾问" : "AI Health Advisor",
     subtitle: isChinese ? "基于医学期刊训练" : "Trained on medical journals",
     bloodReportTitle: isChinese ? "这是血液报告吗？" : "Is this a blood report?",
@@ -188,12 +182,37 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
     return patterns.reduce((acc, pattern) => acc.replace(pattern, "").trim(), text);
   };
 
+  const createChatCompletion = async (payload: {
+    model: string;
+    messages: Array<{ role: string; content: unknown }>;
+    temperature?: number;
+    max_tokens?: number;
+  }) => {
+    const response = await fetch("/api/ai/chat-completions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    return response.json() as Promise<{
+      choices: Array<{
+        message: {
+          content: string | null;
+        };
+      }>;
+    }>;
+  };
+
   const analyzeImageInChat = async (file: File) => {
     setIsLoading(true);
 
     try {
       const base64 = await fileToBase64(file);
-      const response = await openai.chat.completions.create({
+      const response = await createChatCompletion({
         model: "gpt-4o",
         messages: [
           {
@@ -279,7 +298,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
     try {
       console.log("Sending message to OpenAI:", content);
       const supplementsList = AVAILABLE_SUPPLEMENTS.map((s) => s.name).join(", ");
-      const response = await openai.chat.completions.create({
+      const response = await createChatCompletion({
         model: "gpt-4o",
         messages: [
           {
@@ -896,7 +915,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
         })
       );
 
-      const response = await openai.chat.completions.create({
+      const response = await createChatCompletion({
         model: "gpt-4o",
         messages: [
           {

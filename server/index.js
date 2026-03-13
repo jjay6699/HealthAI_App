@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import cookieParser from "cookie-parser";
 import fs from "node:fs";
@@ -5,6 +6,7 @@ import crypto from "node:crypto";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { OAuth2Client } from "google-auth-library";
+import OpenAI from "openai";
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -99,7 +101,7 @@ const upsertMany = db.transaction((clientId, items) => {
 
 const app = express();
 app.disable("x-powered-by");
-app.use(express.json({ limit: "4mb" }));
+app.use(express.json({ limit: "25mb" }));
 
 const SESSION_COOKIE = "ng_session";
 const OAUTH_STATE_COOKIE = "ng_oauth_state";
@@ -163,6 +165,12 @@ const getGoogleOAuthClient = () => {
   return new OAuth2Client({ clientId, clientSecret, redirectUri });
 };
 
+const getOpenAIClient = () => {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  return new OpenAI({ apiKey });
+};
+
 // If the SPA hasn't been built (no dist/), still return a 200 at / so common
 // platform health-checks don't mark the service as unhealthy.
 const distDir = path.join(process.cwd(), "dist");
@@ -178,6 +186,44 @@ const isSafeKey = (value) => typeof value === "string" && /^[a-zA-Z0-9:._-]{1,24
 app.get("/api/kv/ping", (req, res) => {
   res.json({ ok: true, now: Date.now() });
 });
+
+app.post(
+  "/api/ai/chat-completions",
+  asyncHandler(async (req, res) => {
+    const client = getOpenAIClient();
+    if (!client) return res.status(501).json({ error: "openai_not_configured" });
+
+    const {
+      model,
+      messages,
+      temperature,
+      max_tokens: maxTokens,
+      response_format: responseFormat
+    } = req.body || {};
+
+    if (typeof model !== "string" || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: "invalid_payload" });
+    }
+
+    const completion = await client.chat.completions.create({
+      model,
+      messages,
+      ...(typeof temperature === "number" ? { temperature } : {}),
+      ...(typeof maxTokens === "number" ? { max_tokens: maxTokens } : {}),
+      ...(responseFormat && typeof responseFormat === "object"
+        ? { response_format: responseFormat }
+        : {})
+    });
+
+    res.json({
+      choices: completion.choices.map((choice) => ({
+        message: {
+          content: choice.message.content ?? null
+        }
+      }))
+    });
+  })
+);
 
 // --- Auth (Google OAuth) ---
 app.get("/api/auth/me", (req, res) => {

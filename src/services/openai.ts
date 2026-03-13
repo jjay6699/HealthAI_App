@@ -1,13 +1,42 @@
-import OpenAI from "openai";
 import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
 import { pdfToImages, extractTextFromPdf } from "../utils/pdfProcessor";
 import { persistentStorage } from "./persistentStorage";
 import type { Language } from "../i18n";
 
-const openai = new OpenAI({
-  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true // Note: In production, API calls should go through a backend
-});
+interface ChatCompletionRequest {
+  model: string;
+  messages: Array<{
+    role: string;
+    content: unknown;
+  }>;
+  response_format?: { type: "json_object" };
+  temperature?: number;
+  max_tokens?: number;
+}
+
+interface ChatCompletionResponse {
+  choices: Array<{
+    message: {
+      content: string | null;
+    };
+  }>;
+}
+
+const createChatCompletion = async (
+  payload: ChatCompletionRequest
+): Promise<ChatCompletionResponse> => {
+  const response = await fetch("/api/ai/chat-completions", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  return response.json();
+};
 
 const ANALYSIS_CACHE_VERSION = "v4";
 const ANALYSIS_TEMPERATURE = 0;
@@ -301,7 +330,7 @@ Respond in JSON format with this structure:
 ${getLanguageInstruction(language)}`;
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await createChatCompletion({
       model: "gpt-4o",
       messages: [
         {
@@ -366,7 +395,7 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
       return cached;
     }
 
-    const response = await openai.chat.completions.create({
+    const response = await createChatCompletion({
       model: ANALYSIS_MODEL,
       messages: [
         {
@@ -529,7 +558,7 @@ export async function analyzeBloodworkFile(
   }
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await createChatCompletion({
       model: ANALYSIS_MODEL,
       messages: [
         {
@@ -688,7 +717,7 @@ export async function analyzeBloodworkImages(
   });
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await createChatCompletion({
       model: ANALYSIS_MODEL,
       messages: [
         {
@@ -813,7 +842,7 @@ ${profileInfo}
 Provide clear, actionable insights that are easy to understand.`;
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await createChatCompletion({
       model: ANALYSIS_MODEL,
       messages: [
         {
@@ -889,7 +918,7 @@ export async function translateBloodworkAnalysis(
   const cached = getCachedAnalysis(cacheKey);
   if (cached) return cached;
 
-  const response = await openai.chat.completions.create({
+  const response = await createChatCompletion({
     model: ANALYSIS_MODEL,
     messages: [
       {
@@ -949,7 +978,7 @@ export async function translateDailyProfileSummary(
     }
   }
 
-  const response = await openai.chat.completions.create({
+  const response = await createChatCompletion({
     model: ANALYSIS_MODEL,
     messages: [
       {
@@ -1005,7 +1034,7 @@ export async function translateSupplementContent(
     }
   }
 
-  const response = await openai.chat.completions.create({
+  const response = await createChatCompletion({
     model: ANALYSIS_MODEL,
     messages: [
       {
@@ -1079,7 +1108,7 @@ Requirements:
 ${getLanguageInstruction(language)}`;
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await createChatCompletion({
       model: ANALYSIS_MODEL,
       messages: [
         {

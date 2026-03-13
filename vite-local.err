@@ -66,3 +66,4 @@
       at TypeScriptParserMixin.parseUpdate (D:\New Gene App\node_modules\@babel\parser\lib\index.js:11070:21)
       at TypeScriptParserMixin.parseMaybeUnary (D:\New Gene App\node_modules\@babel\parser\lib\index.js:11050:23)
       at TypeScriptParserMixin.parseMaybeUnary (D:\New Gene App\node_modules\@babel\parser\lib\index.js:9857:18)
+^C^C
