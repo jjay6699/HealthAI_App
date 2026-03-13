@@ -2,6 +2,7 @@ import React, { FormEvent, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
 import { useI18n } from "../../i18n";
+import { useAuth } from "../../services/auth";
 import { AppTheme, useTheme } from "../../theme";
 
 const demoCredentials = {
@@ -14,18 +15,45 @@ const LoginScreen = () => {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { t } = useI18n();
   const navigate = useNavigate();
+  const { refreshAuth } = useAuth();
   const [email, setEmail] = useState(""
 );
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
-    setTimeout(() => {
+    setError("");
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        if (payload?.error === "invalid_credentials") {
+          throw new Error("Incorrect email or password.");
+        }
+        if (payload?.error === "too_many_attempts") {
+          throw new Error("Too many login attempts. Please wait and try again.");
+        }
+        if (payload?.error === "invalid_login_payload") {
+          throw new Error("Please enter a valid email and password.");
+        }
+        throw new Error("Unable to log in right now.");
+      }
+
+      await refreshAuth();
       setIsLoading(false);
       navigate("/home");
-    }, 600);
+    } catch (err) {
+      setIsLoading(false);
+      setError(err instanceof Error ? err.message : "Unable to log in right now.");
+    }
   };
 
   const handleUseDemo = () => {
@@ -52,6 +80,7 @@ const LoginScreen = () => {
         <Button title={t("auth.login.fillDetails")} variant="secondary" onClick={handleUseDemo} style={{ alignSelf: "flex-start" }} />
       </div>
       <form style={styles.form} onSubmit={handleSubmit}>
+        {error ? <p style={styles.error}>{error}</p> : null}
         <label style={styles.label} htmlFor="email">
           Email
         </label>
@@ -171,6 +200,11 @@ const createStyles = (theme: AppTheme) => ({
   forgotRow: {
     display: "flex",
     justifyContent: "flex-end"
+  },
+  error: {
+    margin: 0,
+    color: theme.colors.error,
+    fontSize: 14
   },
   linkButton: {
     border: "none",

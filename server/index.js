@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import path from "node:path";
+import { promisify } from "node:util";
 import Database from "better-sqlite3";
 import { OAuth2Client } from "google-auth-library";
 import OpenAI from "openai";
@@ -30,6 +31,19 @@ db.exec(`
     PRIMARY KEY (clientId, key)
   );
 `);
+
+const hasUserColumn = (columnName) =>
+  db
+    .prepare("SELECT 1 FROM pragma_table_info('users') WHERE name = ?")
+    .get(columnName);
+
+if (!hasUserColumn("passwordHash")) {
+  db.exec("ALTER TABLE users ADD COLUMN passwordHash TEXT");
+}
+
+if (!hasUserColumn("country")) {
+  db.exec("ALTER TABLE users ADD COLUMN country TEXT");
+}
 
 // Auth tables
 db.exec(`
@@ -74,14 +88,23 @@ const stmtDeleteOne = db.prepare(
 const stmtGetUserByProviderSub = db.prepare(
   "SELECT id, email, name, pictureUrl, provider, providerSub, createdAt, lastLoginAt FROM users WHERE provider = ? AND providerSub = ?"
 );
+const stmtGetPasswordUserByEmail = db.prepare(
+  "SELECT id, email, name, pictureUrl, provider, providerSub, country, passwordHash, createdAt, lastLoginAt FROM users WHERE email = ?"
+);
 const stmtGetUserById = db.prepare(
   "SELECT id, email, name, pictureUrl, provider, providerSub, createdAt, lastLoginAt FROM users WHERE id = ?"
 );
 const stmtInsertUser = db.prepare(
   "INSERT INTO users (id, email, name, pictureUrl, provider, providerSub, createdAt, lastLoginAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
 );
+const stmtInsertPasswordUser = db.prepare(
+  "INSERT INTO users (id, email, name, pictureUrl, provider, providerSub, passwordHash, country, createdAt, lastLoginAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+);
 const stmtUpdateUserLogin = db.prepare(
   "UPDATE users SET email = ?, name = ?, pictureUrl = ?, lastLoginAt = ? WHERE id = ?"
+);
+const stmtUpdatePasswordUserLogin = db.prepare(
+  "UPDATE users SET name = ?, country = ?, lastLoginAt = ? WHERE id = ?"
 );
 
 const stmtInsertSession = db.prepare(
@@ -92,6 +115,9 @@ const stmtGetSession = db.prepare(
 );
 const stmtDeleteSession = db.prepare("DELETE FROM sessions WHERE token = ?");
 const stmtDeleteExpiredSessions = db.prepare("DELETE FROM sessions WHERE expiresAt < ?");
+
+const scryptAsync = promisify(crypto.scrypt);
+const authRateLimitState = new Map();
 
 const upsertMany = db.transaction((clientId, items) => {
   for (const [key, value] of items) {
@@ -107,6 +133,10 @@ const SESSION_COOKIE = "ng_session";
 const OAUTH_STATE_COOKIE = "ng_oauth_state";
 const isProd = process.env.NODE_ENV === "production";
 const sessionSecret = process.env.SESSION_SECRET;
+
+if (isProd && !sessionSecret) {
+  throw new Error("SESSION_SECRET is required in production.");
+}
 
 app.use(sessionSecret ? cookieParser(sessionSecret) : cookieParser());
 
@@ -164,6 +194,73 @@ const getGoogleOAuthClient = () => {
   if (!clientId || !clientSecret || !redirectUri) return null;
   return new OAuth2Client({ clientId, clientSecret, redirectUri });
 };
+
+const normalizeEmail = (value) => (typeof value === "string" ? value.trim().toLowerCase() : "");
+const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+const isStrongEnoughPassword = (value) =>
+  typeof value === "string" &&
+  value.length >= 8 &&
+  /[A-Za-z]/.test(value) &&
+  /\d/.test(value) &&
+  /[^A-Za-z0-9]/.test(value);
+
+const hashPassword = async (password) => {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derived = await scryptAsync(password, salt, 64);
+  return `${salt}:${Buffer.from(derived).toString("hex")}`;
+};
+
+const verifyPassword = async (password, storedHash) => {
+  if (!storedHash || typeof storedHash !== "string" || !storedHash.includes(":")) return false;
+  const [salt, hashHex] = storedHash.split(":");
+  const derived = await scryptAsync(password, salt, 64);
+  const storedBuffer = Buffer.from(hashHex, "hex");
+  const derivedBuffer = Buffer.from(derived);
+  if (storedBuffer.length !== derivedBuffer.length) return false;
+  return crypto.timingSafeEqual(storedBuffer, derivedBuffer);
+};
+
+const getRequestIp = (req) => {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded) {
+    return forwarded.split(",")[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || "unknown";
+};
+
+const makeRateLimiter =
+  ({ windowMs, maxAttempts, scope }) =>
+  (req, res, next) => {
+    const now = Date.now();
+    const key = `${scope}:${getRequestIp(req)}`;
+    const current = authRateLimitState.get(key);
+    if (!current || current.resetAt <= now) {
+      authRateLimitState.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+
+    if (current.count >= maxAttempts) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+      res.setHeader("Retry-After", retryAfterSeconds);
+      return res.status(429).json({ error: "too_many_attempts" });
+    }
+
+    current.count += 1;
+    authRateLimitState.set(key, current);
+    return next();
+  };
+
+const authLoginRateLimiter = makeRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  maxAttempts: 10,
+  scope: "login"
+});
+
+const authRegisterRateLimiter = makeRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  maxAttempts: 10,
+  scope: "register"
+});
 
 const getOpenAIClient = () => {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -232,6 +329,85 @@ app.get("/api/auth/me", (req, res) => {
   const { id, email, name, pictureUrl, provider, createdAt, lastLoginAt } = user;
   res.json({ user: { id, email, name, pictureUrl, provider, createdAt, lastLoginAt } });
 });
+
+app.post(
+  "/api/auth/register",
+  authRegisterRateLimiter,
+  asyncHandler(async (req, res) => {
+    const email = normalizeEmail(req.body?.email);
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    const country = typeof req.body?.country === "string" ? req.body.country.trim() : "";
+
+    if (!name || !isValidEmail(email) || !isStrongEnoughPassword(password)) {
+      return res.status(400).json({ error: "invalid_registration_payload" });
+    }
+
+    const existing = stmtGetPasswordUserByEmail.get(email);
+    if (existing) {
+      return res.status(409).json({ error: "email_already_registered" });
+    }
+
+    const now = Date.now();
+    const userId = crypto.randomUUID();
+    const passwordHash = await hashPassword(password);
+    stmtInsertPasswordUser.run(
+      userId,
+      email,
+      name,
+      null,
+      "password",
+      email,
+      passwordHash,
+      country || null,
+      now,
+      now
+    );
+
+    const { token, expiresAt } = createSessionForUser(userId);
+    res.cookie(SESSION_COOKIE, token, makeCookieOptions({ maxAge: expiresAt - now }));
+    res.status(201).json({
+      user: { id: userId, email, name, provider: "password", createdAt: now, lastLoginAt: now }
+    });
+  })
+);
+
+app.post(
+  "/api/auth/login",
+  authLoginRateLimiter,
+  asyncHandler(async (req, res) => {
+    const email = normalizeEmail(req.body?.email);
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    if (!isValidEmail(email) || !password) {
+      return res.status(400).json({ error: "invalid_login_payload" });
+    }
+
+    const user = stmtGetPasswordUserByEmail.get(email);
+    if (!user || user.provider !== "password") {
+      return res.status(401).json({ error: "invalid_credentials" });
+    }
+
+    const passwordOk = await verifyPassword(password, user.passwordHash);
+    if (!passwordOk) {
+      return res.status(401).json({ error: "invalid_credentials" });
+    }
+
+    const now = Date.now();
+    stmtUpdatePasswordUserLogin.run(user.name, user.country || null, now, user.id);
+    const { token, expiresAt } = createSessionForUser(user.id);
+    res.cookie(SESSION_COOKIE, token, makeCookieOptions({ maxAge: expiresAt - now }));
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        provider: user.provider,
+        createdAt: user.createdAt,
+        lastLoginAt: now
+      }
+    });
+  })
+);
 
 app.post("/api/auth/logout", (req, res) => {
   const token = getSessionTokenFromReq(req);

@@ -2,6 +2,7 @@ import React, { FormEvent, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
 import { useI18n } from "../../i18n";
+import { useAuth } from "../../services/auth";
 import { AppTheme, useTheme } from "../../theme";
 
 const RegisterScreen = () => {
@@ -9,22 +10,55 @@ const RegisterScreen = () => {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { t } = useI18n();
   const navigate = useNavigate();
+  const { refreshAuth } = useAuth();
   const [form, setForm] = useState({ name: "", email: "", password: "", country: "" });
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const updateField = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [key]: event.target.value }));
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!agreeTerms) return;
     setLoading(true);
-    setTimeout(() => {
+    setError("");
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(form)
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        if (payload?.error === "email_already_registered") {
+          throw new Error("This email is already registered.");
+        }
+        if (payload?.error === "too_many_attempts") {
+          throw new Error("Too many signup attempts. Please wait and try again.");
+        }
+        if (payload?.error === "invalid_registration_payload") {
+          throw new Error("Please complete all fields and use a stronger password.");
+        }
+        throw new Error("Unable to create account right now.");
+      }
+
+      const profileDraft = {
+        name: form.name,
+        email: form.email,
+        country: form.country
+      };
+      localStorage.setItem("userProfile", JSON.stringify(profileDraft));
+      await refreshAuth();
       setLoading(false);
       navigate("/intake");
-    }, 800);
+    } catch (err) {
+      setLoading(false);
+      setError(err instanceof Error ? err.message : "Unable to create account right now.");
+    }
   };
 
   return (
@@ -33,6 +67,7 @@ const RegisterScreen = () => {
       <p style={styles.subheading}>{t("auth.register.subheading")}</p>
 
       <form style={styles.form} onSubmit={handleSubmit}>
+        {error ? <p style={styles.error}>{error}</p> : null}
         <label style={styles.label} htmlFor="name">
           {t("auth.register.name")}
         </label>
@@ -143,6 +178,11 @@ const createStyles = (theme: AppTheme) => ({
     color: theme.colors.textSecondary,
     marginTop: -theme.spacing.sm + 2,
     marginBottom: theme.spacing.sm
+  },
+  error: {
+    margin: 0,
+    color: theme.colors.error,
+    fontSize: 14
   },
   checkboxRow: {
     display: "flex",

@@ -116,9 +116,9 @@ const ProfileScreen = () => {
   const navigate = useNavigate();
   const defaultProfile: ProfileState = {
     avatarImage: null,
-    name: "JJAY TECH",
-    email: "contact@jjay.info",
-    dob: "1986-07-28",
+    name: "",
+    email: "",
+    dob: "",
     gender: "",
     height: 175, // Default height in cm
     weight: 70, // Default weight in kg
@@ -263,6 +263,7 @@ const ProfileScreen = () => {
   const [aiMotivation, setAiMotivation] = useState("");
   const [isAiSummaryLoading, setIsAiSummaryLoading] = useState(false);
   const [aiSummaryError, setAiSummaryError] = useState("");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const languageOptions: { value: Language; label: string }[] = [
     { value: "en", label: t("common.language.en") },
     { value: "zh", label: t("common.language.zh") }
@@ -423,17 +424,34 @@ const ProfileScreen = () => {
     setIsEditingMeasurements(false);
   };
 
-  const handleLogout = () => {
-    // Clear all user-related data from local storage
-    persistentStorage.removeItem("userProfile");
-    persistentStorage.removeItem("paymentMethods");
-    persistentStorage.removeItem("shippingAddresses");
-    persistentStorage.removeItem("orderHistory");
-    persistentStorage.removeItem("bloodworkAnalysis");
-    persistentStorage.removeItem("lastOrder");
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
 
-    // Navigate to the login screen
-    navigate("/login");
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "content-type": "application/json" }
+      });
+    } catch {
+      // Clear local state even if the network request fails.
+    } finally {
+      persistentStorage.removeItem("userProfile");
+      persistentStorage.removeItem("paymentMethods");
+      persistentStorage.removeItem("shippingAddresses");
+      persistentStorage.removeItem("orderHistory");
+      persistentStorage.removeItem("bloodworkAnalysis");
+      persistentStorage.removeItem("bloodworkAnalysisMeta");
+      persistentStorage.removeItem("bloodworkHistory");
+      persistentStorage.removeItem("bloodPressureHistory");
+      persistentStorage.removeItem("fastingGlucoseHistory");
+      persistentStorage.removeItem("weightHistory");
+      persistentStorage.removeItem("orderDetails");
+      persistentStorage.removeItem("deliveryAddress");
+      persistentStorage.removeItem("lastOrder");
+      setIsLoggingOut(false);
+      navigate("/login");
+    }
   };
 
   const formatValue = (value: string) => (value && value.trim() ? value : "Not set");
@@ -927,7 +945,13 @@ const ProfileScreen = () => {
       </Card>
 
       <div style={styles.logoutStack}>
-        <Button title={t("profile.logOut")} variant="secondary" fullWidth onClick={handleLogout} />
+        <Button
+          title={t("profile.logOut")}
+          variant="secondary"
+          fullWidth
+          onClick={handleLogout}
+          loading={isLoggingOut}
+        />
         <button type="button" style={styles.dangerButton}>{t("profile.deleteAccount")}</button>
       </div>
 
