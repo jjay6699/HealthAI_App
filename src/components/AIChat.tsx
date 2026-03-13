@@ -141,19 +141,15 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
     setUploadedFile(files[0]);
-    setPendingUploads((prev) => {
-      const merged = new Map(
-        prev.map((file) => [`${file.name}:${file.size}:${file.lastModified}`, file] as const)
-      );
-      for (const file of files) {
-        merged.set(`${file.name}:${file.size}:${file.lastModified}`, file);
-      }
-      return Array.from(merged.values());
-    });
+    const nextUploads = [...pendingUploads, ...files];
+    setPendingUploads(nextUploads);
     const fileNames = files.map((file) => file.name).join(", ");
     const fileMessage: Message = {
       role: "user",
-      content: `📎 Uploaded ${files.length} file(s): ${fileNames}`
+      content:
+        files.length === 1
+          ? `📎 Added 1 file: ${fileNames}\nTotal selected: ${nextUploads.length}`
+          : `📎 Added ${files.length} file(s): ${fileNames}\nTotal selected: ${nextUploads.length}`
     };
     setMessages((prev) => {
       const next = [...prev, fileMessage];
