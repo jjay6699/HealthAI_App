@@ -1353,11 +1353,12 @@ const styles = {
     color: "#111827"
   },
   questionnaireActions: {
-    display: "flex",
-    gap: 8
+    display: "grid",
+    gap: 10
   },
   primaryButton: {
-    padding: "8px 14px",
+    width: "100%",
+    padding: "10px 14px",
     borderRadius: 10,
     border: "none",
     background: "#C58A4A",
@@ -1366,7 +1367,8 @@ const styles = {
     cursor: "pointer"
   },
   secondaryButton: {
-    padding: "8px 14px",
+    width: "100%",
+    padding: "10px 14px",
     borderRadius: 10,
     border: "1px solid #E5E7EB",
     background: "#FFFDF9",

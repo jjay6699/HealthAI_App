@@ -32,23 +32,40 @@ const SupplementsScreen = () => {
   const [displayRecommendations, setDisplayRecommendations] = useState<SupplementRecommendation[]>([]);
   const [translatedContent, setTranslatedContent] = useState<Record<string, DisplaySupplementContent>>({});
   const [activeSupplementId, setActiveSupplementId] = useState<string | null>(null);
+  const [hasHydratedRecommendations, setHasHydratedRecommendations] = useState(false);
+  const [isRecommendationsLoading, setIsRecommendationsLoading] = useState(true);
 
   useEffect(() => {
     const storedAnalysis = persistentStorage.getItem("bloodworkAnalysis");
-    if (!storedAnalysis) return;
+    if (!storedAnalysis) {
+      setHasHydratedRecommendations(true);
+      return;
+    }
 
     try {
       const analysis: BloodworkAnalysis = JSON.parse(storedAnalysis);
       setRecommendations(analysis.recommendations || []);
     } catch (error) {
       console.error("Failed to parse bloodwork analysis:", error);
+    } finally {
+      setHasHydratedRecommendations(true);
     }
   }, []);
 
   useEffect(() => {
+    if (!hasHydratedRecommendations) return;
     let cancelled = false;
+    setIsRecommendationsLoading(true);
 
     const run = async () => {
+      if (recommendations.length === 0) {
+        if (!cancelled) {
+          setDisplayRecommendations([]);
+          setIsRecommendationsLoading(false);
+        }
+        return;
+      }
+
       const translated = await translateBloodworkAnalysis(
         {
           summary: "",
@@ -62,6 +79,7 @@ const SupplementsScreen = () => {
 
       if (!cancelled) {
         setDisplayRecommendations(translated.recommendations || []);
+        setIsRecommendationsLoading(false);
       }
     };
 
@@ -70,7 +88,7 @@ const SupplementsScreen = () => {
     return () => {
       cancelled = true;
     };
-  }, [language, recommendations]);
+  }, [hasHydratedRecommendations, language, recommendations]);
 
   useEffect(() => {
     let cancelled = false;
@@ -197,6 +215,20 @@ const SupplementsScreen = () => {
       gramsText
     }).trim();
   };
+
+  if (!hasHydratedRecommendations || isRecommendationsLoading) {
+    return (
+      <div style={styles.page}>
+        <h1 style={styles.heading}>{t("supplements.heading")}</h1>
+        <p style={styles.subheading}>{t("supplements.subheading")}</p>
+
+        <Card style={styles.emptyCard}>
+          <h3 style={styles.emptyTitle}>Loading recommendations...</h3>
+          <p style={styles.emptyBody}>Preparing your personalized supplement plan.</p>
+        </Card>
+      </div>
+    );
+  }
 
   if (displayRecommendations.length === 0) {
     return (
