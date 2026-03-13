@@ -141,19 +141,29 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
     setUploadedFile(files[0]);
-    setPendingUploads(files);
+    setPendingUploads((prev) => {
+      const merged = new Map(
+        prev.map((file) => [`${file.name}:${file.size}:${file.lastModified}`, file] as const)
+      );
+      for (const file of files) {
+        merged.set(`${file.name}:${file.size}:${file.lastModified}`, file);
+      }
+      return Array.from(merged.values());
+    });
     const fileNames = files.map((file) => file.name).join(", ");
     const fileMessage: Message = {
       role: "user",
       content: `📎 Uploaded ${files.length} file(s): ${fileNames}`
     };
-    setMessages(prev => [...prev, fileMessage]);
-
-    setMessages(prev => [
-      ...prev,
-      { role: "assistant", content: text.uploadPrompt }
-    ]);
+    setMessages((prev) => {
+      const next = [...prev, fileMessage];
+      if (!showUploadPrompt) {
+        next.push({ role: "assistant", content: text.uploadPrompt });
+      }
+      return next;
+    });
     setShowUploadPrompt(true);
+    event.target.value = "";
   };
 
   const fileToBase64 = (file: File): Promise<string> => {
@@ -1064,7 +1074,15 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
             <div style={{ display: "flex", justifyContent: "flex-start" }}>
               <div style={styles.questionnaireCard}>
                 <p style={styles.questionnaireTitle}>{text.bloodReportTitle}</p>
+                <p style={styles.helperText}>
+                  {isChinese
+                    ? `å·²é€‰æ‹© ${pendingUploads.length} ä¸ªæ–‡ä»¶ã€‚å¦‚æžœæ‰‹æœºä¸æ”¯æŒå¤šé€‰ï¼Œå¯ä»¥ç‚¹å‡»ä¸‹æ–¹æŒ‰é’®ç»§ç»­æ·»åŠ ã€‚`
+                    : `${pendingUploads.length} file(s) selected. If your phone does not support multi-select, tap below to add more images one by one.`}
+                </p>
                 <div style={styles.questionnaireActions}>
+                  <button onClick={handleAttachClick} style={styles.secondaryButton}>
+                    {isChinese ? "ç»§ç»­æ·»åŠ å›¾ç‰‡" : "Add more images"}
+                  </button>
                   <button onClick={handleUploadYes} style={styles.primaryButton}>{text.yesAnalyze}</button>
                   <button onClick={handleUploadNo} style={styles.secondaryButton}>{text.noNotBlood}</button>
                 </div>
