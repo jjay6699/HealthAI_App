@@ -27,6 +27,7 @@ const SupplementsScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { language, t } = useI18n();
+  const isChinese = language === "zh";
   const navigate = useNavigate();
   const [recommendations, setRecommendations] = useState<SupplementRecommendation[]>([]);
   const [displayRecommendations, setDisplayRecommendations] = useState<SupplementRecommendation[]>([]);
@@ -223,8 +224,8 @@ const SupplementsScreen = () => {
         <p style={styles.subheading}>{t("supplements.subheading")}</p>
 
         <Card style={styles.emptyCard}>
-          <h3 style={styles.emptyTitle}>Loading recommendations...</h3>
-          <p style={styles.emptyBody}>Preparing your personalized supplement plan.</p>
+          <h3 style={styles.emptyTitle}>{isChinese ? "正在加载推荐..." : "Loading recommendations..."}</h3>
+          <p style={styles.emptyBody}>{isChinese ? "正在准备你的个性化营养方案。" : "Preparing your personalized supplement plan."}</p>
         </Card>
       </div>
     );

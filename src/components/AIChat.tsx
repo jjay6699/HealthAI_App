@@ -7,7 +7,8 @@ import {
   analyzeBloodworkFile,
   analyzeBloodworkPdf,
   analyzeBloodworkImages,
-  generateSupplementRecommendationsFromContext
+  generateSupplementRecommendationsFromContext,
+  localizeAssistantText
 } from "../services/openai";
 import { persistentStorage } from "../services/persistentStorage";
 
@@ -20,81 +21,114 @@ interface AIChatProps {
   onClose: () => void;
 }
 
+const repairMojibake = (value: string) => {
+  if (!/[ÃÅÆÐÑØÞßà-ÿ]/.test(value)) return value;
+  try {
+    const bytes = Uint8Array.from(value.split("").map((char) => char.charCodeAt(0) & 0xff));
+    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch {
+    return value;
+  }
+};
+
+const normalizeLocalizedObject = <T extends Record<string, unknown>>(input: T): T =>
+  Object.fromEntries(
+    Object.entries(input).map(([key, value]) => {
+      if (typeof value === "string") {
+        return [key, repairMojibake(value)];
+      }
+      if (typeof value === "function") {
+        return [
+          key,
+          (...args: unknown[]) => {
+            const result = value(...args);
+            return typeof result === "string" ? repairMojibake(result) : result;
+          }
+        ];
+      }
+      return [key, value];
+    })
+  ) as T;
+
 const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { language } = useI18n();
   const isChinese = language === "zh";
-  const text = {
+  const rawText = {
     welcome: isChinese
-      ? "你好，我是你的 AI 健康顾问，基于大量医学期刊内容进行训练。今天想咨询什么健康问题？\n\n你可以问我健康、营养相关的问题，或上传血液报告获得个性化分析。"
+      ? "\u4f60\u597d\uff0c\u6211\u662f\u4f60\u7684 AI \u5065\u5eb7\u987e\u95ee\uff0c\u57fa\u4e8e\u5927\u91cf\u533b\u5b66\u671f\u520a\u5185\u5bb9\u8fdb\u884c\u8bad\u7ec3\u3002\u4eca\u5929\u60f3\u54a8\u8be2\u4ec0\u4e48\u5065\u5eb7\u95ee\u9898\uff1f\n\n\u4f60\u53ef\u4ee5\u95ee\u6211\u5065\u5eb7\u3001\u8425\u517b\u76f8\u5173\u7684\u95ee\u9898\uff0c\u6216\u4e0a\u4f20\u8840\u6db2\u62a5\u544a\u83b7\u5f97\u4e2a\u6027\u5316\u5206\u6790\u3002"
       : "Hello! I'm your AI Health Advisor, trained on hundreds of thousands of medical journals. How can I help you with your health questions today?\n\nYou can ask me anything about health, nutrition, or upload your bloodwork for personalized analysis!",
     uploadedFiles: (count: number, names: string) =>
-      isChinese ? `已上传 ${count} 个文件：${names}` : `Uploaded ${count} file(s): ${names}`,
-    uploadPrompt: isChinese ? "这是你想分析的血液报告吗？" : "Is this a blood report you want analyzed?",
+      isChinese ? `\u5df2\u4e0a\u4f20 ${count} \u4e2a\u6587\u4ef6\uff1a${names}` : `Uploaded ${count} file(s): ${names}`,
+    uploadPrompt: isChinese ? "\u8fd9\u662f\u4f60\u60f3\u5206\u6790\u7684\u8840\u6db2\u62a5\u544a\u5417\uff1f" : "Is this a blood report you want analyzed?",
     personalizePrompt: isChinese
-      ? "你愿意先回答一个简短问卷，让建议更个性化吗？"
+      ? "\u4f60\u613f\u610f\u5148\u56de\u7b54\u4e00\u4e2a\u7b80\u77ed\u95ee\u5377\uff0c\u8ba9\u5efa\u8bae\u66f4\u4e2a\u6027\u5316\u5417\uff1f"
       : "Would you like to answer a short questionnaire to personalize your guidance?",
     uploadBloodworkPrompt: isChinese
-      ? "你想上传血液报告，以获得更准确的建议和更详细的解读吗？"
+      ? "\u4f60\u60f3\u4e0a\u4f20\u8840\u6db2\u62a5\u544a\uff0c\u4ee5\u83b7\u5f97\u66f4\u51c6\u786e\u7684\u5efa\u8bae\u548c\u66f4\u8be6\u7ec6\u7684\u89e3\u8bfb\u5417\uff1f"
       : "Would you like to upload your bloodwork for more accurate recommendations and a detailed reading?",
-    declineQuestionnaire: isChinese ? "不用了，继续聊天即可。" : "No thanks, continue without the questionnaire.",
+    declineQuestionnaire: isChinese ? "\u4e0d\u7528\u4e86\uff0c\u7ee7\u7eed\u804a\u5929\u5373\u53ef\u3002" : "No thanks, continue without the questionnaire.",
     under18Notice: isChinese
-      ? "感谢告知。本问卷仅适用于 18 岁及以上用户。你仍然可以继续咨询其他健康问题。"
+      ? "\u611f\u8c22\u544a\u77e5\u3002\u672c\u95ee\u5377\u4ec5\u9002\u7528\u4e8e 18 \u5c81\u53ca\u4ee5\u4e0a\u7528\u6237\u3002\u4f60\u4ecd\u7136\u53ef\u4ee5\u7ee7\u7eed\u54a8\u8be2\u5176\u4ed6\u5065\u5eb7\u95ee\u9898\u3002"
       : "Thanks for letting me know. This questionnaire is only for users 18+. Feel free to ask any other questions.",
     fileProcessError: isChinese
-      ? "处理你的文件时出现错误。请重试，或直接告诉我你的血液检测结果。"
+      ? "\u5904\u7406\u4f60\u7684\u6587\u4ef6\u65f6\u51fa\u73b0\u9519\u8bef\u3002\u8bf7\u91cd\u8bd5\uff0c\u6216\u76f4\u63a5\u544a\u8bc9\u6211\u4f60\u7684\u8840\u6db2\u68c0\u6d4b\u7ed3\u679c\u3002"
       : "I encountered an error processing your file. Please try again or describe your bloodwork results to me.",
     mixedFileError: isChinese
-      ? "请上传单个 PDF，或上传多张图片，不要混合上传。"
+      ? "\u8bf7\u4e0a\u4f20\u5355\u4e2a PDF\uff0c\u6216\u4e0a\u4f20\u591a\u5f20\u56fe\u7247\uff0c\u4e0d\u8981\u6df7\u5408\u4e0a\u4f20\u3002"
       : "Please upload either a single PDF or multiple images, not a mix of files.",
     pdfInChatError: isChinese
-      ? "这里可以分析图片，但 PDF 需要使用血液报告分析器。请改为上传清晰图片。"
+      ? "\u8fd9\u91cc\u53ef\u4ee5\u5206\u6790\u56fe\u7247\uff0c\u4f46 PDF \u9700\u8981\u4f7f\u7528\u8840\u6db2\u62a5\u544a\u5206\u6790\u5668\u3002\u8bf7\u6539\u4e3a\u4e0a\u4f20\u6e05\u6670\u56fe\u7247\u3002"
       : "I can analyze images here, but PDFs need the blood report analyzer. Please upload a clear image instead.",
     imageAnalyzePrompt: isChinese
-      ? "请分析这张图片，并用通俗易懂的语言说明你看到的内容。"
+      ? "\u8bf7\u5206\u6790\u8fd9\u5f20\u56fe\u7247\uff0c\u5e76\u7528\u901a\u4fd7\u6613\u61c2\u7684\u8bed\u8a00\u8bf4\u660e\u4f60\u770b\u5230\u7684\u5185\u5bb9\u3002"
       : "Analyze this image and explain what it shows in plain language.",
-    imageAnalyzeFallback: isChinese ? "我暂时无法分析这张图片。请换一张再试。" : "I couldn't analyze that image. Please try another one.",
-    imageAnalyzeError: isChinese ? "分析这张图片时出现错误，请再试一次。" : "I ran into an error analyzing that image. Please try again.",
+    imageAnalyzeFallback: isChinese ? "\u6211\u6682\u65f6\u65e0\u6cd5\u5206\u6790\u8fd9\u5f20\u56fe\u7247\u3002\u8bf7\u6362\u4e00\u5f20\u518d\u8bd5\u3002" : "I couldn't analyze that image. Please try another one.",
+    imageAnalyzeError: isChinese ? "\u5206\u6790\u8fd9\u5f20\u56fe\u7247\u65f6\u51fa\u73b0\u9519\u8bef\uff0c\u8bf7\u518d\u8bd5\u4e00\u6b21\u3002" : "I ran into an error analyzing that image. Please try again.",
     imagesAnalyzePrompt: isChinese
-      ? "请综合分析所有图片，并用通俗易懂的语言给出一份整体说明。"
+      ? "\u8bf7\u7efc\u5408\u5206\u6790\u6240\u6709\u56fe\u7247\uff0c\u5e76\u7528\u901a\u4fd7\u6613\u61c2\u7684\u8bed\u8a00\u7ed9\u51fa\u4e00\u4efd\u6574\u4f53\u8bf4\u660e\u3002"
       : "Analyze all images together and provide one overall report in plain language.",
-    imagesAnalyzeFallback: isChinese ? "我暂时无法分析这些图片。请换一组再试。" : "I couldn't analyze those images. Please try another set.",
-    imagesAnalyzeError: isChinese ? "分析这些图片时出现错误，请再试一次。" : "I ran into an error analyzing those images. Please try again.",
-    imagesProcessError: isChinese ? "处理这些图片时出现错误，请再试一次。" : "I encountered an error processing those images. Please try again.",
-    supplementPromptTitle: isChinese ? "需要营养建议吗？" : "Need supplement suggestions?",
+    imagesAnalyzeFallback: isChinese ? "\u6211\u6682\u65f6\u65e0\u6cd5\u5206\u6790\u8fd9\u4e9b\u56fe\u7247\u3002\u8bf7\u6362\u4e00\u7ec4\u518d\u8bd5\u3002" : "I couldn't analyze those images. Please try another set.",
+    imagesAnalyzeError: isChinese ? "\u5206\u6790\u8fd9\u4e9b\u56fe\u7247\u65f6\u51fa\u73b0\u9519\u8bef\uff0c\u8bf7\u518d\u8bd5\u4e00\u6b21\u3002" : "I ran into an error analyzing those images. Please try again.",
+    imagesProcessError: isChinese ? "\u5904\u7406\u8fd9\u4e9b\u56fe\u7247\u65f6\u51fa\u73b0\u9519\u8bef\uff0c\u8bf7\u518d\u8bd5\u4e00\u6b21\u3002" : "I encountered an error processing those images. Please try again.",
+    supplementPromptTitle: isChinese ? "\u9700\u8981\u8425\u517b\u5efa\u8bae\u5417\uff1f" : "Need supplement suggestions?",
     supplementPromptBody: isChinese
-      ? "根据刚才的图片分析，我可以推荐可能适合的营养补充产品。"
+      ? "\u6839\u636e\u521a\u624d\u7684\u56fe\u7247\u5206\u6790\uff0c\u6211\u53ef\u4ee5\u63a8\u8350\u53ef\u80fd\u9002\u5408\u7684\u8425\u517b\u8865\u5145\u4ea7\u54c1\u3002"
       : "Based on the image issue I just analyzed, I can suggest suitable supplements for support.",
-    supplementPromptYes: isChinese ? "查看建议" : "View suggestions",
-    supplementPromptNo: isChinese ? "暂时不用" : "Not now",
+    supplementPromptYes: isChinese ? "\u67e5\u770b\u5efa\u8bae" : "View suggestions",
+    supplementPromptNo: isChinese ? "\u6682\u65f6\u4e0d\u7528" : "Not now",
     supplementSuggestionError: isChinese
-      ? "生成营养建议时出现错误，请稍后再试。"
+      ? "\u751f\u6210\u8425\u517b\u5efa\u8bae\u65f6\u51fa\u73b0\u9519\u8bef\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002"
       : "I ran into an error generating supplement suggestions. Please try again later.",
-    genericFallback: isChinese ? "抱歉，我暂时无法生成回复。请再试一次。" : "I apologize, I couldn't generate a response. Please try again.",
+    genericFallback: isChinese ? "\u62b1\u6b49\uff0c\u6211\u6682\u65f6\u65e0\u6cd5\u751f\u6210\u56de\u590d\u3002\u8bf7\u518d\u8bd5\u4e00\u6b21\u3002" : "I apologize, I couldn't generate a response. Please try again.",
     genericError: (message: string) =>
       isChinese
-        ? `抱歉，我遇到了一些错误：${message}。请检查你的 OpenAI API key。`
+        ? `\u62b1\u6b49\uff0c\u6211\u9047\u5230\u4e86\u4e00\u4e9b\u9519\u8bef\uff1a${message}\u3002\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002`
         : `I'm sorry, I encountered an error: ${message}. Please try again shortly.`,
-    title: isChinese ? "AI 健康顾问" : "AI Health Advisor",
-    subtitle: isChinese ? "基于医学期刊训练" : "Trained on medical journals",
-    bloodReportTitle: isChinese ? "请选择分析方式" : "Choose analysis mode",
-    yesAnalyze: isChinese ? "按血液报告分析" : "Analyze as bloodwork",
-    noNotBlood: isChinese ? "按普通图片分析" : "Analyze as regular images",
-    questionnaireTitle: isChinese ? "简短问卷？" : "Quick questionnaire?",
-    yes: isChinese ? "是" : "Yes",
-    no: isChinese ? "否" : "No",
-    back: isChinese ? "返回" : "Back",
-    next: isChinese ? "下一步" : "Next",
-    finish: isChinese ? "完成" : "Finish",
-    thinking: isChinese ? "思考中..." : "Thinking...",
-    attachTitle: isChinese ? "上传血液报告文件" : "Attach bloodwork file",
-    inputPlaceholder: isChinese ? "咨询健康、营养相关问题..." : "Ask about health, nutrition...",
-    send: isChinese ? "发送" : "Send",
+    title: isChinese ? "AI \u5065\u5eb7\u987e\u95ee" : "AI Health Advisor",
+    subtitle: isChinese ? "\u57fa\u4e8e\u533b\u5b66\u671f\u520a\u8bad\u7ec3" : "Trained on medical journals",
+    bloodReportTitle: isChinese ? "\u8bf7\u9009\u62e9\u5206\u6790\u65b9\u5f0f" : "Choose analysis mode",
+    yesAnalyze: isChinese ? "\u6309\u8840\u6db2\u62a5\u544a\u5206\u6790" : "Analyze as bloodwork",
+    noNotBlood: isChinese ? "\u6309\u666e\u901a\u56fe\u7247\u5206\u6790" : "Analyze as regular images",
+    questionnaireTitle: isChinese ? "\u7b80\u77ed\u95ee\u5377\uff1f" : "Quick questionnaire?",
+    yes: isChinese ? "\u662f" : "Yes",
+    no: isChinese ? "\u5426" : "No",
+    back: isChinese ? "\u8fd4\u56de" : "Back",
+    next: isChinese ? "\u4e0b\u4e00\u6b65" : "Next",
+    finish: isChinese ? "\u5b8c\u6210" : "Finish",
+    thinking: isChinese ? "\u601d\u8003\u4e2d..." : "Thinking...",
+    attachTitle: isChinese ? "\u4e0a\u4f20\u8840\u6db2\u62a5\u544a\u6587\u4ef6" : "Attach bloodwork file",
+    inputPlaceholder: isChinese ? "\u54a8\u8be2\u5065\u5eb7\u3001\u8425\u517b\u76f8\u5173\u95ee\u9898..." : "Ask about health, nutrition...",
+    send: isChinese ? "\u53d1\u9001" : "Send",
     aiLanguageInstruction: isChinese
       ? "Respond entirely in Simplified Chinese. Keep the tone clear, natural, and medically responsible."
       : "Respond entirely in English. Keep the tone clear, natural, and medically responsible."
   };
+  const text = rawText;
+  const questionnaireDeclineReply = isChinese
+    ? "\u597d\u7684\uff0c\u6211\u4eec\u53ef\u4ee5\u7ee7\u7eed\u800c\u4e0d\u586b\u5199\u95ee\u5377\u3002\u51c6\u5907\u597d\u540e\uff0c\u968f\u65f6\u95ee\u6211\u4efb\u4f55\u5065\u5eb7\u6216\u8425\u517b\u76f8\u5173\u7684\u95ee\u9898\u3002"
+    : "No problem, we can continue without the questionnaire. Ask me any health or nutrition question whenever you're ready.";
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -105,6 +139,10 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [pendingUploads, setPendingUploads] = useState<File[]>([]);
+  const uploadSelectionHelpText = isChinese
+    ? `\u5df2\u9009\u62e9 ${pendingUploads.length} \u4e2a\u6587\u4ef6\u3002\u5982\u679c\u4f60\u7684\u624b\u673a\u4e0d\u652f\u6301\u591a\u9009\uff0c\u8bf7\u70b9\u4e0b\u9762\u7ee7\u7eed\u9010\u5f20\u6dfb\u52a0\u56fe\u7247\u3002`
+    : `${pendingUploads.length} file(s) selected. If your phone does not support multi-select, tap below to add more images one by one.`;
+  const addMoreImagesLabel = isChinese ? "\u7ee7\u7eed\u6dfb\u52a0\u56fe\u7247" : "Add more images";
   const [showUploadPrompt, setShowUploadPrompt] = useState(false);
   const [showSupplementPrompt, setShowSupplementPrompt] = useState(false);
   const [showQuestionnairePrompt, setShowQuestionnairePrompt] = useState(false);
@@ -322,11 +360,18 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
         max_tokens: 800
       });
 
+      const normalizedContent = await localizeAssistantText(
+        stripDisclaimers(
+          response.choices[0].message.content || text.imageAnalyzeFallback
+        ),
+        language
+      ).catch(() =>
+        stripDisclaimers(response.choices[0].message.content || text.imageAnalyzeFallback)
+      );
+
       const assistantMessage: Message = {
         role: "assistant",
-        content: stripDisclaimers(
-          response.choices[0].message.content || text.imageAnalyzeFallback
-        )
+        content: normalizedContent
       };
       setMessages(prev => [...prev, assistantMessage]);
       persistChatImageAnalysis(assistantMessage.content, [file]);
@@ -426,10 +471,13 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
       const cleanedContent = stripDisclaimers(
         response.choices[0].message.content || text.genericFallback
       );
+      const localizedContent = await localizeAssistantText(cleanedContent, language).catch(
+        () => cleanedContent
+      );
 
       const assistantMessage: Message = {
         role: "assistant",
-        content: cleanedContent
+        content: localizedContent
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -857,9 +905,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
       { role: "user", content: text.declineQuestionnaire },
       {
         role: "assistant",
-        content: isChinese
-          ? "å¥½çš„ï¼Œæˆ‘ä»¬å¯ä»¥ç›´æŽ¥ç»§ç»­èŠå¤©ã€‚å‘Šè¯‰æˆ‘ä½ æƒ³äº†è§£çš„å¥åº·æˆ–è¥å…»é—®é¢˜å§ã€‚"
-          : "No problem, we can continue without the questionnaire. Ask me any health or nutrition question whenever you're ready."
+        content: questionnaireDeclineReply
       }
     ]);
   };
@@ -1033,11 +1079,18 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
         max_tokens: 900
       });
 
+      const normalizedContent = await localizeAssistantText(
+        stripDisclaimers(
+          response.choices[0].message.content || text.imagesAnalyzeFallback
+        ),
+        language
+      ).catch(() =>
+        stripDisclaimers(response.choices[0].message.content || text.imagesAnalyzeFallback)
+      );
+
       const assistantMessage: Message = {
         role: "assistant",
-        content: stripDisclaimers(
-          response.choices[0].message.content || text.imagesAnalyzeFallback
-        )
+        content: normalizedContent
       };
       setMessages(prev => [...prev, assistantMessage]);
       persistChatImageAnalysis(assistantMessage.content, files);
@@ -1189,7 +1242,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
                   whiteSpace: "pre-wrap" as const
                 }}
               >
-                {message.content}
+                {repairMojibake(message.content)}
               </div>
             </div>
           ))}
@@ -1197,15 +1250,9 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
             <div style={{ display: "flex", justifyContent: "flex-start" }}>
               <div style={styles.questionnaireCard}>
                 <p style={styles.questionnaireTitle}>{text.bloodReportTitle}</p>
-                <p style={styles.helperText}>
-                  {isChinese
-                    ? `å·²é€‰æ‹© ${pendingUploads.length} ä¸ªæ–‡ä»¶ã€‚å¦‚æžœæ‰‹æœºä¸æ”¯æŒå¤šé€‰ï¼Œå¯ä»¥ç‚¹å‡»ä¸‹æ–¹æŒ‰é’®ç»§ç»­æ·»åŠ ã€‚`
-                    : `${pendingUploads.length} file(s) selected. If your phone does not support multi-select, tap below to add more images one by one.`}
-                </p>
+                <p style={styles.helperText}>{uploadSelectionHelpText}</p>
                 <div style={styles.questionnaireActions}>
-                  <button onClick={handleAttachClick} style={styles.secondaryButton}>
-                    {isChinese ? "ç»§ç»­æ·»åŠ å›¾ç‰‡" : "Add more images"}
-                  </button>
+                  <button onClick={handleAttachClick} style={styles.secondaryButton}>{addMoreImagesLabel}</button>
                   <button onClick={handleUploadYes} style={styles.primaryButton}>{text.yesAnalyze}</button>
                   <button onClick={handleUploadNo} style={styles.secondaryButton}>{text.noNotBlood}</button>
                 </div>

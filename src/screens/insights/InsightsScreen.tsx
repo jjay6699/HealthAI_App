@@ -36,6 +36,7 @@ const InsightsScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { language, t } = useI18n();
+  const isChinese = language === "zh";
   const [analysis, setAnalysis] = useState<BloodworkAnalysis | null>(null);
   const [displayAnalysis, setDisplayAnalysis] = useState<BloodworkAnalysis | null>(null);
   const [analysisMeta, setAnalysisMeta] = useState<{ fileType?: string; fileName?: string } | null>(null);
@@ -101,8 +102,8 @@ const InsightsScreen = () => {
         <p style={styles.subheading}>{t("insights.subheading")}</p>
 
         <Card style={styles.emptyCard}>
-          <h3 style={styles.emptyTitle}>Loading insights...</h3>
-          <p style={styles.emptyBody}>Preparing your analysis results.</p>
+          <h3 style={styles.emptyTitle}>{isChinese ? "正在加载洞察..." : "Loading insights..."}</h3>
+          <p style={styles.emptyBody}>{isChinese ? "正在准备你的分析结果。" : "Preparing your analysis results."}</p>
         </Card>
       </div>
     );
@@ -129,13 +130,19 @@ const InsightsScreen = () => {
 
   const sourceLabel =
     analysisMeta?.fileType === "image-analysis"
-      ? "Source: AI chat image analysis"
+      ? isChinese
+        ? "来源：AI 聊天图片分析"
+        : "Source: AI chat image analysis"
       : analysisMeta?.fileType === "images"
-      ? "Source: uploaded image analysis"
+      ? isChinese
+        ? "来源：上传图片分析"
+        : "Source: uploaded image analysis"
       : analysisMeta?.fileType === "application/pdf"
-      ? "Source: uploaded PDF bloodwork"
+      ? isChinese
+        ? "来源：上传的 PDF 血液报告"
+        : "Source: uploaded PDF bloodwork"
       : analysisMeta?.fileName
-      ? `Source: ${analysisMeta.fileName}`
+      ? `${isChinese ? "来源" : "Source"}: ${analysisMeta.fileName}`
       : null;
 
   return (

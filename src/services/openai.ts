@@ -984,6 +984,59 @@ export interface SupplementContentTranslation {
   description?: string;
 }
 
+export async function localizeAssistantText(
+  content: string,
+  language: Language
+): Promise<string> {
+  const trimmed = content.trim();
+  if (!trimmed || language === "en") return trimmed || content;
+
+  const cacheKey = buildAnalysisCacheKey("assistant-text-translation", {
+    language,
+    content: trimmed
+  });
+
+  if (typeof window !== "undefined") {
+    try {
+      const cached = persistentStorage.getItem(cacheKey);
+      if (cached) return cached;
+    } catch {
+      // Ignore cache parse/storage errors.
+    }
+  }
+
+  const response = await createChatCompletion({
+    model: ANALYSIS_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          `You translate app chat replies for display. ${getLanguageInstruction(language)} Preserve the original meaning, tone, and formatting. Return plain text only.`
+      },
+      {
+        role: "user",
+        content: trimmed
+      }
+    ],
+    temperature: 0
+  });
+
+  const translated = response.choices[0].message.content?.trim();
+  if (!translated) {
+    throw new Error("No assistant text translation response");
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      persistentStorage.setItem(cacheKey, translated);
+    } catch {
+      // Ignore storage errors.
+    }
+  }
+
+  return translated;
+}
+
 const getCurrentLanguage = (): Language => {
   const stored = persistentStorage.getItem(LANGUAGE_STORAGE_KEY);
   return stored === "zh" ? "zh" : "en";
