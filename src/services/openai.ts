@@ -362,6 +362,107 @@ ${getLanguageInstruction(language)}`;
   }
 }
 
+export async function generateSupplementRecommendationsFromContext(input: {
+  summary: string;
+  context?: string;
+}): Promise<BloodworkAnalysis> {
+  const language = getCurrentLanguage();
+  const cacheKey = buildAnalysisCacheKey("context-recommendations", {
+    input,
+    supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id),
+    language
+  });
+  const cached = getCachedAnalysis(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const supplementsList = AVAILABLE_SUPPLEMENTS.map(
+    (s) => `${s.id}: ${s.name} - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
+  ).join("\n");
+
+  const prompt = `You are a health and nutrition expert. Based on the non-bloodwork image analysis below, suggest suitable nutrition products from our catalog that may support the issue described.
+
+IMAGE ANALYSIS SUMMARY:
+${input.summary}
+
+EXTRA CONTEXT:
+${input.context || "None"}
+
+AVAILABLE NUTRITION PRODUCTS:
+${supplementsList}
+
+Requirements:
+- Only recommend items from AVAILABLE SUPPLEMENTS.
+- Do not diagnose disease or claim certainty from the image alone.
+- Recommendations must be cautious, support-oriented, and tied to the visible issue or symptom pattern.
+- Return between 2 and 6 recommendations.
+- Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
+- Keep reasons plain and user-friendly.
+- Include one short summary, 1-3 concerns, 0-2 strengths, and 1-3 detailed insights.
+- Include dosage and dosageGramsPerDay when appropriate.
+
+Respond in JSON format with this structure:
+{
+  "summary": "Brief overall summary",
+  "concerns": ["concern 1", "concern 2"],
+  "strengths": ["strength 1"],
+  "recommendations": [
+    {
+      "supplementId": "supplement-id",
+      "supplementName": "Nutrition Product Name",
+      "reason": "Why this nutrition product may help",
+      "priority": "high|medium|low",
+      "dosage": "Daily intake amount in grams",
+      "dosageGramsPerDay": 3
+    }
+  ],
+  "detailedInsights": [
+    {
+      "category": "Category name",
+      "findings": "What was observed",
+      "impact": "Why it matters"
+    }
+  ]
+}
+
+${getLanguageInstruction(language)}`;
+
+  try {
+    const response = await createChatCompletion({
+      model: ANALYSIS_MODEL,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You provide cautious, non-diagnostic nutrition recommendations from image-analysis context. Always return valid JSON."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.2,
+      max_tokens: 1400
+    });
+
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error("No response from OpenAI");
+    }
+
+    const analysis: BloodworkAnalysis = JSON.parse(content);
+    const normalized = normalizeRecommendations(analysis);
+    const localized = await localizeBloodworkAnalysis(normalized, language);
+    setCachedAnalysis(cacheKey, localized);
+    return localized;
+  } catch (error) {
+    console.error("Error generating supplement recommendations from context:", error);
+    throw new Error("Failed to generate supplement recommendations.");
+  }
+}
+
 /**
  * Analyzes bloodwork from a PDF file by converting it to images
  */

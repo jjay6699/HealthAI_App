@@ -3,7 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { useI18n } from "../i18n";
 import { useTheme } from "../theme";
 import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
-import { analyzeBloodworkFile, analyzeBloodworkPdf, analyzeBloodworkImages } from "../services/openai";
+import {
+  analyzeBloodworkFile,
+  analyzeBloodworkPdf,
+  analyzeBloodworkImages,
+  generateSupplementRecommendationsFromContext
+} from "../services/openai";
 import { persistentStorage } from "../services/persistentStorage";
 
 interface Message {
@@ -57,6 +62,15 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
     imagesAnalyzeFallback: isChinese ? "我暂时无法分析这些图片。请换一组再试。" : "I couldn't analyze those images. Please try another set.",
     imagesAnalyzeError: isChinese ? "分析这些图片时出现错误，请再试一次。" : "I ran into an error analyzing those images. Please try again.",
     imagesProcessError: isChinese ? "处理这些图片时出现错误，请再试一次。" : "I encountered an error processing those images. Please try again.",
+    supplementPromptTitle: isChinese ? "需要营养建议吗？" : "Need supplement suggestions?",
+    supplementPromptBody: isChinese
+      ? "根据刚才的图片分析，我可以推荐可能适合的营养补充产品。"
+      : "Based on the image issue I just analyzed, I can suggest suitable supplements for support.",
+    supplementPromptYes: isChinese ? "查看建议" : "View suggestions",
+    supplementPromptNo: isChinese ? "暂时不用" : "Not now",
+    supplementSuggestionError: isChinese
+      ? "生成营养建议时出现错误，请稍后再试。"
+      : "I ran into an error generating supplement suggestions. Please try again later.",
     genericFallback: isChinese ? "抱歉，我暂时无法生成回复。请再试一次。" : "I apologize, I couldn't generate a response. Please try again.",
     genericError: (message: string) =>
       isChinese
@@ -92,11 +106,13 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [pendingUploads, setPendingUploads] = useState<File[]>([]);
   const [showUploadPrompt, setShowUploadPrompt] = useState(false);
+  const [showSupplementPrompt, setShowSupplementPrompt] = useState(false);
   const [showQuestionnairePrompt, setShowQuestionnairePrompt] = useState(false);
   const [questionnaireActive, setQuestionnaireActive] = useState(false);
   const [questionnaireStep, setQuestionnaireStep] = useState(0);
   const [questionnaireCompleted, setQuestionnaireCompleted] = useState(false);
   const [questionnaireDismissed, setQuestionnaireDismissed] = useState(false);
+  const [imageAnalysisSummary, setImageAnalysisSummary] = useState("");
   const [questionnaire, setQuestionnaire] = useState({
     eligibility18Plus: "",
     ageRange: "",
@@ -151,13 +167,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
           ? `📎 Added 1 file: ${fileNames}\nTotal selected: ${nextUploads.length}`
           : `📎 Added ${files.length} file(s): ${fileNames}\nTotal selected: ${nextUploads.length}`
     };
-    setMessages((prev) => {
-      const next = [...prev, fileMessage];
-      if (!showUploadPrompt) {
-        next.push({ role: "assistant", content: text.uploadPrompt });
-      }
-      return next;
-    });
+    setMessages((prev) => [...prev, fileMessage]);
     setShowUploadPrompt(true);
     event.target.value = "";
   };
@@ -285,6 +295,8 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
         )
       };
       setMessages(prev => [...prev, assistantMessage]);
+      setImageAnalysisSummary(assistantMessage.content);
+      setShowSupplementPrompt(true);
     } catch (error) {
       console.error("Error analyzing image:", error);
       setMessages(prev => [
@@ -300,6 +312,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
 
   const analyzeUploadedFile = async (file: File) => {
     setIsLoading(true);
+    setShowSupplementPrompt(false);
 
     try {
       let analysis;
@@ -920,6 +933,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
 
   const analyzeUploadedImages = async (files: File[]) => {
     setIsLoading(true);
+    setShowSupplementPrompt(false);
     try {
       const images = await Promise.all(
         files.map(async (file) => ({
@@ -991,6 +1005,8 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
         )
       };
       setMessages(prev => [...prev, assistantMessage]);
+      setImageAnalysisSummary(assistantMessage.content);
+      setShowSupplementPrompt(true);
     } catch (error) {
       console.error("Error analyzing images:", error);
       setMessages(prev => [
@@ -1001,6 +1017,43 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
       setIsLoading(false);
       setUploadedFile(null);
       setPendingUploads([]);
+    }
+  };
+
+  const handleSupplementPromptNo = () => {
+    setShowSupplementPrompt(false);
+  };
+
+  const handleSupplementPromptYes = async () => {
+    if (!imageAnalysisSummary || isLoading) return;
+    setIsLoading(true);
+    setShowSupplementPrompt(false);
+
+    try {
+      const analysis = await generateSupplementRecommendationsFromContext({
+        summary: imageAnalysisSummary
+      });
+
+      persistentStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
+      persistentStorage.setItem(
+        "bloodworkAnalysisMeta",
+        JSON.stringify({
+          uploadedAt: new Date().toISOString(),
+          fileName: "AI image analysis",
+          fileType: "image-analysis",
+          fileSize: 0
+        })
+      );
+
+      navigate("/supplements");
+    } catch (error) {
+      console.error("Error generating supplement suggestions:", error);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: text.supplementSuggestionError }
+      ]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -1119,6 +1172,22 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
                   </button>
                   <button onClick={handleUploadYes} style={styles.primaryButton}>{text.yesAnalyze}</button>
                   <button onClick={handleUploadNo} style={styles.secondaryButton}>{text.noNotBlood}</button>
+                </div>
+              </div>
+            </div>
+          )}
+          {showSupplementPrompt && (
+            <div style={{ display: "flex", justifyContent: "flex-start" }}>
+              <div style={styles.questionnaireCard}>
+                <p style={styles.questionnaireTitle}>{text.supplementPromptTitle}</p>
+                <p style={styles.helperText}>{text.supplementPromptBody}</p>
+                <div style={styles.questionnaireActions}>
+                  <button onClick={handleSupplementPromptYes} style={styles.primaryButton}>
+                    {text.supplementPromptYes}
+                  </button>
+                  <button onClick={handleSupplementPromptNo} style={styles.secondaryButton}>
+                    {text.supplementPromptNo}
+                  </button>
                 </div>
               </div>
             </div>
