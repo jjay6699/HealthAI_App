@@ -44,6 +44,17 @@ const LANGUAGE_STORAGE_KEY = "appLanguage";
 
 const ANALYSIS_MODEL = "gpt-4o";
 
+const BLOODWORK_EXTRACTION_RULES = `Extraction requirements:
+- Review every row in every table before summarizing. Do not skip urinalysis/FEME/urine chemistry, hematology, biochemistry, hormones, inflammatory markers, microscopy, or any appendix page.
+- Treat asterisk/star/flag markers, H/L markers, bolded values, and values outside the printed reference range as abnormal.
+- Concerns must include every detected abnormal or flagged marker, even if the deviation is mild or borderline.
+- If a marker has a value and a reference range, compare them numerically when possible instead of relying only on visual flag icons.
+- Apply the same exhaustive extraction standard to every section of the report, including urinalysis, hematology, red/white cell indices, platelets, electrolytes, renal markers, liver markers, lipids, glucose markers, thyroid markers, vitamins, minerals, inflammatory markers, hormones, microscopy, and any other reported panels.
+- Do not prioritize only the most common or highest-level markers. Low-visibility, borderline, uncommon, or non-blood markers must still be extracted and checked against range.
+- If a report mixes normal and abnormal findings, do not omit the abnormal ones just because there are larger abnormalities elsewhere.
+- If a marker is present but the reference range is cut off or partially obscured, still mention the marker and state that the range was partially unreadable if needed.
+- The summary can be concise, but concerns must be exhaustive for abnormal findings.`;
+
 export interface BloodworkData {
   [key: string]: {
     value: number;
@@ -71,6 +82,15 @@ export interface BloodworkAnalysis {
     findings: string;
     impact: string;
   }[];
+}
+
+interface VerifiedAbnormalMarker {
+  panel?: string;
+  marker: string;
+  value?: string;
+  referenceRange?: string;
+  abnormalDirection?: "high" | "low" | "abnormal" | "flagged";
+  note?: string;
 }
 
 const supplementById = new Map(AVAILABLE_SUPPLEMENTS.map((s) => [s.id, s]));
@@ -222,6 +242,138 @@ const buildAnalysisCacheKey = (kind: string, payload: unknown): string => {
     payload
   });
   return `analysis:${hashString(base)}`;
+};
+
+const normalizeForMatch = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim();
+
+const buildVerifiedConcern = (marker: VerifiedAbnormalMarker) => {
+  const directionText =
+    marker.abnormalDirection === "high"
+      ? "Elevated"
+      : marker.abnormalDirection === "low"
+      ? "Low"
+      : marker.abnormalDirection === "flagged"
+      ? "Flagged"
+      : "Abnormal";
+
+  const valueText = marker.value ? ` at ${marker.value}` : "";
+  const rangeText = marker.referenceRange ? ` (reference: ${marker.referenceRange})` : "";
+  const noteText = marker.note ? ` ${marker.note}` : "";
+  return `${directionText} ${marker.marker}${valueText}${rangeText}${noteText}`.trim();
+};
+
+const mergeVerifiedAbnormalMarkers = (
+  analysis: BloodworkAnalysis,
+  markers: VerifiedAbnormalMarker[]
+): BloodworkAnalysis => {
+  if (markers.length === 0) return analysis;
+
+  const existingConcernText = new Set(
+    (analysis.concerns || []).map((item) => normalizeForMatch(item))
+  );
+  const existingInsightText = normalizeForMatch(
+    (analysis.detailedInsights || [])
+      .flatMap((item) => [item.category, item.findings, item.impact])
+      .join(" ")
+  );
+
+  const appendedConcerns: string[] = [];
+  const appendedInsightLines: string[] = [];
+
+  for (const marker of markers) {
+    const markerKey = normalizeForMatch(marker.marker);
+    const concernLine = buildVerifiedConcern(marker);
+    const concernKey = normalizeForMatch(concernLine);
+
+    const alreadyCovered =
+      [...existingConcernText].some((item) => item.includes(markerKey) || markerKey.includes(item)) ||
+      existingInsightText.includes(markerKey);
+
+    if (!alreadyCovered && !existingConcernText.has(concernKey)) {
+      existingConcernText.add(concernKey);
+      appendedConcerns.push(concernLine);
+      appendedInsightLines.push(
+        `${marker.panel ? `${marker.panel}: ` : ""}${marker.marker}${marker.value ? ` ${marker.value}` : ""}${marker.referenceRange ? ` (reference ${marker.referenceRange})` : ""}`
+      );
+    }
+  }
+
+  if (appendedConcerns.length === 0) {
+    return analysis;
+  }
+
+  return {
+    ...analysis,
+    concerns: [...analysis.concerns, ...appendedConcerns],
+    detailedInsights: [
+      ...analysis.detailedInsights,
+      {
+        category: "Additional abnormal markers",
+        findings: appendedInsightLines.join("; "),
+        impact: "Added by verification pass to ensure less-prominent out-of-range markers are not omitted."
+      }
+    ]
+  };
+};
+
+const verifyAbnormalMarkersCoverage = async (
+  reportContent: unknown,
+  language: Language
+): Promise<VerifiedAbnormalMarker[]> => {
+  const response = await createChatCompletion({
+    model: ANALYSIS_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          `You are a bloodwork verification engine. Your only job is to find every abnormal, flagged, out-of-range, starred, H/L, or otherwise non-normal marker in the provided report. ${getLanguageInstruction(language)} Return valid JSON only.`
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Review the full report exhaustively.
+
+${BLOODWORK_EXTRACTION_RULES}
+
+Return JSON with this exact shape:
+{
+  "abnormalMarkers": [
+    {
+      "panel": "panel name if known",
+      "marker": "marker name",
+      "value": "reported value",
+      "referenceRange": "printed reference range if visible",
+      "abnormalDirection": "high|low|abnormal|flagged",
+      "note": "short note if range is partially obscured or marker is visually flagged"
+    }
+  ]
+}
+
+Rules:
+- Include every abnormal or flagged marker you can find.
+- Do not include normal markers.
+- If the same marker appears twice, keep the clearest entry.
+- If range visibility is partial, still include the marker.`
+          },
+          ...(Array.isArray(reportContent) ? reportContent : [reportContent])
+        ]
+      }
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) return [];
+
+  const parsed = JSON.parse(content) as { abnormalMarkers?: VerifiedAbnormalMarker[] };
+  return (parsed.abnormalMarkers || []).filter((marker) => typeof marker?.marker === "string" && marker.marker.trim().length > 0);
 };
 
 /**
@@ -477,6 +629,7 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
   try {
     // Convert PDF to images
     const images = await pdfToImages(file);
+    const extractedPdfText = await extractTextFromPdf(file).catch(() => "");
 
     if (images.length === 0) {
       throw new Error("No pages found in PDF");
@@ -495,6 +648,20 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
     if (cached) {
       return cached;
     }
+
+    const verificationReportContent = [
+      {
+        type: "text" as const,
+        text: `PDF bloodwork report for verification.\n\nOCR text:\n${extractedPdfText || "No OCR text available"}`
+      },
+      ...allPages.map((pageImage) => ({
+        type: "image_url" as const,
+        image_url: {
+          url: `data:image/jpeg;base64,${pageImage}`,
+          detail: "high" as const
+        }
+      }))
+    ];
 
     const response = await createChatCompletion({
       model: ANALYSIS_MODEL,
@@ -520,9 +687,10 @@ Please provide:
 4. Specific nutrition recommendations from our list that would address any deficiencies or support optimal health
 5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
 
-Before giving recommendations, confirm you checked common lipid/metabolic markers if present: LDL, HDL, total cholesterol, triglycerides (TG), non-HDL, ApoB, glucose, HbA1c. If any of these are missing from the report, explicitly note them as "missing/unreported".
+${BLOODWORK_EXTRACTION_RULES}
 
-Before giving recommendations, confirm you checked common lipid/metabolic markers if present: LDL, HDL, total cholesterol, triglycerides (TG), non-HDL, ApoB, glucose, HbA1c. If any of these are missing from the report, explicitly note them as "missing/unreported".
+OCR-EXTRACTED PDF TEXT (may be incomplete, use to cross-check tables and units):
+${extractedPdfText || "No OCR text available"}
 
 Before giving recommendations, confirm you checked common lipid/metabolic markers if present: LDL, HDL, total cholesterol, triglycerides (TG), non-HDL, ApoB, glucose, HbA1c. If any of these are missing from the report, explicitly note them as "missing/unreported".
 
@@ -593,7 +761,8 @@ ${getLanguageInstruction(language)}`
             ...allPages.map((pageImage) => ({
               type: "image_url" as const,
               image_url: {
-                url: `data:image/jpeg;base64,${pageImage}`
+                url: `data:image/jpeg;base64,${pageImage}`,
+                detail: "high"
               }
             }))
           ]
@@ -610,7 +779,8 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const normalized = normalizeRecommendations(analysis);
+    const verifiedMarkers = await verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []);
+    const normalized = normalizeRecommendations(mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers));
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
     return localized;
@@ -659,6 +829,20 @@ export async function analyzeBloodworkFile(
   }
 
   try {
+    const verificationReportContent = [
+      {
+        type: "text" as const,
+        text: "Single bloodwork report image for abnormal-marker verification."
+      },
+      {
+        type: "image_url" as const,
+        image_url: {
+          url: `data:${imageFormat};base64,${base64Image}`,
+          detail: "high" as const
+        }
+      }
+    ];
+
     const response = await createChatCompletion({
       model: ANALYSIS_MODEL,
       messages: [
@@ -682,6 +866,8 @@ Please provide:
 3. Positive findings or strengths (ONLY values clearly within healthy ranges)
 4. Specific nutrition recommendations from our list that would address any deficiencies or support optimal health
 5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
+
+${BLOODWORK_EXTRACTION_RULES}
 
 Use layman-friendly language (avoid medical jargon, define any necessary terms).
 
@@ -749,7 +935,8 @@ ${getLanguageInstruction(language)}`
             {
               type: "image_url",
               image_url: {
-                url: `data:${imageFormat};base64,${base64Image}`
+                url: `data:${imageFormat};base64,${base64Image}`,
+                detail: "high"
               }
             }
           ]
@@ -766,7 +953,8 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const normalized = normalizeRecommendations(analysis);
+    const verifiedMarkers = await verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []);
+    const normalized = normalizeRecommendations(mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers));
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
     return localized;
@@ -813,9 +1001,17 @@ export async function analyzeBloodworkImages(
     }
     return {
       type: "image_url" as const,
-      image_url: { url: `data:${imageFormat};base64,${img.base64}` }
+      image_url: { url: `data:${imageFormat};base64,${img.base64}`, detail: "high" }
     };
   });
+
+  const verificationReportContent = [
+    {
+      type: "text" as const,
+      text: "Multi-image bloodwork report for abnormal-marker verification."
+    },
+    ...imageParts
+  ];
 
   try {
     const response = await createChatCompletion({
@@ -841,6 +1037,8 @@ Please provide:
 3. Positive findings or strengths (ONLY values clearly within healthy ranges)
 4. Specific nutrition recommendations from our list that would address any deficiencies or support optimal health
 5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
+
+${BLOODWORK_EXTRACTION_RULES}
 
 Use layman-friendly language (avoid medical jargon, define any necessary terms).
 
@@ -903,7 +1101,8 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const normalized = normalizeRecommendations(analysis);
+    const verifiedMarkers = await verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []);
+    const normalized = normalizeRecommendations(mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers));
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
     return localized;
