@@ -762,7 +762,13 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
     setQuestionnaireDismissed(true);
     setMessages(prev => [
       ...prev,
-      { role: "user", content: text.declineQuestionnaire }
+      { role: "user", content: text.declineQuestionnaire },
+      {
+        role: "assistant",
+        content: isChinese
+          ? "å¥½çš„ï¼Œæˆ‘ä»¬å¯ä»¥ç›´æŽ¥ç»§ç»­èŠå¤©ã€‚å‘Šè¯‰æˆ‘ä½ æƒ³äº†è§£çš„å¥åº·æˆ–è¥å…»é—®é¢˜å§ã€‚"
+          : "No problem, we can continue without the questionnaire. Ask me any health or nutrition question whenever you're ready."
+      }
     ]);
   };
 
