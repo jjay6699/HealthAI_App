@@ -195,6 +195,10 @@ const getGoogleOAuthClient = () => {
   return new OAuth2Client({ clientId, clientSecret, redirectUri });
 };
 
+const DEMO_EMAIL = "demo@newgene.app";
+const DEMO_PASSWORD = "DemoPass!1";
+const DEMO_NAME = "Demo User";
+
 const normalizeEmail = (value) => (typeof value === "string" ? value.trim().toLowerCase() : "");
 const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const isStrongEnoughPassword = (value) =>
@@ -218,6 +222,38 @@ const verifyPassword = async (password, storedHash) => {
   const derivedBuffer = Buffer.from(derived);
   if (storedBuffer.length !== derivedBuffer.length) return false;
   return crypto.timingSafeEqual(storedBuffer, derivedBuffer);
+};
+
+const ensureDemoUser = async () => {
+  const existing = stmtGetPasswordUserByEmail.get(DEMO_EMAIL);
+  if (existing?.provider === "password" && existing?.passwordHash) {
+    return existing;
+  }
+
+  const now = Date.now();
+  const passwordHash = await hashPassword(DEMO_PASSWORD);
+
+  if (existing) {
+    db.prepare(
+      "UPDATE users SET name = ?, provider = ?, providerSub = ?, passwordHash = ?, country = ?, lastLoginAt = ? WHERE id = ?"
+    ).run(DEMO_NAME, "password", DEMO_EMAIL, passwordHash, "Internal", now, existing.id);
+    return stmtGetPasswordUserByEmail.get(DEMO_EMAIL);
+  }
+
+  const userId = crypto.randomUUID();
+  stmtInsertPasswordUser.run(
+    userId,
+    DEMO_EMAIL,
+    DEMO_NAME,
+    null,
+    "password",
+    DEMO_EMAIL,
+    passwordHash,
+    "Internal",
+    now,
+    now
+  );
+  return stmtGetPasswordUserByEmail.get(DEMO_EMAIL);
 };
 
 const getRequestIp = (req) => {
@@ -380,6 +416,24 @@ app.post(
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     if (!isValidEmail(email) || !password) {
       return res.status(400).json({ error: "invalid_login_payload" });
+    }
+
+    if (email === DEMO_EMAIL && password === DEMO_PASSWORD) {
+      const demoUser = await ensureDemoUser();
+      const now = Date.now();
+      stmtUpdatePasswordUserLogin.run(demoUser.name, demoUser.country || null, now, demoUser.id);
+      const { token, expiresAt } = createSessionForUser(demoUser.id);
+      res.cookie(SESSION_COOKIE, token, makeCookieOptions({ maxAge: expiresAt - now }));
+      return res.json({
+        user: {
+          id: demoUser.id,
+          email: demoUser.email,
+          name: demoUser.name,
+          provider: demoUser.provider,
+          createdAt: demoUser.createdAt,
+          lastLoginAt: now
+        }
+      });
     }
 
     const user = stmtGetPasswordUserByEmail.get(email);
