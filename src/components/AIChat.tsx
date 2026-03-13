@@ -164,6 +164,44 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
+      if (file.type.startsWith("image/")) {
+        const objectUrl = URL.createObjectURL(file);
+        const image = new Image();
+
+        image.onload = () => {
+          try {
+            const maxDimension = 1600;
+            const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.max(1, Math.round(image.width * scale));
+            canvas.height = Math.max(1, Math.round(image.height * scale));
+            const context = canvas.getContext("2d");
+
+            if (!context) {
+              URL.revokeObjectURL(objectUrl);
+              reject(new Error("Canvas not available"));
+              return;
+            }
+
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+            URL.revokeObjectURL(objectUrl);
+            resolve(dataUrl.split(",")[1]);
+          } catch (error) {
+            URL.revokeObjectURL(objectUrl);
+            reject(error);
+          }
+        };
+
+        image.onerror = (error) => {
+          URL.revokeObjectURL(objectUrl);
+          reject(error);
+        };
+
+        image.src = objectUrl;
+        return;
+      }
+
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = () => {
