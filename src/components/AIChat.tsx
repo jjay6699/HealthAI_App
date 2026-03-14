@@ -3,18 +3,26 @@ import { useNavigate } from "react-router-dom";
 import { useI18n } from "../i18n";
 import { useTheme } from "../theme";
 import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
+import { CHAT_RECOMMENDATION_CATEGORIES } from "../data/chatRecommendationProfiles";
 import {
   analyzeBloodworkFile,
   analyzeBloodworkPdf,
   analyzeBloodworkImages,
   generateSupplementRecommendationsFromContext,
-  localizeAssistantText
+  localizeAssistantText,
+  type BloodworkAnalysis,
+  type SupplementRecommendation
 } from "../services/openai";
 import { persistentStorage } from "../services/persistentStorage";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+}
+
+interface RecommendationCardState {
+  summary: string;
+  recommendations: SupplementRecommendation[];
 }
 
 interface AIChatProps {
@@ -49,6 +57,191 @@ const normalizeLocalizedObject = <T extends Record<string, unknown>>(input: T): 
       return [key, value];
     })
   ) as T;
+
+const getSupplementById = (id: string) => AVAILABLE_SUPPLEMENTS.find((supplement) => supplement.id === id);
+
+const URGENT_SYMPTOM_PATTERNS = [
+  /\b(chest pain|shortness of breath|difficulty breathing|fainting|severe bleeding|blood in stool|vomiting blood|stroke|seizure|severe abdominal pain|high fever|suicidal|passed out|loss of consciousness)\b/i,
+  /胸痛|呼吸困难|晕倒|大量出血|便血|吐血|中风|癫痫|剧烈腹痛|高烧|失去意识/
+];
+
+const CATEGORY_EXCLUSIONS: Array<{
+  patterns: RegExp[];
+  removeCategories?: string[];
+  removeSupplements?: string[];
+}> = [
+  {
+    patterns: [/\b(diarrhea|diarrhoea|loose stool|watery stool|vomiting|stomach flu)\b/i, /腹泻|拉肚子|水样便|呕吐/],
+    removeCategories: ["digestive-constipation"],
+    removeSupplements: ["organic-psyllium-husk", "chia-seed", "australian-instant-oats", "baobab-powder"]
+  },
+  {
+    patterns: [/\b(anxiety|anxious|panic|palpitations|racing heart|jitters)\b/i, /焦虑|惊恐|心悸|心跳快/],
+    removeSupplements: ["matcha-powder"]
+  },
+  {
+    patterns: [/\b(insomnia|can't sleep|cannot sleep|trouble sleeping|poor sleep|sleep problem)\b/i, /失眠|睡不着|睡眠差/],
+    removeSupplements: ["matcha-powder", "beetroot-powder"]
+  },
+  {
+    patterns: [/\b(acid reflux|heartburn|gerd)\b/i, /反酸|烧心/],
+    removeSupplements: ["chia-seed", "organic-psyllium-husk"]
+  }
+];
+
+const normalizeSymptomText = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/shoulder and neck pain/g, "shoulder pain neck pain")
+    .replace(/stomach pains/g, "stomach pain")
+    .replace(/body aches/g, "body ache")
+    .replace(/joint aches/g, "joint pain")
+    .replace(/brainfog/g, "brain fog")
+    .replace(/胃痛/g, " stomach pain ")
+    .replace(/肚子痛/g, " stomach pain ")
+    .replace(/腹痛/g, " stomach pain ")
+    .replace(/胃胀/g, " bloating ")
+    .replace(/消化不良/g, " indigestion ")
+    .replace(/恶心/g, " nausea ")
+    .replace(/反酸/g, " acid reflux ")
+    .replace(/颈痛/g, " neck pain ")
+    .replace(/肩痛/g, " shoulder pain ")
+    .replace(/背痛/g, " back pain ")
+    .replace(/关节痛/g, " joint pain ")
+    .replace(/肌肉痛/g, " muscle pain ")
+    .replace(/发炎/g, " inflammation ")
+    .replace(/肿胀/g, " swelling ")
+    .replace(/便秘/g, " constipation ")
+    .replace(/肠胃/g, " gut ")
+    .replace(/疲劳/g, " fatigue ")
+    .replace(/没精神/g, " low energy ")
+    .replace(/低能量/g, " low energy ")
+    .replace(/脑雾/g, " brain fog ")
+    .replace(/血糖/g, " blood sugar ")
+    .replace(/免疫力/g, " immunity ")
+    .replace(/感冒/g, " cold ")
+    .replace(/皮肤/g, " skin ")
+    .replace(/心脏/g, " heart health ")
+    .replace(/记忆力/g, " memory ")
+    .replace(/专注/g, " focus ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const buildSymptomRecommendations = (
+  content: string,
+  isChinese: boolean
+): RecommendationCardState | null => {
+  const normalizedContent = normalizeSymptomText(content);
+
+  if (URGENT_SYMPTOM_PATTERNS.some((pattern) => pattern.test(content))) {
+    return null;
+  }
+
+  const excludedCategoryIds = new Set<string>();
+  const excludedSupplementIds = new Set<string>();
+
+  CATEGORY_EXCLUSIONS.forEach((rule) => {
+    if (!rule.patterns.some((pattern) => pattern.test(content))) return;
+    rule.removeCategories?.forEach((categoryId) => excludedCategoryIds.add(categoryId));
+    rule.removeSupplements?.forEach((supplementId) => excludedSupplementIds.add(supplementId));
+  });
+
+  const matchedCategories = CHAT_RECOMMENDATION_CATEGORIES.map((category) => {
+    if (excludedCategoryIds.has(category.id)) {
+      return { category, score: 0, matchedTriggers: [] as string[] };
+    }
+    const matchedTriggers = category.triggers.filter((trigger) => normalizedContent.includes(trigger));
+    return { category, score: matchedTriggers.length, matchedTriggers };
+  })
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      return right.category.recommendations.length - left.category.recommendations.length;
+    });
+
+  const recommendationMap = new Map<
+    string,
+    SupplementRecommendation & { score: number; categoryLabels: string[] }
+  >();
+
+  matchedCategories.slice(0, 2).forEach(({ category, score }) => {
+    category.recommendations.forEach((item) => {
+      if (excludedSupplementIds.has(item.supplementId)) return;
+      const supplement = getSupplementById(item.supplementId);
+      if (!supplement) return;
+
+      const existing = recommendationMap.get(item.supplementId);
+      const priorityWeight = { high: 3, medium: 2, low: 1 };
+
+      if (!existing) {
+        recommendationMap.set(item.supplementId, {
+          supplementId: supplement.id,
+          supplementName: supplement.name,
+          reason: item.reason,
+          priority: item.priority,
+          dosage: item.dosage,
+          score: score * 10 + priorityWeight[item.priority],
+          categoryLabels: [category.label]
+        });
+        return;
+      }
+
+      existing.score += score * 10 + priorityWeight[item.priority];
+      existing.categoryLabels = Array.from(new Set([...existing.categoryLabels, category.label]));
+      if (priorityWeight[item.priority] > priorityWeight[existing.priority]) {
+        existing.priority = item.priority;
+        existing.reason = item.reason;
+        existing.dosage = item.dosage;
+      }
+    });
+  });
+
+  const recommendations = Array.from(recommendationMap.values())
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 3)
+    .map(({ score: _score, categoryLabels, ...recommendation }) => ({
+      ...recommendation,
+      reason: isChinese
+        ? "根据你提到的症状，可能适合作为日常支持。"
+        : `${recommendation.reason} Relevant for: ${categoryLabels.slice(0, 2).join(" and ")}.`
+    }));
+
+  if (recommendations.length === 0) return null;
+
+  return {
+    summary: isChinese
+      ? "我根据你提到的症状整理了可查看的产品建议。"
+      : "I matched products from your catalog based on the exact symptom type you described.",
+    recommendations
+  };
+};
+
+const persistChatRecommendations = (card: RecommendationCardState, userInput: string) => {
+  const analysis: BloodworkAnalysis = {
+    summary: card.summary,
+    concerns: [userInput],
+    strengths: [],
+    recommendations: card.recommendations,
+    detailedInsights: [
+      {
+        category: "AI chat symptom matching",
+        findings: userInput,
+        impact: card.summary
+      }
+    ]
+  };
+
+  persistentStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
+  persistentStorage.setItem(
+    "bloodworkAnalysisMeta",
+    JSON.stringify({
+      uploadedAt: new Date().toISOString(),
+      fileName: "AI chat symptom recommendation",
+      fileType: "chat-symptom-match",
+      fileSize: userInput.length
+    })
+  );
+};
 
 const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const theme = useTheme();
@@ -98,6 +291,11 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
       : "Based on the image issue I just analyzed, I can suggest suitable supplements for support.",
     supplementPromptYes: isChinese ? "\u67e5\u770b\u5efa\u8bae" : "View suggestions",
     supplementPromptNo: isChinese ? "\u6682\u65f6\u4e0d\u7528" : "Not now",
+    chatRecommendationTitle: isChinese ? "\u4ea7\u54c1\u5efa\u8bae" : "Product recommendations",
+    chatRecommendationButton: isChinese ? "\u67e5\u770b\u5efa\u8bae" : "View recommendations",
+    chatRecommendationDisclaimer: isChinese
+      ? "\u5982\u679c\u75c7\u72b6\u6301\u7eed\u6216\u52a0\u91cd\uff0c\u8bf7\u5c3d\u5feb\u54a8\u8be2\u533b\u7597\u4e13\u4e1a\u4eba\u58eb\u3002"
+      : "If the issue persists or gets worse, please see a medical professional.",
     supplementSuggestionError: isChinese
       ? "\u751f\u6210\u8425\u517b\u5efa\u8bae\u65f6\u51fa\u73b0\u9519\u8bef\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002"
       : "I ran into an error generating supplement suggestions. Please try again later.",
@@ -151,6 +349,8 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const [questionnaireCompleted, setQuestionnaireCompleted] = useState(false);
   const [questionnaireDismissed, setQuestionnaireDismissed] = useState(false);
   const [imageAnalysisSummary, setImageAnalysisSummary] = useState("");
+  const [chatRecommendations, setChatRecommendations] = useState<RecommendationCardState | null>(null);
+  const [lastSymptomQuery, setLastSymptomQuery] = useState("");
   const [questionnaire, setQuestionnaire] = useState({
     eligibility18Plus: "",
     ageRange: "",
@@ -180,7 +380,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, chatRecommendations, showUploadPrompt, showSupplementPrompt, showQuestionnairePrompt, questionnaireActive]);
 
   useEffect(() => {
     setMessages((prev) => {
@@ -431,6 +631,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
 
   const sendMessageToAI = async (content: string) => {
     setIsLoading(true);
+    setChatRecommendations(null);
 
     try {
       console.log("Sending message to OpenAI:", content);
@@ -481,6 +682,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      setChatRecommendations(buildSymptomRecommendations(content, isChinese));
     } catch (error) {
       console.error("Error calling OpenAI:", error);
       console.error("Error details:", JSON.stringify(error, null, 2));
@@ -494,12 +696,19 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
     }
   };
 
+  const handleViewChatRecommendations = () => {
+    if (!chatRecommendations) return;
+    persistChatRecommendations(chatRecommendations, lastSymptomQuery);
+    navigate("/supplements");
+  };
+
   const handleSend = async () => {
     if ((!input.trim() && !uploadedFile) || isLoading) return;
 
     const userMessage: Message = { role: "user", content: input };
     setMessages(prev => [...prev, userMessage]);
     const currentInput = input;
+    setLastSymptomQuery(currentInput);
     setInput("");
 
     const isGreeting = /^(hi|hello|hey|good morning|good afternoon|good evening|你好|您好)\b/i.test(currentInput.trim());
@@ -1286,6 +1495,28 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
               </div>
             </div>
           )}
+          {chatRecommendations && (
+            <div style={{ display: "flex", justifyContent: "flex-start" }}>
+              <div style={styles.questionnaireCard}>
+                <p style={styles.questionnaireTitle}>{text.chatRecommendationTitle}</p>
+                <p style={styles.helperText}>{chatRecommendations.summary}</p>
+                <div style={styles.recommendationList}>
+                  {chatRecommendations.recommendations.map((recommendation) => (
+                    <div key={recommendation.supplementId} style={styles.recommendationItem}>
+                      <span style={styles.recommendationName}>{recommendation.supplementName}</span>
+                      <span style={styles.recommendationReason}>{recommendation.reason}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={styles.questionnaireActions}>
+                  <button onClick={handleViewChatRecommendations} style={styles.primaryButton}>
+                    {text.chatRecommendationButton}
+                  </button>
+                </div>
+                <p style={styles.disclaimerText}>{text.chatRecommendationDisclaimer}</p>
+              </div>
+            </div>
+          )}
           {questionnaireActive && (
             <div style={{ display: "flex", justifyContent: "flex-start" }}>
               <div style={styles.questionnaireCard}>
@@ -1494,6 +1725,34 @@ const styles = {
   helperText: {
     margin: 0,
     fontSize: 12,
+    color: "#6B7280"
+  },
+  recommendationList: {
+    display: "grid",
+    gap: 10
+  },
+  recommendationItem: {
+    display: "grid",
+    gap: 4,
+    padding: 12,
+    borderRadius: 12,
+    background: "#F9FAFB",
+    border: "1px solid #E5E7EB"
+  },
+  recommendationName: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: "#111827"
+  },
+  recommendationReason: {
+    fontSize: 13,
+    lineHeight: "18px",
+    color: "#4B5563"
+  },
+  disclaimerText: {
+    margin: 0,
+    fontSize: 12,
+    lineHeight: "18px",
     color: "#6B7280"
   }
 } as const;
