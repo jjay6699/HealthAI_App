@@ -85,7 +85,8 @@ dist
 
 # Local SQLite (used by server/index.js)
 data/
+!src/data/
+!src/data/*.ts
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
-
