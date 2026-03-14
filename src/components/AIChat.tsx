@@ -899,6 +899,7 @@ IMPORTANT: When users ask about:
 You should PROACTIVELY suggest: "For the most accurate and personalized recommendations, I'd suggest uploading your bloodwork using the 📎 attachment button below. This will allow me to analyze your specific biomarkers and provide tailored advice."
 
 If users mention bloodwork values or health concerns, provide specific advice. Be friendly, clear, and helpful.
+Keep replies concise but complete, and always finish the last sentence cleanly.
 
 If you need more context before giving tailored guidance, ask: "${text.personalizePrompt}"
 
@@ -910,7 +911,7 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
           { role: "user", content: `${content}\n\nQuestionnaire completed: ${questionnaireCompleted ? "yes" : "no"}` }
         ],
         temperature: 0.7,
-        max_tokens: 500
+        max_tokens: 900
       });
 
       console.log("OpenAI response:", response);
