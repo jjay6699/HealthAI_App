@@ -657,16 +657,42 @@ const ProfileScreen = () => {
     return sorted[0].value;
   }, [glucoseHistory, profile.fastingGlucose]);
 
+  const profileSummaryInput = useMemo(
+    () => ({
+      name: profile.name,
+      dob: profile.dob || undefined,
+      gender: profile.gender || undefined,
+      heightCm: profile.height > 0 ? profile.height : undefined,
+      weightKg: profile.weight > 0 ? profile.weight : undefined,
+      activityLevel: profile.activityLevel || undefined,
+      exerciseDays: profile.exerciseDays > 0 ? profile.exerciseDays : undefined,
+      minutesPerSession: profile.minutesPerSession > 0 ? profile.minutesPerSession : undefined,
+      sleepDuration: profile.sleepDuration || undefined,
+      stressLevel: profile.stressLevel || undefined,
+      bloodPressure: latestBpValue || undefined,
+      fastingGlucoseMmolL: latestGlucoseValue > 0 ? latestGlucoseValue : undefined,
+      hba1c: profile.hba1c > 0 ? profile.hba1c : undefined,
+      restingHeartRate: profile.restingHeartRate > 0 ? profile.restingHeartRate : undefined,
+      waistCircumferenceCm: profile.waistCircumference > 0 ? profile.waistCircumference : undefined,
+      bodyFatPercent: profile.bodyFat > 0 ? profile.bodyFat : undefined,
+      dietPattern: profile.dietPattern || undefined,
+      mealsPerDay: profile.mealsPerDay > 0 ? profile.mealsPerDay : undefined,
+      caffeineIntake: profile.caffeineIntake || undefined,
+      waterIntakeCups: profile.waterIntake > 0 ? profile.waterIntake : undefined,
+      allergies: profile.allergies || undefined,
+      conditions: profile.conditions || undefined,
+      medications: profile.medications || undefined,
+      supplements: profile.supplements || undefined,
+      topPriorities: profile.topPriorities || undefined
+    }),
+    [latestBpValue, latestGlucoseValue, profile]
+  );
+
   const fetchProfileSummary = async () => {
     setIsAiSummaryLoading(true);
     setAiSummaryError("");
     try {
-      const result = await generateProfileSummary({
-        name: profile.name,
-        weightKg: profile.weight > 0 ? profile.weight : undefined,
-        bloodPressure: latestBpValue || undefined,
-        fastingGlucoseMmolL: latestGlucoseValue > 0 ? latestGlucoseValue : undefined
-      });
+      const result = await generateProfileSummary(profileSummaryInput);
       setAiSummary(result.summary);
       setAiMotivation(result.motivation);
     } catch {
@@ -705,16 +731,13 @@ const ProfileScreen = () => {
   }, [language]);
 
   useEffect(() => {
-    const hasData =
-      Boolean(profile.name.trim()) ||
-      profile.weight > 0 ||
-      Boolean(latestBpValue) ||
-      latestGlucoseValue > 0;
+    const hasData = Object.values(profileSummaryInput).some((value) => {
+      if (typeof value === "number") return value > 0;
+      return Boolean(value);
+    });
     if (!hasData) return;
     fetchProfileSummary();
-    // Only rerun when the core summary inputs change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile.name, profile.weight, latestBpValue, latestGlucoseValue, language]);
+  }, [profileSummaryInput, language]);
 
   return (
     <div style={styles.page}>

@@ -1168,9 +1168,30 @@ Provide clear, actionable insights that are easy to understand.`;
 
 export interface DailyProfileSummaryInput {
   name: string;
+  dob?: string;
+  gender?: string;
+  heightCm?: number;
   weightKg?: number;
+  activityLevel?: string;
+  exerciseDays?: number;
+  minutesPerSession?: number;
+  sleepDuration?: string;
+  stressLevel?: string;
   bloodPressure?: string;
   fastingGlucoseMmolL?: number;
+  hba1c?: number;
+  restingHeartRate?: number;
+  waistCircumferenceCm?: number;
+  bodyFatPercent?: number;
+  dietPattern?: string;
+  mealsPerDay?: number;
+  caffeineIntake?: string;
+  waterIntakeCups?: number;
+  allergies?: string;
+  conditions?: string;
+  medications?: string;
+  supplements?: string;
+  topPriorities?: string;
 }
 
 export interface DailyProfileSummary {
@@ -1640,9 +1661,30 @@ export async function generateProfileSummary(
 
 PROFILE:
 - Name: ${input.name || "Unknown"}
+- Date of birth: ${input.dob?.trim() || "Not provided"}
+- Gender: ${input.gender?.trim() || "Not provided"}
+- Height: ${input.heightCm && input.heightCm > 0 ? `${input.heightCm} cm` : "Not provided"}
 - Weight: ${input.weightKg && input.weightKg > 0 ? `${input.weightKg} kg` : "Not provided"}
+- Activity level: ${input.activityLevel?.trim() || "Not provided"}
+- Exercise days per week: ${input.exerciseDays && input.exerciseDays > 0 ? input.exerciseDays : "Not provided"}
+- Minutes per session: ${input.minutesPerSession && input.minutesPerSession > 0 ? input.minutesPerSession : "Not provided"}
+- Sleep duration: ${input.sleepDuration?.trim() || "Not provided"}
+- Stress level: ${input.stressLevel?.trim() || "Not provided"}
 - Blood pressure: ${input.bloodPressure?.trim() || "Not provided"}
 - Fasting glucose: ${input.fastingGlucoseMmolL && input.fastingGlucoseMmolL > 0 ? `${input.fastingGlucoseMmolL} mmol/L` : "Not provided"}
+- HbA1c: ${input.hba1c && input.hba1c > 0 ? `${input.hba1c}%` : "Not provided"}
+- Resting heart rate: ${input.restingHeartRate && input.restingHeartRate > 0 ? `${input.restingHeartRate} bpm` : "Not provided"}
+- Waist circumference: ${input.waistCircumferenceCm && input.waistCircumferenceCm > 0 ? `${input.waistCircumferenceCm} cm` : "Not provided"}
+- Body fat: ${input.bodyFatPercent && input.bodyFatPercent > 0 ? `${input.bodyFatPercent}%` : "Not provided"}
+- Diet pattern: ${input.dietPattern?.trim() || "Not provided"}
+- Meals per day: ${input.mealsPerDay && input.mealsPerDay > 0 ? input.mealsPerDay : "Not provided"}
+- Caffeine intake: ${input.caffeineIntake?.trim() || "Not provided"}
+- Water intake: ${input.waterIntakeCups && input.waterIntakeCups > 0 ? `${input.waterIntakeCups} cups/day` : "Not provided"}
+- Allergies: ${input.allergies?.trim() || "Not provided"}
+- Conditions: ${input.conditions?.trim() || "Not provided"}
+- Medications: ${input.medications?.trim() || "Not provided"}
+- Current supplements: ${input.supplements?.trim() || "Not provided"}
+- Top priorities: ${input.topPriorities?.trim() || "Not provided"}
 
 Requirements:
 - Keep language plain and supportive.
