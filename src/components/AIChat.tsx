@@ -8,6 +8,7 @@ import {
   analyzeBloodworkFile,
   analyzeBloodworkPdf,
   analyzeBloodworkImages,
+  generateChatSupplementRecommendations,
   generateSupplementRecommendationsFromContext,
   localizeAssistantText,
   type BloodworkAnalysis,
@@ -93,10 +94,17 @@ const normalizeSymptomText = (value: string) =>
   value
     .toLowerCase()
     .replace(/shoulder and neck pain/g, "shoulder pain neck pain")
+    .replace(/neck and shoulder pain/g, "neck pain shoulder pain")
     .replace(/stomach pains/g, "stomach pain")
     .replace(/body aches/g, "body ache")
     .replace(/joint aches/g, "joint pain")
     .replace(/brainfog/g, "brain fog")
+    .replace(/migraines/g, "migraine")
+    .replace(/head aches/g, "headache")
+    .replace(/back of my head/g, "pain at the back of my head")
+    .replace(/back of head/g, "pain at the back of my head")
+    .replace(/rear of my head/g, "pain at the back of my head")
+    .replace(/tension in my head/g, "tension headache")
     .replace(/胃痛/g, " stomach pain ")
     .replace(/肚子痛/g, " stomach pain ")
     .replace(/腹痛/g, " stomach pain ")
@@ -124,6 +132,12 @@ const normalizeSymptomText = (value: string) =>
     .replace(/心脏/g, " heart health ")
     .replace(/记忆力/g, " memory ")
     .replace(/专注/g, " focus ")
+    .replace(/头痛/g, " headache ")
+    .replace(/偏头痛/g, " migraine ")
+    .replace(/后脑勺痛/g, " pain at the back of my head ")
+    .replace(/后脑痛/g, " pain at the back of my head ")
+    .replace(/紧张性头痛/g, " tension headache ")
+    .replace(/压力大/g, " stress ")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -682,7 +696,20 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-      setChatRecommendations(buildSymptomRecommendations(content, isChinese));
+
+      try {
+        const aiRecommendations = await generateChatSupplementRecommendations({
+          userMessage: content,
+          assistantReply: localizedContent,
+          conversationContext: messages.slice(-4).map((message) => `${message.role}: ${message.content}`),
+          language
+        });
+
+        setChatRecommendations(aiRecommendations ?? buildSymptomRecommendations(content, isChinese));
+      } catch (recommendationError) {
+        console.error("Error generating AI chat recommendations:", recommendationError);
+        setChatRecommendations(buildSymptomRecommendations(content, isChinese));
+      }
     } catch (error) {
       console.error("Error calling OpenAI:", error);
       console.error("Error details:", JSON.stringify(error, null, 2));

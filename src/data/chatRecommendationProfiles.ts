@@ -108,6 +108,40 @@ export const CHAT_RECOMMENDATION_CATEGORIES: ChatRecommendationCategory[] = [
     ]
   },
   {
+    id: "headache-migraine",
+    label: "headache or migraine support",
+    triggers: [
+      "migraine",
+      "migraines",
+      "headache",
+      "head pain",
+      "pain at the back of my head",
+      "back of my head",
+      "occipital",
+      "tension headache"
+    ],
+    recommendations: [
+      {
+        supplementId: "turmeric-powder",
+        priority: "high",
+        reason: "May support healthy inflammation balance for tension-related head or neck discomfort.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "blueberry-powder",
+        priority: "medium",
+        reason: "May support antioxidant and brain-focused wellness.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "beetroot-powder",
+        priority: "medium",
+        reason: "May support circulation and overall head and neck wellness.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
     id: "pain-joint-muscle",
     label: "joint or muscle discomfort",
     triggers: ["joint pain", "muscle pain", "body ache", "stiffness", "swelling", "inflammation", "back pain"],
@@ -129,6 +163,31 @@ export const CHAT_RECOMMENDATION_CATEGORIES: ChatRecommendationCategory[] = [
         priority: "medium",
         reason: "May support muscle maintenance and recovery if intake is low.",
         dosage: "Start with 20-30g per day"
+      }
+    ]
+  },
+  {
+    id: "stress-tension",
+    label: "stress or tension support",
+    triggers: ["stress", "stressed", "tension", "tense", "burnout", "overwhelmed"],
+    recommendations: [
+      {
+        supplementId: "maca-powder",
+        priority: "medium",
+        reason: "May support resilience and steady daily energy during stressful periods.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "cacao-powder",
+        priority: "medium",
+        reason: "May support mood and antioxidant intake during high-stress periods.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "natural-cocoa-powder",
+        priority: "low",
+        reason: "May support mood and general wellbeing as a cocoa-based option.",
+        dosage: "Start with 5-10g per day"
       }
     ]
   },

@@ -1,4 +1,5 @@
 import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
+import { SUPPLEMENT_DESCRIPTIONS } from "../data/supplementDescriptions";
 import { pdfToImages, extractTextFromPdf } from "../utils/pdfProcessor";
 import { persistentStorage } from "./persistentStorage";
 import type { Language } from "../i18n";
@@ -1183,6 +1184,11 @@ export interface SupplementContentTranslation {
   description?: string;
 }
 
+export interface ChatSupplementRecommendationResult {
+  summary: string;
+  recommendations: SupplementRecommendation[];
+}
+
 export async function localizeAssistantText(
   content: string,
   language: Language
@@ -1234,6 +1240,183 @@ export async function localizeAssistantText(
   }
 
   return translated;
+}
+
+export async function generateChatSupplementRecommendations(input: {
+  userMessage: string;
+  assistantReply?: string;
+  conversationContext?: string[];
+  language?: Language;
+}): Promise<ChatSupplementRecommendationResult | null> {
+  const language = input.language ?? getCurrentLanguage();
+  const cacheKey = buildAnalysisCacheKey("chat-symptom-recommendations", {
+    userMessage: input.userMessage,
+    assistantReply: input.assistantReply || "",
+    conversationContext: input.conversationContext || [],
+    supplementIds: AVAILABLE_SUPPLEMENTS.map((supplement) => supplement.id),
+    language
+  });
+
+  if (typeof window !== "undefined") {
+    try {
+      const cached = persistentStorage.getItem(cacheKey);
+      if (cached) {
+        return JSON.parse(cached) as ChatSupplementRecommendationResult | null;
+      }
+    } catch {
+      // Ignore cache issues.
+    }
+  }
+
+  const catalog = AVAILABLE_SUPPLEMENTS.map((supplement) => ({
+    supplementId: supplement.id,
+    supplementName: supplement.name,
+    benefits: supplement.benefits,
+    keyNutrients: supplement.keyNutrients,
+    description: SUPPLEMENT_DESCRIPTIONS[supplement.id] || ""
+  }));
+
+  const response = await createChatCompletion({
+    model: ANALYSIS_MODEL,
+    messages: [
+      {
+        role: "system",
+        content: `You are a cautious nutrition product recommendation engine for an AI health chat. ${getLanguageInstruction(language)}
+
+Your job:
+- Read the user's situation semantically, not by exact keyword matching.
+- Understand English and Simplified Chinese symptom descriptions, paraphrases, and implied context.
+- Cross-check the user's situation ONLY against the provided product catalog.
+- Recommend products only when there is a reasonable support-oriented fit.
+- Do not diagnose, do not claim treatment, and do not recommend products for emergencies.
+
+Safety rules:
+- If symptoms sound urgent, severe, or medically high-risk, return no product recommendations.
+- If there is no clear product fit from the catalog, return no product recommendations.
+- Avoid energizing products for insomnia, anxiety, palpitations, or similar complaints unless the user is explicitly asking about low energy.
+- Avoid constipation/fiber-forward recommendations for diarrhea, vomiting, or likely acute stomach infection.
+- Keep recommendations conservative and support-oriented.
+
+Return valid JSON only with this exact structure:
+{
+  "shouldRecommend": true,
+  "summary": "short summary in the app language",
+  "recommendations": [
+    {
+      "supplementId": "catalog-id",
+      "supplementName": "Exact Catalog Name",
+      "reason": "short reason in the app language",
+      "priority": "high|medium|low",
+      "dosage": "short dosage guidance"
+    }
+  ]
+}`
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          userMessage: input.userMessage,
+          assistantReply: input.assistantReply || "",
+          conversationContext: input.conversationContext || [],
+          catalog
+        })
+      }
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0.1,
+    max_tokens: 1200
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) {
+    throw new Error("No chat recommendation response");
+  }
+
+  const parsed = JSON.parse(content) as {
+    shouldRecommend?: boolean;
+    summary?: string;
+    recommendations?: Array<{
+      supplementId?: string;
+      supplementName?: string;
+      reason?: string;
+      priority?: "high" | "medium" | "low";
+      dosage?: string;
+    }>;
+  };
+
+  if (!parsed.shouldRecommend || !Array.isArray(parsed.recommendations) || parsed.recommendations.length === 0) {
+    if (typeof window !== "undefined") {
+      try {
+        persistentStorage.setItem(cacheKey, JSON.stringify(null));
+      } catch {
+        // Ignore storage errors.
+      }
+    }
+    return null;
+  }
+
+  const recommendations = parsed.recommendations
+    .map((recommendation) => {
+      const byId = recommendation.supplementId
+        ? AVAILABLE_SUPPLEMENTS.find((supplement) => supplement.id === recommendation.supplementId)
+        : undefined;
+      const byName = recommendation.supplementName
+        ? AVAILABLE_SUPPLEMENTS.find((supplement) => supplement.name === recommendation.supplementName)
+        : undefined;
+      const supplement = byId || byName;
+      if (!supplement) return null;
+
+      return {
+        supplementId: supplement.id,
+        supplementName: supplement.name,
+        reason: recommendation.reason?.trim() || supplement.benefits[0] || "May offer general support.",
+        priority:
+          recommendation.priority === "high" || recommendation.priority === "low"
+            ? recommendation.priority
+            : "medium",
+        dosage: recommendation.dosage?.trim() || "Start with 5-10g per day"
+      };
+    })
+    .filter(
+      (
+        recommendation
+      ): recommendation is {
+        supplementId: string;
+        supplementName: string;
+        reason: string;
+        priority: "high" | "medium" | "low";
+        dosage: string;
+      } => recommendation !== null
+    )
+    .slice(0, 3);
+
+  if (recommendations.length === 0) {
+    if (typeof window !== "undefined") {
+      try {
+        persistentStorage.setItem(cacheKey, JSON.stringify(null));
+      } catch {
+        // Ignore storage errors.
+      }
+    }
+    return null;
+  }
+
+  const result: ChatSupplementRecommendationResult = {
+    summary: parsed.summary?.trim() || (language === "zh"
+      ? "我根据你的情况和现有产品目录整理了可参考的产品建议。"
+      : "I cross-checked your situation against your catalog and found a few products that may be relevant."),
+    recommendations
+  };
+
+  if (typeof window !== "undefined") {
+    try {
+      persistentStorage.setItem(cacheKey, JSON.stringify(result));
+    } catch {
+      // Ignore storage errors.
+    }
+  }
+
+  return result;
 }
 
 const getCurrentLanguage = (): Language => {
