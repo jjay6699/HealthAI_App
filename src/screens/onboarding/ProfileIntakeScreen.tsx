@@ -13,6 +13,7 @@ type FieldSpec = {
   placeholder?: string;
   type?: React.HTMLInputTypeAttribute;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  step?: number | "any";
   format?: "date";
   options?: string[];
   kind?: "text" | "select" | "multiselect" | "checkbox";
@@ -82,7 +83,7 @@ const steps: {
     description: "Optional vitals add context to your trends.",
     fields: [
       { key: "bloodPressure", label: "Blood pressure", placeholder: "120/80" },
-      { key: "fastingGlucose", label: "Fasting glucose", placeholder: "mg/dL", type: "number", inputMode: "numeric" },
+      { key: "fastingGlucose", label: "Fasting glucose", placeholder: "mmol/L", type: "number", inputMode: "decimal", step: 0.1 },
       { key: "hba1c", label: "HbA1c", placeholder: "%", type: "number", inputMode: "decimal" },
       { key: "restingHeartRate", label: "Resting heart rate", placeholder: "bpm", type: "number", inputMode: "numeric" },
       { key: "waistCircumference", label: "Waist circumference", placeholder: "cm", type: "number", inputMode: "numeric" },
@@ -459,6 +460,7 @@ const ProfileIntakeScreen = () => {
                   style={{ ...styles.input, ...(showError ? styles.inputError : {}) }}
                   type={field.type || "text"}
                   inputMode={field.inputMode}
+                  step={field.step}
                   value={typeof fieldValues[field.key] === "string" ? fieldValues[field.key] : ""}
                   onChange={(event) => handleFieldChange(field, event.target.value)}
                 />

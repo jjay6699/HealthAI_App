@@ -1170,7 +1170,7 @@ export interface DailyProfileSummaryInput {
   name: string;
   weightKg?: number;
   bloodPressure?: string;
-  fastingGlucoseMgDl?: number;
+  fastingGlucoseMmolL?: number;
 }
 
 export interface DailyProfileSummary {
@@ -1642,7 +1642,7 @@ PROFILE:
 - Name: ${input.name || "Unknown"}
 - Weight: ${input.weightKg && input.weightKg > 0 ? `${input.weightKg} kg` : "Not provided"}
 - Blood pressure: ${input.bloodPressure?.trim() || "Not provided"}
-- Fasting glucose: ${input.fastingGlucoseMgDl && input.fastingGlucoseMgDl > 0 ? `${input.fastingGlucoseMgDl} mg/dL` : "Not provided"}
+- Fasting glucose: ${input.fastingGlucoseMmolL && input.fastingGlucoseMmolL > 0 ? `${input.fastingGlucoseMmolL} mmol/L` : "Not provided"}
 
 Requirements:
 - Keep language plain and supportive.

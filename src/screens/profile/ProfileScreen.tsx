@@ -97,6 +97,7 @@ type EditConfig = {
   helper?: string;
   type?: React.HTMLInputTypeAttribute;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  step?: number | "any";
   options?: string[];
 };
 
@@ -108,6 +109,12 @@ const getInitials = (name: string): string => {
   }
   return words.map(w => w[0]).join("").substring(0, 2).toUpperCase();
 };
+
+const formatGlucoseValue = (value: number): string =>
+  new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1
+  }).format(value);
 
 const ProfileScreen = () => {
   const theme = useTheme();
@@ -213,6 +220,7 @@ const ProfileScreen = () => {
     value: string;
     type?: React.HTMLInputTypeAttribute;
     inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+    step?: number | "any";
     options?: string[];
   }>(null);
   const [editValue, setEditValue] = useState("");
@@ -322,7 +330,7 @@ const ProfileScreen = () => {
     sleepDuration: { label: t("profile.sleepDuration"), options: ["Under 5 hrs", "5-6 hrs", "6-7 hrs", "7-8 hrs", "8+ hrs"] },
     stressLevel: { label: t("profile.stressLevel"), options: ["Low", "Moderate", "High"] },
     bloodPressure: { label: t("profile.bloodPressure"), helper: "Format: 120/80" },
-    fastingGlucose: { label: `${t("profile.fastingGlucose")} (mg/dL)`, type: "number", inputMode: "numeric" },
+    fastingGlucose: { label: `${t("profile.fastingGlucose")} (mmol/L)`, type: "number", inputMode: "decimal", step: 0.1 },
     hba1c: { label: "HbA1c (%)", type: "number", inputMode: "decimal" },
     restingHeartRate: { label: "Resting HR (bpm)", type: "number", inputMode: "numeric" },
     waistCircumference: { label: `${t("profile.waistCircumference")} (cm)`, type: "number", inputMode: "numeric" },
@@ -371,6 +379,7 @@ const ProfileScreen = () => {
       value,
       type: config.type,
       inputMode: config.inputMode,
+      step: config.step,
       options: config.options
     });
     setEditValue(value);
@@ -465,9 +474,9 @@ const ProfileScreen = () => {
   };
 
   const getLatestGlucose = () => {
-    if (glucoseHistory.length === 0) return formatNumber(profile.fastingGlucose, "mg/dL");
+    if (glucoseHistory.length === 0) return formatNumber(profile.fastingGlucose, "mmol/L");
     const sorted = [...glucoseHistory].sort((a, b) => b.date.localeCompare(a.date));
-    return `${sorted[0].value} mg/dL`;
+    return `${formatGlucoseValue(sorted[0].value)} mmol/L`;
   };
 
   const getLatestWeight = () => {
@@ -621,10 +630,10 @@ const ProfileScreen = () => {
     const avg = glucoseFilteredEntries.reduce((sum, entry) => sum + entry.value, 0) / glucoseFilteredEntries.length;
     const trend = glucoseFilteredEntries[glucoseFilteredEntries.length - 1].value - glucoseFilteredEntries[0].value;
     const trendText = trend > 0 ? "rising" : trend < 0 ? "improving" : "stable";
-    if (avg >= 100) {
-      return `Recent average fasting glucose is ${Math.round(avg)} mg/dL and trend is ${trendText}. Keep monitoring daily while using your nutrition plan.`;
+    if (avg >= 5.6) {
+      return `Recent average fasting glucose is ${formatGlucoseValue(avg)} mmol/L and trend is ${trendText}. Keep monitoring daily while using your nutrition plan.`;
     }
-    return `Recent average fasting glucose is ${Math.round(avg)} mg/dL with a ${trendText} pattern. Current range looks good.`;
+    return `Recent average fasting glucose is ${formatGlucoseValue(avg)} mmol/L with a ${trendText} pattern. Current range looks good.`;
   })();
 
   const weightInsight = (() => {
@@ -656,7 +665,7 @@ const ProfileScreen = () => {
         name: profile.name,
         weightKg: profile.weight > 0 ? profile.weight : undefined,
         bloodPressure: latestBpValue || undefined,
-        fastingGlucoseMgDl: latestGlucoseValue > 0 ? latestGlucoseValue : undefined
+        fastingGlucoseMmolL: latestGlucoseValue > 0 ? latestGlucoseValue : undefined
       });
       setAiSummary(result.summary);
       setAiMotivation(result.motivation);
@@ -1112,8 +1121,9 @@ const ProfileScreen = () => {
               />
               <input
                 type="number"
-                inputMode="numeric"
-                placeholder="mg/dL"
+                inputMode="decimal"
+                step="0.1"
+                placeholder="mmol/L"
                 value={glucoseValue}
                 onChange={(event) => setGlucoseValue(event.target.value)}
                 style={styles.trackerInput}
@@ -1165,7 +1175,7 @@ const ProfileScreen = () => {
                 .map((entry) => (
                   <div key={`glucose-${entry.date}`} style={styles.trackerHistoryRow}>
                     <span>{entry.date}</span>
-                    <span>{entry.value} mg/dL</span>
+                    <span>{formatGlucoseValue(entry.value)} mmol/L</span>
                   </div>
                 ))}
             </div>
