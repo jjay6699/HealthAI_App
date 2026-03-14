@@ -116,7 +116,8 @@ const KNOWN_PERSIST_KEYS = [
   "weightHistory",
   "orderDetails",
   "deliveryAddress",
-  "lastOrder"
+  "lastOrder",
+  "chatRecommendationExamples"
 ];
 
 const listLocalKeysToPersist = (): string[] => {

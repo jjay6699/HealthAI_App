@@ -26,6 +26,15 @@ interface RecommendationCardState {
   recommendations: SupplementRecommendation[];
 }
 
+interface RecommendationExample {
+  timestamp: string;
+  language: "en" | "zh";
+  userMessage: string;
+  assistantReply: string;
+  hadRecommendations: boolean;
+  recommendedSupplementIds: string[];
+}
+
 interface AIChatProps {
   onClose: () => void;
 }
@@ -60,10 +69,11 @@ const normalizeLocalizedObject = <T extends Record<string, unknown>>(input: T): 
   ) as T;
 
 const getSupplementById = (id: string) => AVAILABLE_SUPPLEMENTS.find((supplement) => supplement.id === id);
+const CHAT_RECOMMENDATION_EXAMPLES_KEY = "chatRecommendationExamples";
 
 const URGENT_SYMPTOM_PATTERNS = [
-  /\b(chest pain|shortness of breath|difficulty breathing|fainting|severe bleeding|blood in stool|vomiting blood|stroke|seizure|severe abdominal pain|high fever|suicidal|passed out|loss of consciousness)\b/i,
-  /胸痛|呼吸困难|晕倒|大量出血|便血|吐血|中风|癫痫|剧烈腹痛|高烧|失去意识/
+  /\b(chest pain|shortness of breath|difficulty breathing|fainting|severe bleeding|blood in stool|vomiting blood|stroke|seizure|severe abdominal pain|high fever|suicidal|passed out|loss of consciousness|black stool|tarry stool|coughing blood|severe dehydration|one-sided weakness|confusion|sudden vision loss|blood in urine|unable to urinate|severe flank pain|severe sore throat|trouble swallowing)\b/i,
+  /胸痛|呼吸困难|晕倒|大量出血|便血|吐血|中风|癫痫|剧烈腹痛|高烧|失去意识|黑便|咳血|严重脱水|单侧无力|意识混乱|突然失明|尿血|无法排尿|剧烈腰侧痛|严重喉咙痛|吞咽困难/
 ];
 
 const CATEGORY_EXCLUSIONS: Array<{
@@ -87,17 +97,175 @@ const CATEGORY_EXCLUSIONS: Array<{
   {
     patterns: [/\b(acid reflux|heartburn|gerd)\b/i, /反酸|烧心/],
     removeSupplements: ["chia-seed", "organic-psyllium-husk"]
+  },
+  {
+    patterns: [/\b(urinary discomfort|pee pain|burning pee|frequent urination|urine discomfort|bladder discomfort)\b/i, /尿痛|尿频|尿路不适|膀胱不适/],
+    removeSupplements: ["matcha-powder", "beetroot-powder"]
   }
 ];
 
 const normalizeSymptomText = (value: string) =>
   value
     .toLowerCase()
+    .replace(/stomache/g, "stomach")
+    .replace(/migrane/g, "migraine")
+    .replace(/hedache/g, "headache")
+    .replace(/vomitting/g, "vomiting")
+    .replace(/diahrea/g, "diarrhea")
+    .replace(/constipated badly/g, "constipation")
+    .replace(/bloaty/g, "bloating")
+    .replace(/tummy pain/g, "stomach pain")
+    .replace(/tummy not good/g, "upset stomach")
+    .replace(/stomach not good/g, "upset stomach")
+    .replace(/feel like vomit/g, "nausea")
+    .replace(/feel wana vomit/g, "nausea")
+    .replace(/wanna vomit/g, "nausea")
+    .replace(/wana vomit/g, "nausea")
+    .replace(/feel like throwing up/g, "nausea")
+    .replace(/throwing up/g, "vomiting")
+    .replace(/hard stool/g, "hard stool")
+    .replace(/not fully out/g, "incomplete bowel movement")
+    .replace(/still feel need to poop/g, "incomplete bowel movement")
+    .replace(/cannot empty bowel/g, "incomplete bowel movement")
+    .replace(/constipated when travel/g, "travel constipation")
+    .replace(/bloated after eating/g, "bloating after meals")
+    .replace(/bloated after meals/g, "bloating after meals")
+    .replace(/after certain food/g, "food triggered")
+    .replace(/certain food make me bloat/g, "food triggered")
+    .replace(/lots of gas/g, "gas heavy")
+    .replace(/a lot of gas/g, "gas heavy")
+    .replace(/cant poop/g, "constipation")
+    .replace(/cannot poop/g, "constipation")
+    .replace(/hard to poop/g, "constipation")
+    .replace(/cannot shit/g, "constipation")
+    .replace(/pain on knee/g, "knee pain")
+    .replace(/pain knee/g, "knee pain")
+    .replace(/pain at knee/g, "knee pain")
+    .replace(/pain on back/g, "back pain")
+    .replace(/pain at back/g, "back pain")
+    .replace(/head very pain/g, "headache")
+    .replace(/my head pain/g, "headache")
+    .replace(/head pain/g, "headache")
+    .replace(/no energy/g, "low energy")
+    .replace(/always no energy/g, "low energy")
+    .replace(/very tired/g, "fatigue")
+    .replace(/body very weak/g, "weakness")
+    .replace(/i feel weak/g, "weakness")
+    .replace(/whole body weak/g, "weakness")
+    .replace(/super tired/g, "fatigue")
+    .replace(/hands and legs cold/g, "cold hands cold feet")
+    .replace(/always sick/g, "keep getting sick")
+    .replace(/keep fall sick/g, "keep getting sick")
+    .replace(/fall sick easily/g, "keep getting sick")
+    .replace(/cant sleep well/g, "poor sleep")
+    .replace(/sleep not good/g, "poor sleep")
+    .replace(/cannot sleep well/g, "poor sleep")
+    .replace(/sleep keep wake up/g, "waking often")
+    .replace(/period very pain/g, "period pain")
+    .replace(/mens pain/g, "period pain")
+    .replace(/moody before period/g, "pms mood")
+    .replace(/tired during period/g, "period fatigue")
+    .replace(/night sweat cant sleep/g, "perimenopause sleep")
+    .replace(/itchy nose/g, "allergy")
+    .replace(/blocked nose/g, "stuffy nose")
+    .replace(/nose block/g, "stuffy nose")
+    .replace(/keep sneezing/g, "sneezing")
+    .replace(/nose keep running/g, "runny nose")
+    .replace(/mucus drip to throat/g, "post nasal drip")
+    .replace(/post nasal drip/g, "post nasal drip")
+    .replace(/nose keep running/g, "runny nose")
+    .replace(/mucus drip to throat/g, "post nasal drip")
+    .replace(/post nasal drip/g, "post nasal drip")
+    .replace(/throat pain/g, "sore throat")
+    .replace(/my throat hurt/g, "sore throat")
+    .replace(/dry throat/g, "sore throat")
+    .replace(/itchy throat/g, "sore throat")
+    .replace(/dry cough/g, "dry cough")
+    .replace(/cough with phlegm/g, "phlegmy cough")
+    .replace(/cough with mucus/g, "phlegmy cough")
+    .replace(/wet cough/g, "phlegmy cough")
+    .replace(/dry cough/g, "dry cough")
+    .replace(/cough with phlegm/g, "phlegmy cough")
+    .replace(/cough with mucus/g, "phlegmy cough")
+    .replace(/wet cough/g, "phlegmy cough")
+    .replace(/eye tired/g, "eye strain")
+    .replace(/eyes tired/g, "eye strain")
+    .replace(/eyes blur after screen/g, "screen fatigue")
+    .replace(/screen too long/g, "screen fatigue")
+    .replace(/mouse hand/g, "mouse hand")
+    .replace(/wrist pain from mouse/g, "wrist strain")
+    .replace(/neck from laptop/g, "laptop neck")
+    .replace(/headache from screen/g, "screen headache")
+    .replace(/mouse hand/g, "mouse hand")
+    .replace(/wrist pain from mouse/g, "wrist strain")
+    .replace(/neck from laptop/g, "laptop neck")
+    .replace(/headache from screen/g, "screen headache")
+    .replace(/mouth sore/g, "mouth ulcer")
+    .replace(/gum pain/g, "gum sensitivity")
+    .replace(/pee pain/g, "urinary discomfort")
+    .replace(/burning pee/g, "urinary discomfort")
+    .replace(/burning when pee/g, "urinary discomfort")
+    .replace(/no appetite/g, "appetite loss")
+    .replace(/cannot eat much/g, "appetite loss")
+    .replace(/after sick/g, "post illness")
+    .replace(/recover from flu/g, "post illness")
+    .replace(/after antibiotics/g, "after antibiotics")
+    .replace(/not eating much lately/g, "after poor appetite")
+    .replace(/after antibiotics/g, "after antibiotics")
+    .replace(/not eating much lately/g, "after poor appetite")
+    .replace(/itchy skin/g, "dry skin")
+    .replace(/skin very dry/g, "dry skin")
+    .replace(/hot flush/g, "hot flashes")
+    .replace(/body suddenly hot/g, "hot flashes")
+    .replace(/sit too long/g, "office stiffness")
+    .replace(/sitting all day/g, "office stiffness")
+    .replace(/desk job pain/g, "office stiffness")
+    .replace(/office body stiff/g, "office stiffness")
+    .replace(/sit too much/g, "sedentary")
     .replace(/shoulder and neck pain/g, "shoulder pain neck pain")
     .replace(/neck and shoulder pain/g, "neck pain shoulder pain")
     .replace(/stomach pains/g, "stomach pain")
+    .replace(/back aches/g, "back ache")
+    .replace(/backaches/g, "backache")
     .replace(/body aches/g, "body ache")
+    .replace(/hard stool/g, "hard stool")
+    .replace(/not fully out/g, "incomplete bowel movement")
+    .replace(/still feel need to poop/g, "incomplete bowel movement")
+    .replace(/cannot empty bowel/g, "incomplete bowel movement")
+    .replace(/constipated when travel/g, "travel constipation")
+    .replace(/bloated after eating/g, "bloating after meals")
+    .replace(/bloated after meals/g, "bloating after meals")
+    .replace(/after certain food/g, "food triggered")
+    .replace(/certain food make me bloat/g, "food triggered")
+    .replace(/lots of gas/g, "gas heavy")
+    .replace(/a lot of gas/g, "gas heavy")
     .replace(/joint aches/g, "joint pain")
+    .replace(/knee pains/g, "knee pain")
+    .replace(/knees pain/g, "knee pain")
+    .replace(/pain on my knees/g, "knee pain")
+    .replace(/pain in my knees/g, "knee pain")
+    .replace(/constant pain on my knees/g, "knee pain")
+    .replace(/pain on my knee/g, "knee pain")
+    .replace(/aching knees/g, "knee pain")
+    .replace(/sore knees/g, "knee pain")
+    .replace(/lower backache/g, "lower back pain")
+    .replace(/upper backache/g, "upper back pain")
+    .replace(/cold hands and feet/g, "cold hands cold feet")
+    .replace(/cold hands or feet/g, "cold hands cold feet")
+    .replace(/frequent colds/g, "keep getting sick")
+    .replace(/getting sick often/g, "keep getting sick")
+    .replace(/poor concentration/g, "focus")
+    .replace(/cant focus/g, "focus")
+    .replace(/can't focus/g, "focus")
+    .replace(/trouble concentrating/g, "focus")
+    .replace(/hair fall/g, "hair loss")
+    .replace(/brittle nail/g, "brittle nails")
+    .replace(/period cramps/g, "period pain")
+    .replace(/menstrual pain/g, "period pain")
+    .replace(/moody before period/g, "pms mood")
+    .replace(/tired during period/g, "period fatigue")
+    .replace(/night sweat cant sleep/g, "perimenopause sleep")
+    .replace(/always hungry/g, "always hungry")
     .replace(/brainfog/g, "brain fog")
     .replace(/migraines/g, "migraine")
     .replace(/head aches/g, "headache")
@@ -138,8 +306,72 @@ const normalizeSymptomText = (value: string) =>
     .replace(/后脑痛/g, " pain at the back of my head ")
     .replace(/紧张性头痛/g, " tension headache ")
     .replace(/压力大/g, " stress ")
+    .replace(/膝盖痛/g, " knee pain ")
+    .replace(/膝盖酸痛/g, " knee pain ")
+    .replace(/背痛/g, " back pain ")
+    .replace(/腰痛/g, " lower back pain ")
+    .replace(/上背痛/g, " upper back pain ")
+    .replace(/下背痛/g, " lower back pain ")
+    .replace(/手脚冰冷/g, " cold hands cold feet ")
+    .replace(/经常感冒/g, " keep getting sick ")
+    .replace(/脱发/g, " hair loss ")
+    .replace(/指甲脆弱/g, " brittle nails ")
+    .replace(/经痛/g, " period pain ")
+    .replace(/经前综合征/g, " pms ")
+    .replace(/容易饿/g, " always hungry ")
+    .replace(/喉咙痒/g, " sore throat ")
+    .replace(/想吐/g, " nausea ")
+    .replace(/吐了/g, " vomiting ")
+    .replace(/没力/g, " weakness ")
+    .replace(/很累/g, " fatigue ")
+    .replace(/容易生病/g, " keep getting sick ")
+    .replace(/睡不好/g, " poor sleep ")
+    .replace(/一直醒/g, " waking often ")
+    .replace(/眼睛酸/g, " eye strain ")
+    .replace(/看屏幕太久/g, " screen fatigue ")
+    .replace(/喉咙干/g, " sore throat ")
+    .replace(/口腔痛/g, " mouth ulcer ")
+    .replace(/没胃口吃饭/g, " appetite loss ")
+    .replace(/上火/g, " mouth ulcer ")
+    .replace(/过敏/g, " allergy ")
+    .replace(/鼻窦/g, " sinus ")
+    .replace(/打喷嚏/g, " sneezing ")
+    .replace(/咳嗽/g, " cough ")
+    .replace(/喉咙痛/g, " sore throat ")
+    .replace(/眼睛疲劳/g, " eye strain ")
+    .replace(/屏幕疲劳/g, " screen fatigue ")
+    .replace(/口腔溃疡/g, " mouth ulcer ")
+    .replace(/牙龈敏感/g, " gum sensitivity ")
+    .replace(/尿痛/g, " urinary discomfort ")
+    .replace(/尿频/g, " frequent urination ")
+    .replace(/没胃口/g, " appetite loss ")
+    .replace(/病后恢复/g, " post illness ")
+    .replace(/皮肤干燥/g, " dry skin ")
+    .replace(/湿疹/g, " eczema ")
+    .replace(/更年期/g, " menopause ")
+    .replace(/潮热/g, " hot flashes ")
+    .replace(/久坐/g, " sedentary ")
+    .replace(/办公室酸痛/g, " office stiffness ")
     .replace(/\s+/g, " ")
     .trim();
+
+const persistRecommendationExample = (
+  language: "en" | "zh",
+  userMessage: string,
+  assistantReply: string,
+  recommendations: RecommendationCardState | null
+) => {
+  const existing = persistentStorage.getJSON<RecommendationExample[]>(CHAT_RECOMMENDATION_EXAMPLES_KEY, []);
+  const nextEntry: RecommendationExample = {
+    timestamp: new Date().toISOString(),
+    language,
+    userMessage,
+    assistantReply,
+    hadRecommendations: Boolean(recommendations?.recommendations?.length),
+    recommendedSupplementIds: recommendations?.recommendations?.map((item) => item.supplementId) || []
+  };
+  persistentStorage.setJSON(CHAT_RECOMMENDATION_EXAMPLES_KEY, [nextEntry, ...existing].slice(0, 200));
+};
 
 const buildSymptomRecommendations = (
   content: string,
@@ -705,10 +937,14 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
           language
         });
 
-        setChatRecommendations(aiRecommendations ?? buildSymptomRecommendations(content, isChinese));
+        const nextRecommendations = aiRecommendations ?? buildSymptomRecommendations(content, isChinese);
+        setChatRecommendations(nextRecommendations);
+        persistRecommendationExample(language, content, localizedContent, nextRecommendations);
       } catch (recommendationError) {
         console.error("Error generating AI chat recommendations:", recommendationError);
-        setChatRecommendations(buildSymptomRecommendations(content, isChinese));
+        const fallbackRecommendations = buildSymptomRecommendations(content, isChinese);
+        setChatRecommendations(fallbackRecommendations);
+        persistRecommendationExample(language, content, localizedContent, fallbackRecommendations);
       }
     } catch (error) {
       console.error("Error calling OpenAI:", error);

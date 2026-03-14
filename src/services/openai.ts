@@ -39,7 +39,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v4";
+const ANALYSIS_CACHE_VERSION = "v8";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -1286,9 +1286,21 @@ export async function generateChatSupplementRecommendations(input: {
 Your job:
 - Read the user's situation semantically, not by exact keyword matching.
 - Understand English and Simplified Chinese symptom descriptions, paraphrases, and implied context.
+- Understand broken English, missing grammar, short fragments, casual slang, and common misspellings.
 - Cross-check the user's situation ONLY against the provided product catalog.
 - Recommend products only when there is a reasonable support-oriented fit.
 - Do not diagnose, do not claim treatment, and do not recommend products for emergencies.
+
+Common examples that should usually produce catalog cross-check recommendations if the catalog supports them:
+- stomach discomfort, bloating, nausea, indigestion, constipation
+- knee pain, back pain, neck pain, shoulder pain, joint pain, muscle soreness, inflammation
+- headache, migraine, tension-related discomfort
+- fatigue, low energy, low stamina, poor focus
+- stress, low mood, immune support, blood sugar support, heart-supportive nutrition
+- allergy / sinus / sneezing, mild cough / sore throat, eye strain, mouth ulcers, appetite loss, post-illness recovery
+- dry skin / eczema-like complaints, menopause / hot flashes, sedentary office stiffness
+- constipation subtypes, bloating subtypes, cough subtypes, sinus subtypes, office-strain subtypes, women's-health subtypes, recovery subtypes
+- messages like "pain on my knees", "stomach not good", "head very pain", "keep fall sick", or equivalent Chinese phrasing
 
 Safety rules:
 - If symptoms sound urgent, severe, or medically high-risk, return no product recommendations.
