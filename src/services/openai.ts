@@ -1310,15 +1310,21 @@ Your job:
 Common examples that should usually produce catalog cross-check recommendations if the catalog supports them:
 - stomach discomfort, bloating, nausea, indigestion, constipation
 - IBS-like symptoms, sensitive stomach, cramping after meals, reflux after spicy or heavy meals
+- stomach burning, frequent burping, trapped gas, fullness after small meals, morning nausea, food-poisoning recovery
 - knee pain, back pain, neck pain, shoulder pain, joint pain, muscle soreness, inflammation
 - headache, migraine, tension-related discomfort
 - fatigue, low energy, weakness, dizziness, low stamina, poor focus, mental fatigue
 - stress, low mood, immune support, blood sugar support, sugar cravings, heart-supportive nutrition
-- allergy / sinus / sneezing, itchy eyes, mild cough / sore throat / hoarse voice, eye strain, mouth ulcers, appetite loss, post-illness recovery
+- anxiety, panic, jittery feelings, palpitations, feverish / coming-down-with-something complaints
+- allergy / sinus / sneezing, itchy eyes, mild cough / sore throat / hoarse voice, eye strain, mouth ulcers, toothache / mild oral discomfort, appetite loss, post-illness recovery
 - dry skin / eczema-like complaints, acne / breakouts, puffiness / water retention, menopause / hot flashes, sedentary office stiffness
 - irregular periods, PMS patterns, period fatigue, heavy periods, cycle-related discomfort
+- spotting, breast tenderness, ovulation pain, cycle acne, afternoon crash, post-meal sleepiness, wired-but-tired complaints
 - UTI-style urinary discomfort, painful urination, frequent urination, mild bladder discomfort
 - nausea, travel nausea, motion sickness, muscle cramps, dehydration-type sluggishness, cholesterol support, low libido
+- weight-support phrasing, always hungry / snacking complaints, inflammation / swelling complaints
+- heel pain, foot pain, hand pain, ankle pain, slow workout recovery, oily skin, dull skin, hair shedding, weak nails
+- delayed period, cycle bloating, after-work fatigue, weak when hungry, junk-food cravings, slow metabolism wording
 - constipation subtypes, bloating subtypes, cough subtypes, sinus subtypes, office-strain subtypes, women's-health subtypes, recovery subtypes
 - messages like "pain on my knees", "stomach not good", "head very pain", "keep fall sick", or equivalent Chinese phrasing
 
