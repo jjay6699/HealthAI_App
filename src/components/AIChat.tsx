@@ -212,8 +212,20 @@ const normalizeSymptomText = (value: string) =>
     .replace(/pee pain/g, "urinary discomfort")
     .replace(/burning pee/g, "urinary discomfort")
     .replace(/burning when pee/g, "urinary discomfort")
+    .replace(/uti/g, "urinary discomfort")
+    .replace(/urine infection/g, "urinary discomfort")
+    .replace(/urinary tract infection/g, "urinary discomfort")
+    .replace(/pain when peeing/g, "urinary discomfort")
+    .replace(/burning when urinating/g, "urinary discomfort")
+    .replace(/pee very often/g, "frequent urination")
+    .replace(/keep peeing/g, "frequent urination")
+    .replace(/always need to pee/g, "frequent urination")
     .replace(/no appetite/g, "appetite loss")
     .replace(/cannot eat much/g, "appetite loss")
+    .replace(/feel nauseous/g, "nausea")
+    .replace(/motion sickness/g, "travel nausea")
+    .replace(/car sick/g, "travel nausea")
+    .replace(/sea sick/g, "travel nausea")
     .replace(/after sick/g, "post illness")
     .replace(/recover from flu/g, "post illness")
     .replace(/after antibiotics/g, "after antibiotics")
@@ -228,6 +240,60 @@ const normalizeSymptomText = (value: string) =>
     .replace(/sitting all day/g, "office stiffness")
     .replace(/desk job pain/g, "office stiffness")
     .replace(/office body stiff/g, "office stiffness")
+    .replace(/sensitive stomach/g, "sensitive stomach")
+    .replace(/stomach very sensitive/g, "sensitive stomach")
+    .replace(/always bloated after eating/g, "bloating after meals")
+    .replace(/reflux after eating/g, "reflux after eating")
+    .replace(/spicy food give me reflux/g, "spicy food reflux")
+    .replace(/feel dizzy/g, "dizziness")
+    .replace(/always dizzy/g, "dizziness")
+    .replace(/light headed/g, "lightheaded")
+    .replace(/light headedness/g, "lightheaded")
+    .replace(/brain very tired/g, "mental fatigue")
+    .replace(/mentally tired/g, "mental fatigue")
+    .replace(/cannot think clearly/g, "cannot think clearly")
+    .replace(/mind very slow/g, "mind feels slow")
+    .replace(/itchy eyes/g, "itchy eyes")
+    .replace(/eyes very itchy/g, "itchy eyes")
+    .replace(/watery eyes/g, "watery eyes")
+    .replace(/dry eyes/g, "dry eyes")
+    .replace(/eyes very dry/g, "dry eyes")
+    .replace(/have acne/g, "acne")
+    .replace(/many pimples/g, "pimples")
+    .replace(/skin breakout/g, "breakout")
+    .replace(/pimple marks/g, "acne marks")
+    .replace(/acne scars/g, "acne marks")
+    .replace(/face very puffy/g, "puffy face")
+    .replace(/retain water/g, "water retention")
+    .replace(/always crave sweet/g, "sugar cravings")
+    .replace(/always want sugar/g, "sugar cravings")
+    .replace(/sweet cravings/g, "sugar cravings")
+    .replace(/late period/g, "late period")
+    .replace(/period irregular/g, "irregular period")
+    .replace(/period not regular/g, "irregular period")
+    .replace(/period very heavy/g, "heavy period")
+    .replace(/heavy flow/g, "heavy period")
+    .replace(/hormone imbalance/g, "hormonal imbalance")
+    .replace(/hormonal issues/g, "hormonal imbalance")
+    .replace(/voice hoarse/g, "hoarse voice")
+    .replace(/lost my voice/g, "lost voice")
+    .replace(/voice gone/g, "voice gone")
+    .replace(/chesty cough/g, "chesty cough")
+    .replace(/cough with phlegm/g, "phlegm")
+    .replace(/bad posture/g, "bad posture")
+    .replace(/screen posture/g, "screen posture")
+    .replace(/leg cramps/g, "muscle cramps")
+    .replace(/calf cramps/g, "muscle cramps")
+    .replace(/charley horse/g, "muscle cramps")
+    .replace(/muscle cramp/g, "muscle cramps")
+    .replace(/feel dehydrated/g, "dehydrated")
+    .replace(/dehydrated/g, "dehydrated")
+    .replace(/dry mouth/g, "dehydrated")
+    .replace(/high cholesterol/g, "cholesterol")
+    .replace(/cholesterol high/g, "cholesterol")
+    .replace(/bad cholesterol/g, "cholesterol")
+    .replace(/low libido/g, "low libido")
+    .replace(/sex drive low/g, "low libido")
     .replace(/sit too much/g, "sedentary")
     .replace(/shoulder and neck pain/g, "shoulder pain neck pain")
     .replace(/neck and shoulder pain/g, "neck pain shoulder pain")
@@ -362,6 +428,71 @@ const normalizeSymptomText = (value: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const SYMPTOM_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "at",
+  "for",
+  "from",
+  "i",
+  "in",
+  "is",
+  "it",
+  "me",
+  "my",
+  "of",
+  "on",
+  "or",
+  "the",
+  "to",
+  "with"
+]);
+
+const stemSymptomToken = (token: string) => {
+  const cleaned = token.replace(/[^a-z0-9]/g, "");
+  if (cleaned.length <= 4) return cleaned;
+
+  return cleaned
+    .replace(/ies$/g, "y")
+    .replace(/ing$/g, "")
+    .replace(/ed$/g, "")
+    .replace(/es$/g, "")
+    .replace(/s$/g, "");
+};
+
+const extractSymptomTokens = (value: string) =>
+  normalizeSymptomText(value)
+    .split(" ")
+    .map(stemSymptomToken)
+    .filter((token) => token && !SYMPTOM_STOP_WORDS.has(token));
+
+const scoreTriggerMatch = (
+  normalizedContent: string,
+  contentTokens: Set<string>,
+  trigger: string
+) => {
+  const normalizedTrigger = normalizeSymptomText(trigger);
+  if (!normalizedTrigger) return 0;
+  if (normalizedContent.includes(normalizedTrigger)) {
+    return Math.max(4, normalizedTrigger.split(" ").length + 2);
+  }
+
+  const triggerTokens = extractSymptomTokens(trigger);
+  if (triggerTokens.length === 0) return 0;
+
+  const matchedTokenCount = triggerTokens.filter((token) => contentTokens.has(token)).length;
+  if (matchedTokenCount === triggerTokens.length) {
+    return triggerTokens.length + 1;
+  }
+
+  if (triggerTokens.length >= 2 && matchedTokenCount >= 2) {
+    return matchedTokenCount;
+  }
+
+  return 0;
+};
+
 const persistRecommendationExample = (
   language: "en" | "zh",
   userMessage: string,
@@ -385,6 +516,7 @@ const buildSymptomRecommendations = (
   isChinese: boolean
 ): RecommendationCardState | null => {
   const normalizedContent = normalizeSymptomText(content);
+  const contentTokens = new Set(extractSymptomTokens(content));
 
   if (URGENT_SYMPTOM_PATTERNS.some((pattern) => pattern.test(content))) {
     return null;
@@ -403,8 +535,18 @@ const buildSymptomRecommendations = (
     if (excludedCategoryIds.has(category.id)) {
       return { category, score: 0, matchedTriggers: [] as string[] };
     }
-    const matchedTriggers = category.triggers.filter((trigger) => normalizedContent.includes(trigger));
-    return { category, score: matchedTriggers.length, matchedTriggers };
+    const matchedTriggers = category.triggers
+      .map((trigger) => ({
+        trigger,
+        score: scoreTriggerMatch(normalizedContent, contentTokens, trigger)
+      }))
+      .filter((entry) => entry.score > 0);
+
+    return {
+      category,
+      score: matchedTriggers.reduce((sum, entry) => sum + entry.score, 0),
+      matchedTriggers: matchedTriggers.map((entry) => entry.trigger)
+    };
   })
     .filter((entry) => entry.score > 0)
     .sort((left, right) => {
@@ -417,7 +559,7 @@ const buildSymptomRecommendations = (
     SupplementRecommendation & { score: number; categoryLabels: string[] }
   >();
 
-  matchedCategories.slice(0, 2).forEach(({ category, score }) => {
+  matchedCategories.slice(0, 4).forEach(({ category, score }) => {
     category.recommendations.forEach((item) => {
       if (excludedSupplementIds.has(item.supplementId)) return;
       const supplement = getSupplementById(item.supplementId);
@@ -464,7 +606,7 @@ const buildSymptomRecommendations = (
   return {
     summary: isChinese
       ? "我根据你提到的症状整理了可查看的产品建议。"
-      : "I matched products from your catalog based on the exact symptom type you described.",
+      : "I matched products from your catalog based on the symptom patterns you described.",
     recommendations
   };
 };

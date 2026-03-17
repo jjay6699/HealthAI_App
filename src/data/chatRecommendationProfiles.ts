@@ -1207,5 +1207,589 @@ export const CHAT_RECOMMENDATION_CATEGORIES: ChatRecommendationCategory[] = [
         dosage: "Start with 5-10g per day"
       }
     ]
+  },
+  {
+    id: "digestive-ibs-like",
+    label: "IBS-like digestive support",
+    triggers: ["ibs", "sensitive stomach", "digestive flare", "stomach flare", "alternating constipation diarrhea", "sensitive gut", "gut flare"],
+    recommendations: [
+      {
+        supplementId: "ginger-powder",
+        priority: "high",
+        reason: "May support digestive comfort when the gut feels sensitive or easily triggered.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "baobab-powder",
+        priority: "medium",
+        reason: "May support gut-friendly daily fiber intake in mild IBS-like patterns.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "lemon-powder",
+        priority: "low",
+        reason: "May provide a lighter digestion-supportive option during mild flares.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "digestive-cramping",
+    label: "stomach cramp support",
+    triggers: ["stomach cramps", "abdominal cramps", "cramps after eating", "gut cramps", "tummy cramps", "cramping stomach"],
+    recommendations: [
+      {
+        supplementId: "ginger-powder",
+        priority: "high",
+        reason: "May help support digestive comfort when cramping and mild nausea are part of the picture.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "baobab-powder",
+        priority: "medium",
+        reason: "May support digestive balance and gut comfort in recurring mild cramp patterns.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "digestive-reflux-food-trigger",
+    label: "food-triggered reflux support",
+    triggers: ["reflux after eating", "heartburn after eating", "spicy food reflux", "food reflux", "acid after meals", "burping after meals"],
+    recommendations: [
+      {
+        supplementId: "ginger-powder",
+        priority: "medium",
+        reason: "May support digestion when mild reflux-type symptoms are tied to meals.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "lemon-powder",
+        priority: "low",
+        reason: "May fit lighter daily digestion-supportive routines when symptoms are mild.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "fatigue-weakness-dizzy",
+    label: "fatigue, weakness, or lightheadedness support",
+    triggers: ["weakness", "body weak", "lightheaded", "dizzy", "dizziness", "faintish", "low stamina", "feel drained"],
+    recommendations: [
+      {
+        supplementId: "maca-powder",
+        priority: "medium",
+        reason: "May support daily energy and resilience when tiredness and weakness are recurring.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "spirulina-powder",
+        priority: "medium",
+        reason: "May support nutrient intake when overall energy and recovery feel low.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "beetroot-powder",
+        priority: "low",
+        reason: "May support circulation and stamina in non-urgent low-energy situations.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "focus-mental-fatigue",
+    label: "mental fatigue support",
+    triggers: ["mental fatigue", "mentally tired", "mind feels slow", "cannot think clearly", "foggy brain", "slow brain"],
+    recommendations: [
+      {
+        supplementId: "matcha-powder",
+        priority: "medium",
+        reason: "May support steadier focus and alertness when mental fatigue is prominent.",
+        dosage: "Start with 2-5g per day"
+      },
+      {
+        supplementId: "blueberry-powder",
+        priority: "medium",
+        reason: "May support brain-focused antioxidant intake and overall cognitive wellness.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "spirulina-powder",
+        priority: "low",
+        reason: "May support general nutrient intake when mental and physical energy both feel low.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "sleep-restless",
+    label: "restless sleep support",
+    triggers: ["restless sleep", "sleep restless", "cannot stay asleep", "wake at night", "broken sleep", "sleep interrupted"],
+    recommendations: [
+      {
+        supplementId: "natural-cocoa-powder",
+        priority: "low",
+        reason: "May fit a gentler evening comfort routine when sleep feels light or interrupted.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "cacao-powder",
+        priority: "low",
+        reason: "May support stress-related comfort routines when mild sleep disruption is present.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "allergy-itchy-eyes",
+    label: "itchy eyes or allergy support",
+    triggers: ["itchy eyes", "watery eyes", "allergy eyes", "eyes itchy", "eye allergy", "red itchy eyes"],
+    recommendations: [
+      {
+        supplementId: "lemon-powder",
+        priority: "medium",
+        reason: "May support vitamin C intake and mild allergy-supportive routines.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "baobab-powder",
+        priority: "medium",
+        reason: "May support immune and recovery-oriented nutrition during mild allergy-type symptoms.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "spirulina-powder",
+        priority: "low",
+        reason: "May support overall nutrient intake during mild allergy-like periods.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "eye-dryness-support",
+    label: "dry or tired eye support",
+    triggers: ["dry eyes", "eye dryness", "eyes dry", "eye tired", "screen eyes", "eye fatigue"],
+    recommendations: [
+      {
+        supplementId: "blueberry-powder",
+        priority: "medium",
+        reason: "May support eye-friendly antioxidant intake when eyes feel strained or dry.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "acai-berry",
+        priority: "low",
+        reason: "May support antioxidant intake for screen-heavy or eye-fatigue days.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "skin-acne-breakout",
+    label: "acne or breakout support",
+    triggers: ["acne", "pimples", "breakout", "breakouts", "skin breakouts", "hormonal acne", "oily skin"],
+    recommendations: [
+      {
+        supplementId: "tomato-powder",
+        priority: "medium",
+        reason: "May support skin wellness with antioxidant-rich nutrition during breakout-prone periods.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "blueberry-powder",
+        priority: "medium",
+        reason: "May support antioxidant protection and overall skin wellness.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "wheatgrass-powder",
+        priority: "low",
+        reason: "May support overall greens intake and general skin-supportive nutrition.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "skin-redness-inflammation",
+    label: "skin redness or irritation support",
+    triggers: ["skin redness", "red skin", "inflamed skin", "skin irritation", "sensitive skin", "itchy rash"],
+    recommendations: [
+      {
+        supplementId: "blueberry-powder",
+        priority: "medium",
+        reason: "May support antioxidant intake for general skin wellness when irritation is mild.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "tomato-powder",
+        priority: "low",
+        reason: "May support skin-focused antioxidant intake in everyday routines.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "superfood-collagen",
+        priority: "low",
+        reason: "May support overall skin structure and recovery-oriented nutrition.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "water-retention-puffy",
+    label: "water retention or puffiness support",
+    triggers: ["water retention", "puffy", "bloating face", "puffy face", "feel swollen", "retain water", "face swollen"],
+    recommendations: [
+      {
+        supplementId: "barley-grass-powder",
+        priority: "medium",
+        reason: "May support lighter daily greens intake when you feel sluggish or puffy.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "wheatgrass-powder",
+        priority: "medium",
+        reason: "May support general daily wellness and greens intake in puffy, sluggish-feeling phases.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "lemon-powder",
+        priority: "low",
+        reason: "May fit hydration-friendly daily routines when puffiness is mild and non-urgent.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "blood-sugar-cravings",
+    label: "sugar craving support",
+    triggers: ["sugar cravings", "sweet cravings", "crave sugar", "want sweet things", "energy crash after eating", "shaky when hungry"],
+    recommendations: [
+      {
+        supplementId: "ceylon-cinnamon-powder",
+        priority: "high",
+        reason: "May support steadier blood sugar patterns and cravings in daily routines.",
+        dosage: "Start with 2-5g per day"
+      },
+      {
+        supplementId: "australian-instant-oats",
+        priority: "medium",
+        reason: "May provide a steadier, more filling carbohydrate base for balanced energy.",
+        dosage: "Start with 20-40g per day"
+      },
+      {
+        supplementId: "chia-seed",
+        priority: "medium",
+        reason: "May support fullness and steadier eating patterns through added fiber.",
+        dosage: "Start with 10-15g per day"
+      }
+    ]
+  },
+  {
+    id: "womens-cycle-irregular",
+    label: "cycle irregularity support",
+    triggers: ["irregular period", "irregular cycles", "late period", "cycle irregular", "period not regular", "missed period"],
+    recommendations: [
+      {
+        supplementId: "maca-powder",
+        priority: "medium",
+        reason: "May support overall wellbeing and resilience during irregular cycle patterns.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "cacao-powder",
+        priority: "low",
+        reason: "May support mood and comfort when cycle changes are stressful.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "womens-heavy-period-support",
+    label: "heavy period support",
+    triggers: ["heavy period", "heavy flow", "period very heavy", "bleeding a lot on period", "strong menstrual flow"],
+    recommendations: [
+      {
+        supplementId: "maca-powder",
+        priority: "low",
+        reason: "May support daily resilience and energy during cycle-related strain in non-urgent situations.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "spirulina-powder",
+        priority: "low",
+        reason: "May support nutrient intake during periods of lower energy around the cycle.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "respiratory-hoarse-throat",
+    label: "hoarse voice or throat irritation support",
+    triggers: ["hoarse voice", "lost voice", "voice gone", "throat irritated", "voice strain", "raspy throat"],
+    recommendations: [
+      {
+        supplementId: "ginger-powder",
+        priority: "medium",
+        reason: "May offer warming support for mild throat irritation and hoarseness.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "lemon-powder",
+        priority: "medium",
+        reason: "May support recovery-oriented daily routines during mild throat symptoms.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "respiratory-chesty-recovery",
+    label: "chesty cough recovery support",
+    triggers: ["chesty cough", "mucus cough", "phlegm", "coughing mucus", "phlegmy", "chest congestion"],
+    recommendations: [
+      {
+        supplementId: "ginger-powder",
+        priority: "medium",
+        reason: "May offer warming support during mild chesty-cough recovery.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "baobab-powder",
+        priority: "low",
+        reason: "May support general recovery and immune-supportive nutrition while symptoms settle.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "lemon-powder",
+        priority: "low",
+        reason: "May support lighter recovery-oriented routines during mild cough symptoms.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "office-posture-upper-body",
+    label: "posture or desk strain support",
+    triggers: ["bad posture", "posture pain", "desk posture", "rounded shoulders", "screen posture", "office neck shoulder"],
+    recommendations: [
+      {
+        supplementId: "turmeric-powder",
+        priority: "medium",
+        reason: "May support healthy inflammation balance for recurring posture-related discomfort.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "superfood-collagen",
+        priority: "medium",
+        reason: "May support connective tissue and recovery during ongoing upper-body strain.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "matcha-powder",
+        priority: "low",
+        reason: "May support focus during long desk days when the issue is tied to office routines.",
+        dosage: "Start with 2-5g per day"
+      }
+    ]
+  },
+  {
+    id: "urinary-uti-style-support",
+    label: "UTI-style urinary discomfort support",
+    triggers: ["uti", "urine infection", "urinary tract infection", "pain when peeing", "burning when urinating", "frequent urination", "urinary discomfort"],
+    recommendations: [
+      {
+        supplementId: "lemon-powder",
+        priority: "low",
+        reason: "May support hydration-friendly daily routines in mild urinary discomfort situations.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "baobab-powder",
+        priority: "low",
+        reason: "May support general recovery-oriented nutrition while mild urinary symptoms settle.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "digestive-nausea-travel",
+    label: "nausea or motion discomfort support",
+    triggers: ["travel nausea", "motion sickness", "car sick", "sea sick", "feel nauseous", "queasy", "nausea"],
+    recommendations: [
+      {
+        supplementId: "ginger-powder",
+        priority: "high",
+        reason: "May support digestion and help with mild nausea or travel-related stomach discomfort.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "lemon-powder",
+        priority: "medium",
+        reason: "May offer a lighter option when the stomach feels unsettled.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "muscle-cramp-support",
+    label: "muscle cramp support",
+    triggers: ["muscle cramps", "leg cramps", "calf cramps", "charley horse", "night cramps", "cramps in legs"],
+    recommendations: [
+      {
+        supplementId: "beetroot-powder",
+        priority: "medium",
+        reason: "May support circulation and muscle performance when cramps happen around activity or fatigue.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "kale-powder",
+        priority: "medium",
+        reason: "May support mineral-rich daily nutrition for muscle and recovery support.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "turmeric-powder",
+        priority: "low",
+        reason: "May support recovery if cramping comes with soreness or overuse.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "hydration-sluggish-support",
+    label: "hydration or dehydrated support",
+    triggers: ["dehydrated", "dry mouth", "feel dehydrated", "sluggish from heat", "heat tired", "need hydration"],
+    recommendations: [
+      {
+        supplementId: "lemon-powder",
+        priority: "medium",
+        reason: "May fit hydration-friendly daily routines when you feel depleted or dried out.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "baobab-powder",
+        priority: "medium",
+        reason: "May support recovery-oriented nutrition and a lighter daily add-in.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "barley-grass-powder",
+        priority: "low",
+        reason: "May support gentle daily greens intake when feeling run down or sluggish.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "cholesterol-heart-support",
+    label: "cholesterol support",
+    triggers: ["cholesterol", "high cholesterol", "bad cholesterol", "ldl", "lipids", "heart health"],
+    recommendations: [
+      {
+        supplementId: "chia-seed",
+        priority: "high",
+        reason: "May support heart-friendly nutrition with fiber and omega-3s in daily routines.",
+        dosage: "Start with 10-15g per day"
+      },
+      {
+        supplementId: "australian-instant-oats",
+        priority: "high",
+        reason: "May provide beta-glucan fiber that fits cholesterol-supportive eating patterns.",
+        dosage: "Start with 20-40g per day"
+      },
+      {
+        supplementId: "acai-berry",
+        priority: "low",
+        reason: "May support antioxidant intake for overall cardiovascular-friendly nutrition.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "skin-post-acne-marks",
+    label: "post-acne marks or skin recovery support",
+    triggers: ["acne marks", "acne scars", "pimple marks", "post acne marks", "skin healing", "uneven skin tone"],
+    recommendations: [
+      {
+        supplementId: "tomato-powder",
+        priority: "medium",
+        reason: "May support skin-focused antioxidant intake during recovery from breakouts.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "superfood-collagen",
+        priority: "medium",
+        reason: "May support overall skin structure and recovery-oriented nutrition.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "blueberry-powder",
+        priority: "low",
+        reason: "May support antioxidant protection for overall skin wellness.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "hormonal-balance-support",
+    label: "hormonal balance support",
+    triggers: ["hormonal imbalance", "hormonal issues", "hormone balance", "hormones off", "cycle hormones", "pms"],
+    recommendations: [
+      {
+        supplementId: "maca-powder",
+        priority: "high",
+        reason: "May support resilience and general wellbeing during hormone-related fluctuations.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "cacao-powder",
+        priority: "low",
+        reason: "May support mood and comfort when hormone-related symptoms feel draining.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "low-libido-support",
+    label: "low libido or drive support",
+    triggers: ["low libido", "sex drive low", "reduced libido", "low sex drive", "drive feels low"],
+    recommendations: [
+      {
+        supplementId: "maca-powder",
+        priority: "medium",
+        reason: "May support vitality and daily wellbeing when energy and drive feel low.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "cacao-powder",
+        priority: "low",
+        reason: "May support mood and overall wellbeing in lower-energy phases.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
+  },
+  {
+    id: "greens-poor-diet-recovery",
+    label: "poor diet or low produce intake support",
+    triggers: ["eat badly", "poor diet", "not enough vegetables", "not enough fruits", "junk food", "eat unhealthy"],
+    recommendations: [
+      {
+        supplementId: "wheatgrass-powder",
+        priority: "medium",
+        reason: "May help fill greens gaps when daily food quality has been poor.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "spirulina-powder",
+        priority: "medium",
+        reason: "May support overall nutrient intake when meals have been inconsistent.",
+        dosage: "Start with 5-10g per day"
+      },
+      {
+        supplementId: "kale-powder",
+        priority: "medium",
+        reason: "May support micronutrient intake when vegetables are lacking.",
+        dosage: "Start with 5-10g per day"
+      }
+    ]
   }
 ];
