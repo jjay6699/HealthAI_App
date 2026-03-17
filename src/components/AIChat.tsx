@@ -49,6 +49,13 @@ const repairMojibake = (value: string) => {
   }
 };
 
+const normalizeAssistantResponse = (text: string) =>
+  text
+    .replace(/\*\*/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
 const normalizeLocalizedObject = <T extends Record<string, unknown>>(input: T): T =>
   Object.fromEntries(
     Object.entries(input).map(([key, value]) => {
@@ -905,7 +912,9 @@ If you need more context before giving tailored guidance, ask: "${text.personali
 
 If you recommend nutrition products, ONLY use items from this list: ${supplementsList}.
 Do not recommend anything outside the list.
-Do not use markdown or bold formatting (no **). Use plain text only.`
+Always format replies as plain-text point form using numbered items like 1. 2. 3.
+Keep each point concise but useful, and use 3-6 points unless a shorter answer is clearly better.
+Do not use markdown or bold formatting (no **, bullets with *, or headings). Use plain text only.`
           },
           ...messages.map(m => ({ role: m.role, content: m.content })),
           { role: "user", content: `${content}\n\nQuestionnaire completed: ${questionnaireCompleted ? "yes" : "no"}` }
@@ -919,13 +928,15 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
       const cleanedContent = stripDisclaimers(
         response.choices[0].message.content || text.genericFallback
       );
-      const localizedContent = await localizeAssistantText(cleanedContent, language).catch(
-        () => cleanedContent
+      const normalizedContent = normalizeAssistantResponse(cleanedContent);
+      const localizedContent = await localizeAssistantText(normalizedContent, language).catch(
+        () => normalizedContent
       );
+      const finalContent = normalizeAssistantResponse(localizedContent);
 
       const assistantMessage: Message = {
         role: "assistant",
-        content: localizedContent
+        content: finalContent
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -933,19 +944,19 @@ Do not use markdown or bold formatting (no **). Use plain text only.`
       try {
         const aiRecommendations = await generateChatSupplementRecommendations({
           userMessage: content,
-          assistantReply: localizedContent,
+          assistantReply: finalContent,
           conversationContext: messages.slice(-4).map((message) => `${message.role}: ${message.content}`),
           language
         });
 
         const nextRecommendations = aiRecommendations ?? buildSymptomRecommendations(content, isChinese);
         setChatRecommendations(nextRecommendations);
-        persistRecommendationExample(language, content, localizedContent, nextRecommendations);
+        persistRecommendationExample(language, content, finalContent, nextRecommendations);
       } catch (recommendationError) {
         console.error("Error generating AI chat recommendations:", recommendationError);
         const fallbackRecommendations = buildSymptomRecommendations(content, isChinese);
         setChatRecommendations(fallbackRecommendations);
-        persistRecommendationExample(language, content, localizedContent, fallbackRecommendations);
+        persistRecommendationExample(language, content, finalContent, fallbackRecommendations);
       }
     } catch (error) {
       console.error("Error calling OpenAI:", error);
