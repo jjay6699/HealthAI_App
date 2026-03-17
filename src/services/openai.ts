@@ -1297,12 +1297,7 @@ export async function generateChatSupplementRecommendations(input: {
     description: SUPPLEMENT_DESCRIPTIONS[supplement.id] || ""
   }));
 
-  const response = await createChatCompletion({
-    model: ANALYSIS_MODEL,
-    messages: [
-      {
-        role: "system",
-        content: `You are a cautious nutrition product recommendation engine for an AI health chat. ${getLanguageInstruction(language)}
+  const buildRecommendationPrompt = (broadCatalogFallback: boolean) => `You are a cautious nutrition product recommendation engine for an AI health chat. ${getLanguageInstruction(language)}
 
 Your job:
 - Read the user's situation semantically, not by exact keyword matching.
@@ -1329,10 +1324,18 @@ Common examples that should usually produce catalog cross-check recommendations 
 
 Safety rules:
 - If symptoms sound urgent, severe, or medically high-risk, return no product recommendations.
-- If there is no clear product fit from the catalog, return no product recommendations.
+- If there is no plausible product fit from the catalog, return no product recommendations.
 - Avoid energizing products for insomnia, anxiety, palpitations, or similar complaints unless the user is explicitly asking about low energy.
 - Avoid constipation/fiber-forward recommendations for diarrhea, vomiting, or likely acute stomach infection.
 - Keep recommendations conservative and support-oriented.
+
+${broadCatalogFallback
+  ? `Fallback behavior:
+- If there is no direct symptom-specific match but the issue is non-urgent, still check whether the catalog has anything that could support the user's broader need such as digestion, hydration-friendly routines, inflammation balance, antioxidant intake, greens intake, recovery, fiber intake, protein intake, mood support, or general wellness.
+- For non-urgent complaints, prefer returning 1-3 honest, support-oriented catalog options instead of returning nothing whenever there is a plausible fit.
+- If the fit is broad rather than direct, say that clearly in the reason.`
+  : `Recommendation threshold:
+- Prioritize direct symptom-relevant product fits first.`}
 
 Return valid JSON only with this exact structure:
 {
@@ -1347,29 +1350,33 @@ Return valid JSON only with this exact structure:
       "dosage": "short dosage guidance"
     }
   ]
-}`
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          userMessage: input.userMessage,
-          assistantReply: input.assistantReply || "",
-          conversationContext: input.conversationContext || [],
-          catalog
-        })
-      }
-    ],
-    response_format: { type: "json_object" },
-    temperature: 0.1,
-    max_tokens: 1200
-  });
+}`;
 
-  const content = response.choices[0].message.content;
-  if (!content) {
-    throw new Error("No chat recommendation response");
-  }
+  const requestRecommendationPass = async (broadCatalogFallback: boolean) =>
+    createChatCompletion({
+      model: ANALYSIS_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: buildRecommendationPrompt(broadCatalogFallback)
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            userMessage: input.userMessage,
+            assistantReply: input.assistantReply || "",
+            conversationContext: input.conversationContext || [],
+            catalog,
+            mode: broadCatalogFallback ? "broad_catalog_support" : "direct_symptom_support"
+          })
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.1,
+      max_tokens: 1200
+    });
 
-  const parsed = JSON.parse(content) as {
+  const parseRecommendationPayload = (content: string) => JSON.parse(content) as {
     shouldRecommend?: boolean;
     summary?: string;
     recommendations?: Array<{
@@ -1381,79 +1388,103 @@ Return valid JSON only with this exact structure:
     }>;
   };
 
-  if (!parsed.shouldRecommend || !Array.isArray(parsed.recommendations) || parsed.recommendations.length === 0) {
-    if (typeof window !== "undefined") {
-      try {
-        persistentStorage.setItem(cacheKey, JSON.stringify(null));
-      } catch {
-        // Ignore storage errors.
-      }
+  const normalizeRecommendationItems = (parsed: ReturnType<typeof parseRecommendationPayload>) =>
+    (parsed.recommendations || [])
+      .map((recommendation) => {
+        const byId = recommendation.supplementId
+          ? AVAILABLE_SUPPLEMENTS.find((supplement) => supplement.id === recommendation.supplementId)
+          : undefined;
+        const byName = recommendation.supplementName
+          ? AVAILABLE_SUPPLEMENTS.find((supplement) => supplement.name === recommendation.supplementName)
+          : undefined;
+        const supplement = byId || byName;
+        if (!supplement) return null;
+
+        return {
+          supplementId: supplement.id,
+          supplementName: supplement.name,
+          reason: recommendation.reason?.trim() || supplement.benefits[0] || "May offer general support.",
+          priority:
+            recommendation.priority === "high" || recommendation.priority === "low"
+              ? recommendation.priority
+              : "medium",
+          dosage: recommendation.dosage?.trim() || "Start with 5-10g per day"
+        };
+      })
+      .filter(
+        (
+          recommendation
+        ): recommendation is {
+          supplementId: string;
+          supplementName: string;
+          reason: string;
+          priority: "high" | "medium" | "low";
+          dosage: string;
+        } => recommendation !== null
+      )
+      .slice(0, 3);
+
+  const buildResult = (parsed: ReturnType<typeof parseRecommendationPayload>): ChatSupplementRecommendationResult | null => {
+    if (!parsed.shouldRecommend || !Array.isArray(parsed.recommendations) || parsed.recommendations.length === 0) {
+      return null;
     }
-    return null;
-  }
 
-  const recommendations = parsed.recommendations
-    .map((recommendation) => {
-      const byId = recommendation.supplementId
-        ? AVAILABLE_SUPPLEMENTS.find((supplement) => supplement.id === recommendation.supplementId)
-        : undefined;
-      const byName = recommendation.supplementName
-        ? AVAILABLE_SUPPLEMENTS.find((supplement) => supplement.name === recommendation.supplementName)
-        : undefined;
-      const supplement = byId || byName;
-      if (!supplement) return null;
+    const recommendations = normalizeRecommendationItems(parsed);
+    if (recommendations.length === 0) return null;
 
-      return {
-        supplementId: supplement.id,
-        supplementName: supplement.name,
-        reason: recommendation.reason?.trim() || supplement.benefits[0] || "May offer general support.",
-        priority:
-          recommendation.priority === "high" || recommendation.priority === "low"
-            ? recommendation.priority
-            : "medium",
-        dosage: recommendation.dosage?.trim() || "Start with 5-10g per day"
-      };
-    })
-    .filter(
-      (
-        recommendation
-      ): recommendation is {
-        supplementId: string;
-        supplementName: string;
-        reason: string;
-        priority: "high" | "medium" | "low";
-        dosage: string;
-      } => recommendation !== null
-    )
-    .slice(0, 3);
-
-  if (recommendations.length === 0) {
-    if (typeof window !== "undefined") {
-      try {
-        persistentStorage.setItem(cacheKey, JSON.stringify(null));
-      } catch {
-        // Ignore storage errors.
-      }
-    }
-    return null;
-  }
-
-  const result: ChatSupplementRecommendationResult = {
-    summary: parsed.summary?.trim() || (language === "zh"
-      ? "我根据你的情况和现有产品目录整理了可参考的产品建议。"
-      : "I cross-checked your situation against your catalog and found a few products that may be relevant."),
-    recommendations
+    return {
+      summary: parsed.summary?.trim() || (language === "zh"
+        ? "我根据你的情况和现有产品目录整理了可参考的产品建议。"
+        : "I cross-checked your situation against your catalog and found a few products that may be relevant."),
+      recommendations
+    };
   };
+
+  const directResponse = await requestRecommendationPass(false);
+  const directContent = directResponse.choices[0].message.content;
+  if (!directContent) {
+    throw new Error("No chat recommendation response");
+  }
+
+  const directResult = buildResult(parseRecommendationPayload(directContent));
+  if (directResult) {
+    if (typeof window !== "undefined") {
+      try {
+        persistentStorage.setItem(cacheKey, JSON.stringify(directResult));
+      } catch {
+        // Ignore storage errors.
+      }
+    }
+    return directResult;
+  }
+
+  const broadResponse = await requestRecommendationPass(true);
+  const broadContent = broadResponse.choices[0].message.content;
+  if (!broadContent) {
+    throw new Error("No broad chat recommendation response");
+  }
+
+  const broadResult = buildResult(parseRecommendationPayload(broadContent));
+  if (!broadResult) {
+    if (typeof window !== "undefined") {
+      try {
+        persistentStorage.setItem(cacheKey, JSON.stringify(null));
+      } catch {
+        // Ignore storage errors.
+      }
+    }
+    return null;
+  }
 
   if (typeof window !== "undefined") {
     try {
-      persistentStorage.setItem(cacheKey, JSON.stringify(result));
+      persistentStorage.setItem(cacheKey, JSON.stringify(broadResult));
     } catch {
       // Ignore storage errors.
     }
   }
 
-  return result;
+  return broadResult;
 }
 
 const getCurrentLanguage = (): Language => {
