@@ -1218,6 +1218,7 @@ export async function localizeAssistantText(
   if (!trimmed || language === "en") return trimmed || content;
 
   const cacheKey = buildAnalysisCacheKey("assistant-text-translation", {
+    version: "v2",
     language,
     content: trimmed
   });
@@ -1237,7 +1238,7 @@ export async function localizeAssistantText(
       {
         role: "system",
         content:
-          `You translate app chat replies for display. ${getLanguageInstruction(language)} Preserve the original meaning, tone, and formatting. Return plain text only.`
+          `You translate app chat replies for display. Respond entirely in ${language === "zh" ? "Simplified Chinese" : "natural Bahasa Melayu used in Malaysia"}. Preserve the original meaning, tone, and numbering. Return plain text only. Never invent placeholder field names, schema terms, or product ids such as supplementName, supplementId, catalog-id, or Exact Catalog Name.`
       },
       {
         role: "user",
@@ -1301,7 +1302,7 @@ export async function generateChatSupplementRecommendations(input: {
 
 Your job:
 - Read the user's situation semantically, not by exact keyword matching.
-- Understand English, Simplified Chinese, and Bahasa Malaysia symptom descriptions, paraphrases, and implied context.
+- Understand English, Simplified Chinese, and Bahasa Melayu used in Malaysia symptom descriptions, paraphrases, and implied context.
 - Understand broken English, missing grammar, short fragments, casual slang, and common misspellings.
 - Cross-check the user's situation ONLY against the provided product catalog.
 - Recommend products only when there is a reasonable support-oriented fit.
@@ -1356,7 +1357,12 @@ Return valid JSON only with this exact structure:
       "dosage": "short dosage guidance"
     }
   ]
-}`;
+}
+
+Output rules:
+- The JSON structure is internal. Do not echo field names or schema labels inside summary or reason text.
+- Summary and reason text must be natural user-facing language only.
+- Do not write supplementName, supplementId, catalog-id, or Exact Catalog Name inside any user-visible string.`;
 
   const requestRecommendationPass = async (broadCatalogFallback: boolean) =>
     createChatCompletion({
@@ -1442,7 +1448,7 @@ Return valid JSON only with this exact structure:
       summary: parsed.summary?.trim() || (language === "zh"
         ? "我根据你的情况和现有产品目录整理了可参考的产品建议。"
         : language === "bm"
-        ? "Saya telah menyemak situasi anda dengan katalog produk sedia ada dan menemui beberapa produk yang mungkin berkaitan."
+        ? "Saya telah semak situasi anda dengan katalog produk yang ada dan jumpa beberapa pilihan yang mungkin sesuai."
         : "I cross-checked your situation against your catalog and found a few products that may be relevant."),
       recommendations
     };
@@ -1505,7 +1511,7 @@ const getLanguageInstruction = (language: Language): string =>
   language === "zh"
     ? "Respond entirely in Simplified Chinese. Keep supplementName and supplementId unchanged."
     : language === "bm"
-    ? "Respond entirely in Bahasa Malaysia. Keep supplementName and supplementId unchanged."
+    ? "Respond entirely in natural Bahasa Melayu used in Malaysia. Keep supplementName and supplementId unchanged."
     : "Respond in English.";
 
 const localizeBloodworkAnalysis = async (
