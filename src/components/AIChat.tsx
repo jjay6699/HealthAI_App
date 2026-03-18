@@ -14,6 +14,7 @@ import {
   type BloodworkAnalysis,
   type SupplementRecommendation
 } from "../services/openai";
+import type { Language } from "../i18n";
 import { persistentStorage } from "../services/persistentStorage";
 
 interface Message {
@@ -28,7 +29,7 @@ interface RecommendationCardState {
 
 interface RecommendationExample {
   timestamp: string;
-  language: "en" | "zh";
+  language: Language;
   userMessage: string;
   assistantReply: string;
   hadRecommendations: boolean;
@@ -573,7 +574,7 @@ const scoreTriggerMatch = (
 };
 
 const persistRecommendationExample = (
-  language: "en" | "zh",
+  language: Language,
   userMessage: string,
   assistantReply: string,
   recommendations: RecommendationCardState | null
@@ -592,8 +593,10 @@ const persistRecommendationExample = (
 
 const buildSymptomRecommendations = (
   content: string,
-  isChinese: boolean
+  language: Language
 ): RecommendationCardState | null => {
+  const isChinese = language === "zh";
+  const isMalay = language === "bm";
   const normalizedContent = normalizeSymptomText(content);
   const contentTokens = new Set(extractSymptomTokens(content));
 
@@ -677,6 +680,8 @@ const buildSymptomRecommendations = (
       ...recommendation,
       reason: isChinese
         ? "根据你提到的症状，可能适合作为日常支持。"
+        : isMalay
+        ? "Berdasarkan simptom yang anda sebutkan, ini mungkin sesuai sebagai sokongan harian."
         : `${recommendation.reason} Relevant for: ${categoryLabels.slice(0, 2).join(" and ")}.`
     }));
 
@@ -685,6 +690,8 @@ const buildSymptomRecommendations = (
   return {
     summary: isChinese
       ? "我根据你提到的症状整理了可查看的产品建议。"
+      : isMalay
+      ? "Saya telah padankan simptom yang anda terangkan dengan beberapa cadangan produk yang boleh anda lihat."
       : "I matched products from your catalog based on the symptom patterns you described.",
     recommendations
   };
@@ -722,84 +729,115 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const navigate = useNavigate();
   const { language } = useI18n();
   const isChinese = language === "zh";
+  const isMalay = language === "bm";
   const rawText = {
     welcome: isChinese
       ? "\u4f60\u597d\uff0c\u6211\u662f\u4f60\u7684 AI \u5065\u5eb7\u987e\u95ee\uff0c\u57fa\u4e8e\u5927\u91cf\u533b\u5b66\u671f\u520a\u5185\u5bb9\u8fdb\u884c\u8bad\u7ec3\u3002\u4eca\u5929\u60f3\u54a8\u8be2\u4ec0\u4e48\u5065\u5eb7\u95ee\u9898\uff1f\n\n\u4f60\u53ef\u4ee5\u95ee\u6211\u5065\u5eb7\u3001\u8425\u517b\u76f8\u5173\u7684\u95ee\u9898\uff0c\u6216\u4e0a\u4f20\u8840\u6db2\u62a5\u544a\u83b7\u5f97\u4e2a\u6027\u5316\u5206\u6790\u3002"
+      : isMalay
+      ? "Hai! Saya ialah Penasihat Kesihatan AI anda, dilatih menggunakan ratusan ribu jurnal perubatan. Bagaimana saya boleh membantu soalan kesihatan anda hari ini?\n\nAnda boleh tanya apa sahaja tentang kesihatan, nutrisi, atau muat naik laporan darah anda untuk analisis peribadi!"
       : "Hello! I'm your AI Health Advisor, trained on hundreds of thousands of medical journals. How can I help you with your health questions today?\n\nYou can ask me anything about health, nutrition, or upload your bloodwork for personalized analysis!",
     uploadedFiles: (count: number, names: string) =>
-      isChinese ? `\u5df2\u4e0a\u4f20 ${count} \u4e2a\u6587\u4ef6\uff1a${names}` : `Uploaded ${count} file(s): ${names}`,
-    uploadPrompt: isChinese ? "\u8fd9\u662f\u4f60\u60f3\u5206\u6790\u7684\u8840\u6db2\u62a5\u544a\u5417\uff1f" : "Is this a blood report you want analyzed?",
+      isChinese ? `\u5df2\u4e0a\u4f20 ${count} \u4e2a\u6587\u4ef6\uff1a${names}` : isMalay ? `${count} fail telah dimuat naik: ${names}` : `Uploaded ${count} file(s): ${names}`,
+    uploadPrompt: isChinese ? "\u8fd9\u662f\u4f60\u60f3\u5206\u6790\u7684\u8840\u6db2\u62a5\u544a\u5417\uff1f" : isMalay ? "Adakah ini laporan darah yang anda mahu saya analisis?" : "Is this a blood report you want analyzed?",
     personalizePrompt: isChinese
       ? "\u4f60\u613f\u610f\u5148\u56de\u7b54\u4e00\u4e2a\u7b80\u77ed\u95ee\u5377\uff0c\u8ba9\u5efa\u8bae\u66f4\u4e2a\u6027\u5316\u5417\uff1f"
+      : isMalay
+      ? "Adakah anda mahu jawab soal selidik ringkas terlebih dahulu supaya panduan anda lebih diperibadikan?"
       : "Would you like to answer a short questionnaire to personalize your guidance?",
     uploadBloodworkPrompt: isChinese
       ? "\u4f60\u60f3\u4e0a\u4f20\u8840\u6db2\u62a5\u544a\uff0c\u4ee5\u83b7\u5f97\u66f4\u51c6\u786e\u7684\u5efa\u8bae\u548c\u66f4\u8be6\u7ec6\u7684\u89e3\u8bfb\u5417\uff1f"
+      : isMalay
+      ? "Adakah anda mahu memuat naik laporan darah anda untuk cadangan yang lebih tepat dan bacaan yang lebih terperinci?"
       : "Would you like to upload your bloodwork for more accurate recommendations and a detailed reading?",
-    declineQuestionnaire: isChinese ? "\u4e0d\u7528\u4e86\uff0c\u7ee7\u7eed\u804a\u5929\u5373\u53ef\u3002" : "No thanks, continue without the questionnaire.",
+    declineQuestionnaire: isChinese ? "\u4e0d\u7528\u4e86\uff0c\u7ee7\u7eed\u804a\u5929\u5373\u53ef\u3002" : isMalay ? "Tak perlu, teruskan tanpa soal selidik." : "No thanks, continue without the questionnaire.",
     under18Notice: isChinese
       ? "\u611f\u8c22\u544a\u77e5\u3002\u672c\u95ee\u5377\u4ec5\u9002\u7528\u4e8e 18 \u5c81\u53ca\u4ee5\u4e0a\u7528\u6237\u3002\u4f60\u4ecd\u7136\u53ef\u4ee5\u7ee7\u7eed\u54a8\u8be2\u5176\u4ed6\u5065\u5eb7\u95ee\u9898\u3002"
+      : isMalay
+      ? "Terima kasih kerana memaklumkan. Soal selidik ini hanya untuk pengguna berumur 18 tahun ke atas. Anda masih boleh terus bertanya soalan kesihatan yang lain."
       : "Thanks for letting me know. This questionnaire is only for users 18+. Feel free to ask any other questions.",
     fileProcessError: isChinese
       ? "\u5904\u7406\u4f60\u7684\u6587\u4ef6\u65f6\u51fa\u73b0\u9519\u8bef\u3002\u8bf7\u91cd\u8bd5\uff0c\u6216\u76f4\u63a5\u544a\u8bc9\u6211\u4f60\u7684\u8840\u6db2\u68c0\u6d4b\u7ed3\u679c\u3002"
+      : isMalay
+      ? "Saya menghadapi ralat semasa memproses fail anda. Cuba lagi atau terus beritahu saya keputusan laporan darah anda."
       : "I encountered an error processing your file. Please try again or describe your bloodwork results to me.",
     mixedFileError: isChinese
       ? "\u8bf7\u4e0a\u4f20\u5355\u4e2a PDF\uff0c\u6216\u4e0a\u4f20\u591a\u5f20\u56fe\u7247\uff0c\u4e0d\u8981\u6df7\u5408\u4e0a\u4f20\u3002"
+      : isMalay
+      ? "Sila muat naik sama ada satu PDF atau beberapa imej, bukan campuran fail."
       : "Please upload either a single PDF or multiple images, not a mix of files.",
     pdfInChatError: isChinese
       ? "\u8fd9\u91cc\u53ef\u4ee5\u5206\u6790\u56fe\u7247\uff0c\u4f46 PDF \u9700\u8981\u4f7f\u7528\u8840\u6db2\u62a5\u544a\u5206\u6790\u5668\u3002\u8bf7\u6539\u4e3a\u4e0a\u4f20\u6e05\u6670\u56fe\u7247\u3002"
+      : isMalay
+      ? "Saya boleh menganalisis imej di sini, tetapi PDF perlu menggunakan penganalisis laporan darah. Sila muat naik imej yang jelas."
       : "I can analyze images here, but PDFs need the blood report analyzer. Please upload a clear image instead.",
     imageAnalyzePrompt: isChinese
       ? "\u8bf7\u5206\u6790\u8fd9\u5f20\u56fe\u7247\uff0c\u5e76\u7528\u901a\u4fd7\u6613\u61c2\u7684\u8bed\u8a00\u8bf4\u660e\u4f60\u770b\u5230\u7684\u5185\u5bb9\u3002"
+      : isMalay
+      ? "Sila analisis imej ini dan terangkan apa yang anda nampak dengan bahasa yang mudah difahami."
       : "Analyze this image and explain what it shows in plain language.",
-    imageAnalyzeFallback: isChinese ? "\u6211\u6682\u65f6\u65e0\u6cd5\u5206\u6790\u8fd9\u5f20\u56fe\u7247\u3002\u8bf7\u6362\u4e00\u5f20\u518d\u8bd5\u3002" : "I couldn't analyze that image. Please try another one.",
-    imageAnalyzeError: isChinese ? "\u5206\u6790\u8fd9\u5f20\u56fe\u7247\u65f6\u51fa\u73b0\u9519\u8bef\uff0c\u8bf7\u518d\u8bd5\u4e00\u6b21\u3002" : "I ran into an error analyzing that image. Please try again.",
+    imageAnalyzeFallback: isChinese ? "\u6211\u6682\u65f6\u65e0\u6cd5\u5206\u6790\u8fd9\u5f20\u56fe\u7247\u3002\u8bf7\u6362\u4e00\u5f20\u518d\u8bd5\u3002" : isMalay ? "Saya tidak dapat menganalisis imej itu buat masa ini. Sila cuba imej lain." : "I couldn't analyze that image. Please try another one.",
+    imageAnalyzeError: isChinese ? "\u5206\u6790\u8fd9\u5f20\u56fe\u7247\u65f6\u51fa\u73b0\u9519\u8bef\uff0c\u8bf7\u518d\u8bd5\u4e00\u6b21\u3002" : isMalay ? "Saya menghadapi ralat semasa menganalisis imej itu. Sila cuba lagi." : "I ran into an error analyzing that image. Please try again.",
     imagesAnalyzePrompt: isChinese
       ? "\u8bf7\u7efc\u5408\u5206\u6790\u6240\u6709\u56fe\u7247\uff0c\u5e76\u7528\u901a\u4fd7\u6613\u61c2\u7684\u8bed\u8a00\u7ed9\u51fa\u4e00\u4efd\u6574\u4f53\u8bf4\u660e\u3002"
+      : isMalay
+      ? "Sila analisis semua imej ini bersama-sama dan berikan satu laporan keseluruhan dengan bahasa yang mudah difahami."
       : "Analyze all images together and provide one overall report in plain language.",
-    imagesAnalyzeFallback: isChinese ? "\u6211\u6682\u65f6\u65e0\u6cd5\u5206\u6790\u8fd9\u4e9b\u56fe\u7247\u3002\u8bf7\u6362\u4e00\u7ec4\u518d\u8bd5\u3002" : "I couldn't analyze those images. Please try another set.",
-    imagesAnalyzeError: isChinese ? "\u5206\u6790\u8fd9\u4e9b\u56fe\u7247\u65f6\u51fa\u73b0\u9519\u8bef\uff0c\u8bf7\u518d\u8bd5\u4e00\u6b21\u3002" : "I ran into an error analyzing those images. Please try again.",
-    imagesProcessError: isChinese ? "\u5904\u7406\u8fd9\u4e9b\u56fe\u7247\u65f6\u51fa\u73b0\u9519\u8bef\uff0c\u8bf7\u518d\u8bd5\u4e00\u6b21\u3002" : "I encountered an error processing those images. Please try again.",
-    supplementPromptTitle: isChinese ? "\u9700\u8981\u8425\u517b\u5efa\u8bae\u5417\uff1f" : "Need supplement suggestions?",
+    imagesAnalyzeFallback: isChinese ? "\u6211\u6682\u65f6\u65e0\u6cd5\u5206\u6790\u8fd9\u4e9b\u56fe\u7247\u3002\u8bf7\u6362\u4e00\u7ec4\u518d\u8bd5\u3002" : isMalay ? "Saya tidak dapat menganalisis imej-imej itu buat masa ini. Sila cuba set yang lain." : "I couldn't analyze those images. Please try another set.",
+    imagesAnalyzeError: isChinese ? "\u5206\u6790\u8fd9\u4e9b\u56fe\u7247\u65f6\u51fa\u73b0\u9519\u8bef\uff0c\u8bf7\u518d\u8bd5\u4e00\u6b21\u3002" : isMalay ? "Saya menghadapi ralat semasa menganalisis imej-imej itu. Sila cuba lagi." : "I ran into an error analyzing those images. Please try again.",
+    imagesProcessError: isChinese ? "\u5904\u7406\u8fd9\u4e9b\u56fe\u7247\u65f6\u51fa\u73b0\u9519\u8bef\uff0c\u8bf7\u518d\u8bd5\u4e00\u6b21\u3002" : isMalay ? "Saya menghadapi ralat semasa memproses imej-imej itu. Sila cuba lagi." : "I encountered an error processing those images. Please try again.",
+    supplementPromptTitle: isChinese ? "\u9700\u8981\u8425\u517b\u5efa\u8bae\u5417\uff1f" : isMalay ? "Perlu cadangan suplemen?" : "Need supplement suggestions?",
     supplementPromptBody: isChinese
       ? "\u6839\u636e\u521a\u624d\u7684\u56fe\u7247\u5206\u6790\uff0c\u6211\u53ef\u4ee5\u63a8\u8350\u53ef\u80fd\u9002\u5408\u7684\u8425\u517b\u8865\u5145\u4ea7\u54c1\u3002"
+      : isMalay
+      ? "Berdasarkan isu imej yang baru saya analisis, saya boleh cadangkan suplemen yang mungkin sesuai sebagai sokongan."
       : "Based on the image issue I just analyzed, I can suggest suitable supplements for support.",
-    supplementPromptYes: isChinese ? "\u67e5\u770b\u5efa\u8bae" : "View suggestions",
-    supplementPromptNo: isChinese ? "\u6682\u65f6\u4e0d\u7528" : "Not now",
-    chatRecommendationTitle: isChinese ? "\u4ea7\u54c1\u5efa\u8bae" : "Product recommendations",
-    chatRecommendationButton: isChinese ? "\u67e5\u770b\u5efa\u8bae" : "View recommendations",
+    supplementPromptYes: isChinese ? "\u67e5\u770b\u5efa\u8bae" : isMalay ? "Lihat cadangan" : "View suggestions",
+    supplementPromptNo: isChinese ? "\u6682\u65f6\u4e0d\u7528" : isMalay ? "Bukan sekarang" : "Not now",
+    chatRecommendationTitle: isChinese ? "\u4ea7\u54c1\u5efa\u8bae" : isMalay ? "Cadangan produk" : "Product recommendations",
+    chatRecommendationButton: isChinese ? "\u67e5\u770b\u5efa\u8bae" : isMalay ? "Lihat cadangan" : "View recommendations",
     chatRecommendationDisclaimer: isChinese
       ? "\u5982\u679c\u75c7\u72b6\u6301\u7eed\u6216\u52a0\u91cd\uff0c\u8bf7\u5c3d\u5feb\u54a8\u8be2\u533b\u7597\u4e13\u4e1a\u4eba\u58eb\u3002"
+      : isMalay
+      ? "Jika masalah ini berterusan atau menjadi lebih teruk, sila dapatkan nasihat profesional perubatan."
       : "If the issue persists or gets worse, please see a medical professional.",
     supplementSuggestionError: isChinese
       ? "\u751f\u6210\u8425\u517b\u5efa\u8bae\u65f6\u51fa\u73b0\u9519\u8bef\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002"
+      : isMalay
+      ? "Saya menghadapi ralat semasa menjana cadangan suplemen. Sila cuba lagi nanti."
       : "I ran into an error generating supplement suggestions. Please try again later.",
-    genericFallback: isChinese ? "\u62b1\u6b49\uff0c\u6211\u6682\u65f6\u65e0\u6cd5\u751f\u6210\u56de\u590d\u3002\u8bf7\u518d\u8bd5\u4e00\u6b21\u3002" : "I apologize, I couldn't generate a response. Please try again.",
+    genericFallback: isChinese ? "\u62b1\u6b49\uff0c\u6211\u6682\u65f6\u65e0\u6cd5\u751f\u6210\u56de\u590d\u3002\u8bf7\u518d\u8bd5\u4e00\u6b21\u3002" : isMalay ? "Maaf, saya tidak dapat menjana jawapan buat masa ini. Sila cuba lagi." : "I apologize, I couldn't generate a response. Please try again.",
     genericError: (message: string) =>
       isChinese
         ? `\u62b1\u6b49\uff0c\u6211\u9047\u5230\u4e86\u4e00\u4e9b\u9519\u8bef\uff1a${message}\u3002\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002`
+        : isMalay
+        ? `Maaf, saya menghadapi ralat: ${message}. Sila cuba sebentar lagi.`
         : `I'm sorry, I encountered an error: ${message}. Please try again shortly.`,
-    title: isChinese ? "AI \u5065\u5eb7\u987e\u95ee" : "AI Health Advisor",
-    subtitle: isChinese ? "\u57fa\u4e8e\u533b\u5b66\u671f\u520a\u8bad\u7ec3" : "Trained on medical journals",
-    bloodReportTitle: isChinese ? "\u8bf7\u9009\u62e9\u5206\u6790\u65b9\u5f0f" : "Choose analysis mode",
-    yesAnalyze: isChinese ? "\u6309\u8840\u6db2\u62a5\u544a\u5206\u6790" : "Analyze as bloodwork",
-    noNotBlood: isChinese ? "\u6309\u666e\u901a\u56fe\u7247\u5206\u6790" : "Analyze as regular images",
-    questionnaireTitle: isChinese ? "\u7b80\u77ed\u95ee\u5377\uff1f" : "Quick questionnaire?",
-    yes: isChinese ? "\u662f" : "Yes",
-    no: isChinese ? "\u5426" : "No",
-    back: isChinese ? "\u8fd4\u56de" : "Back",
-    next: isChinese ? "\u4e0b\u4e00\u6b65" : "Next",
-    finish: isChinese ? "\u5b8c\u6210" : "Finish",
-    thinking: isChinese ? "\u601d\u8003\u4e2d..." : "Thinking...",
-    attachTitle: isChinese ? "\u4e0a\u4f20\u8840\u6db2\u62a5\u544a\u6587\u4ef6" : "Attach bloodwork file",
-    inputPlaceholder: isChinese ? "\u54a8\u8be2\u5065\u5eb7\u3001\u8425\u517b\u76f8\u5173\u95ee\u9898..." : "Ask about health, nutrition...",
-    send: isChinese ? "\u53d1\u9001" : "Send",
+    title: isChinese ? "AI \u5065\u5eb7\u987e\u95ee" : isMalay ? "Penasihat Kesihatan AI" : "AI Health Advisor",
+    subtitle: isChinese ? "\u57fa\u4e8e\u533b\u5b66\u671f\u520a\u8bad\u7ec3" : isMalay ? "Dilatih menggunakan jurnal perubatan" : "Trained on medical journals",
+    bloodReportTitle: isChinese ? "\u8bf7\u9009\u62e9\u5206\u6790\u65b9\u5f0f" : isMalay ? "Pilih mod analisis" : "Choose analysis mode",
+    yesAnalyze: isChinese ? "\u6309\u8840\u6db2\u62a5\u544a\u5206\u6790" : isMalay ? "Analisis sebagai laporan darah" : "Analyze as bloodwork",
+    noNotBlood: isChinese ? "\u6309\u666e\u901a\u56fe\u7247\u5206\u6790" : isMalay ? "Analisis sebagai imej biasa" : "Analyze as regular images",
+    questionnaireTitle: isChinese ? "\u7b80\u77ed\u95ee\u5377\uff1f" : isMalay ? "Soal selidik ringkas?" : "Quick questionnaire?",
+    yes: isChinese ? "\u662f" : isMalay ? "Ya" : "Yes",
+    no: isChinese ? "\u5426" : isMalay ? "Tidak" : "No",
+    back: isChinese ? "\u8fd4\u56de" : isMalay ? "Kembali" : "Back",
+    next: isChinese ? "\u4e0b\u4e00\u6b65" : isMalay ? "Seterusnya" : "Next",
+    finish: isChinese ? "\u5b8c\u6210" : isMalay ? "Selesai" : "Finish",
+    thinking: isChinese ? "\u601d\u8003\u4e2d..." : isMalay ? "Sedang berfikir..." : "Thinking...",
+    attachTitle: isChinese ? "\u4e0a\u4f20\u8840\u6db2\u62a5\u544a\u6587\u4ef6" : isMalay ? "Lampirkan fail laporan darah" : "Attach bloodwork file",
+    inputPlaceholder: isChinese ? "\u54a8\u8be2\u5065\u5eb7\u3001\u8425\u517b\u76f8\u5173\u95ee\u9898..." : isMalay ? "Tanya tentang kesihatan, nutrisi..." : "Ask about health, nutrition...",
+    send: isChinese ? "\u53d1\u9001" : isMalay ? "Hantar" : "Send",
     aiLanguageInstruction: isChinese
       ? "Respond entirely in Simplified Chinese. Keep the tone clear, natural, and medically responsible."
+      : isMalay
+      ? "Respond entirely in Bahasa Malaysia. Keep the tone clear, natural, and medically responsible."
       : "Respond entirely in English. Keep the tone clear, natural, and medically responsible."
   };
   const text = rawText;
   const questionnaireDeclineReply = isChinese
     ? "\u597d\u7684\uff0c\u6211\u4eec\u53ef\u4ee5\u7ee7\u7eed\u800c\u4e0d\u586b\u5199\u95ee\u5377\u3002\u51c6\u5907\u597d\u540e\uff0c\u968f\u65f6\u95ee\u6211\u4efb\u4f55\u5065\u5eb7\u6216\u8425\u517b\u76f8\u5173\u7684\u95ee\u9898\u3002"
+    : isMalay
+    ? "Tiada masalah, kita boleh teruskan tanpa soal selidik. Tanya saya apa-apa soalan kesihatan atau nutrisi bila-bila masa anda bersedia."
     : "No problem, we can continue without the questionnaire. Ask me any health or nutrition question whenever you're ready.";
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -813,8 +851,10 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
   const [pendingUploads, setPendingUploads] = useState<File[]>([]);
   const uploadSelectionHelpText = isChinese
     ? `\u5df2\u9009\u62e9 ${pendingUploads.length} \u4e2a\u6587\u4ef6\u3002\u5982\u679c\u4f60\u7684\u624b\u673a\u4e0d\u652f\u6301\u591a\u9009\uff0c\u8bf7\u70b9\u4e0b\u9762\u7ee7\u7eed\u9010\u5f20\u6dfb\u52a0\u56fe\u7247\u3002`
+    : isMalay
+    ? `${pendingUploads.length} fail telah dipilih. Jika telefon anda tidak menyokong multi-pilih, tekan di bawah untuk tambah lagi imej satu demi satu.`
     : `${pendingUploads.length} file(s) selected. If your phone does not support multi-select, tap below to add more images one by one.`;
-  const addMoreImagesLabel = isChinese ? "\u7ee7\u7eed\u6dfb\u52a0\u56fe\u7247" : "Add more images";
+  const addMoreImagesLabel = isChinese ? "\u7ee7\u7eed\u6dfb\u52a0\u56fe\u7247" : isMalay ? "Tambah lagi imej" : "Add more images";
   const [showUploadPrompt, setShowUploadPrompt] = useState(false);
   const [showSupplementPrompt, setShowSupplementPrompt] = useState(false);
   const [showQuestionnairePrompt, setShowQuestionnairePrompt] = useState(false);
@@ -1170,12 +1210,12 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
           language
         });
 
-        const nextRecommendations = aiRecommendations ?? buildSymptomRecommendations(content, isChinese);
+        const nextRecommendations = aiRecommendations ?? buildSymptomRecommendations(content, language);
         setChatRecommendations(nextRecommendations);
         persistRecommendationExample(language, content, finalContent, nextRecommendations);
       } catch (recommendationError) {
         console.error("Error generating AI chat recommendations:", recommendationError);
-        const fallbackRecommendations = buildSymptomRecommendations(content, isChinese);
+        const fallbackRecommendations = buildSymptomRecommendations(content, language);
         setChatRecommendations(fallbackRecommendations);
         persistRecommendationExample(language, content, finalContent, fallbackRecommendations);
       }

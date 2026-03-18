@@ -117,7 +117,8 @@ const HistoryScreen = () => {
     if (!iso) return t("history.unknownDate");
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return t("history.unknownDate");
-    return date.toLocaleDateString(language === "zh" ? "zh-CN" : undefined, {
+    const locale = language === "zh" ? "zh-CN" : language === "bm" ? "ms-MY" : undefined;
+    return date.toLocaleDateString(locale, {
       month: "short",
       day: "numeric",
       year: "numeric"

@@ -274,7 +274,8 @@ const ProfileScreen = () => {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const languageOptions: { value: Language; label: string }[] = [
     { value: "en", label: t("common.language.en") },
-    { value: "zh", label: t("common.language.zh") }
+    { value: "zh", label: t("common.language.zh") },
+    { value: "bm", label: t("common.language.bm") }
   ];
 
   // Temporary state for measurement editor
@@ -317,22 +318,22 @@ const ProfileScreen = () => {
   }, [weightHistory]);
 
   const editConfig: Record<EditKey, EditConfig> = {
-    avatarImage: { label: "Profile photo" },
+    avatarImage: { label: t("profile.profilePhoto") },
     name: { label: t("profile.fullName") },
-    email: { label: "Email address", type: "email" },
+    email: { label: t("profile.emailAddress"), type: "email" },
     dob: { label: t("profile.dateOfBirth"), type: "date" },
     gender: { label: t("profile.gender"), options: ["Female", "Male"] },
-    height: { label: "Height (cm)", type: "number", inputMode: "numeric" },
-    weight: { label: "Weight (kg)", type: "number", inputMode: "numeric" },
+    height: { label: t("profile.heightCm"), type: "number", inputMode: "numeric" },
+    weight: { label: t("profile.weightKg"), type: "number", inputMode: "numeric" },
     activityLevel: { label: t("profile.activityLevel"), options: ["Sedentary", "Lightly active", "Moderately active", "Very active"] },
-    exerciseDays: { label: "Exercise days (per week)", type: "number", inputMode: "numeric" },
+    exerciseDays: { label: t("profile.exerciseDaysPerWeek"), type: "number", inputMode: "numeric" },
     minutesPerSession: { label: t("profile.minutesPerSession"), type: "number", inputMode: "numeric" },
     sleepDuration: { label: t("profile.sleepDuration"), options: ["Under 5 hrs", "5-6 hrs", "6-7 hrs", "7-8 hrs", "8+ hrs"] },
     stressLevel: { label: t("profile.stressLevel"), options: ["Low", "Moderate", "High"] },
-    bloodPressure: { label: t("profile.bloodPressure"), helper: "Format: 120/80" },
+    bloodPressure: { label: t("profile.bloodPressure"), helper: t("profile.bpFormatHelper") },
     fastingGlucose: { label: `${t("profile.fastingGlucose")} (mmol/L)`, type: "number", inputMode: "decimal", step: 0.1 },
-    hba1c: { label: "HbA1c (%)", type: "number", inputMode: "decimal" },
-    restingHeartRate: { label: "Resting HR (bpm)", type: "number", inputMode: "numeric" },
+    hba1c: { label: `${t("profile.hba1c")} (%)`, type: "number", inputMode: "decimal" },
+    restingHeartRate: { label: t("profile.restingHrBpm"), type: "number", inputMode: "numeric" },
     waistCircumference: { label: `${t("profile.waistCircumference")} (cm)`, type: "number", inputMode: "numeric" },
     bodyFat: { label: `${t("profile.bodyFat")} (%)`, type: "number", inputMode: "decimal" },
     dietPattern: { label: t("profile.dietPattern"), options: ["Balanced", "Mediterranean", "Plant-based", "Vegetarian", "Vegan", "Low-carb", "Keto", "Paleo"] },
@@ -348,9 +349,9 @@ const ProfileScreen = () => {
     dataProcessingConsent: { label: t("profile.dataConsent") },
     dataProcessing: { label: t("profile.dataProcessing") },
     dataStorage: { label: t("profile.healthDataStorage") },
-    research: { label: "Research participation" },
-    appleHealth: { label: "Apple Health status" },
-    googleFit: { label: "Google Fit status" }
+    research: { label: t("profile.researchParticipationStatus") },
+    appleHealth: { label: t("profile.appleHealthStatus") },
+    googleFit: { label: t("profile.googleFitStatus") }
   };
 
   const numericKeys = new Set<EditKey>([
@@ -463,9 +464,56 @@ const ProfileScreen = () => {
     }
   };
 
-  const formatValue = (value: string) => (value && value.trim() ? value : "Not set");
+  const localizeProfileValue = (value: string) => {
+    const trimmed = value.trim();
+    switch (trimmed) {
+      case "Female": return t("profile.gender.female");
+      case "Male": return t("profile.gender.male");
+      case "Sedentary": return t("profile.activity.sedentary");
+      case "Lightly active": return t("profile.activity.light");
+      case "Moderately active": return t("profile.activity.moderate");
+      case "Very active": return t("profile.activity.very");
+      case "Under 5 hrs": return t("profile.sleep.under5");
+      case "5-6 hrs": return t("profile.sleep.5to6");
+      case "6-7 hrs": return t("profile.sleep.6to7");
+      case "7-8 hrs": return t("profile.sleep.7to8");
+      case "8+ hrs": return t("profile.sleep.8plus");
+      case "Low": return t("profile.stress.low");
+      case "Moderate": return t("profile.stress.moderate");
+      case "High": return t("profile.stress.high");
+      case "Balanced": return t("profile.diet.balanced");
+      case "Mediterranean": return t("profile.diet.mediterranean");
+      case "Plant-based": return t("profile.diet.plant");
+      case "Vegetarian": return t("profile.diet.vegetarian");
+      case "Vegan": return t("profile.diet.vegan");
+      case "Low-carb": return t("profile.diet.lowcarb");
+      case "Keto": return t("profile.diet.keto");
+      case "Paleo": return t("profile.diet.paleo");
+      case "None": return t("profile.caffeine.none");
+      case "Low (1 cup)": return t("profile.caffeine.low");
+      case "Moderate (2-3 cups)": return t("profile.caffeine.moderate");
+      case "High (4+ cups)": return t("profile.caffeine.high");
+      case "Allowed": return t("profile.data.allowed");
+      case "Opted in": return t("profile.data.optedIn");
+      case "Opted out": return t("profile.data.optedOut");
+      case "Not connected": return t("profile.data.notConnected");
+      default: return trimmed;
+    }
+  };
+
+  const formatValue = (value: string) => (value && value.trim() ? localizeProfileValue(value) : t("profile.notSet"));
   const formatNumber = (value: number, unit?: string) =>
-    value && value > 0 ? `${value}${unit ? ` ${unit}` : ""}` : "Not set";
+    value && value > 0 ? `${value}${unit ? ` ${unit}` : ""}` : t("profile.notSet");
+
+  const localizeOrderStatus = (status: Order["status"]) => {
+    switch (status) {
+      case "processing": return t("profile.orderStatus.processing");
+      case "shipped": return t("profile.orderStatus.shipped");
+      case "delivered": return t("profile.orderStatus.delivered");
+      case "cancelled": return t("profile.orderStatus.cancelled");
+      default: return status;
+    }
+  };
 
   const getLatestBp = () => {
     if (bpHistory.length === 0) return formatValue(profile.bloodPressure);
@@ -612,37 +660,37 @@ const ProfileScreen = () => {
   const weightMonthTicks = buildMonthTicks(weightChartEntries.map((entry) => entry.date), chartWidth);
 
   const bpInsight = (() => {
-    if (bpFilteredEntries.length < 2) return "Add daily readings to see blood pressure trends.";
+    if (bpFilteredEntries.length < 2) return t("profile.tracker.insight.bp.empty");
     const avgSystolic =
       bpFilteredEntries.reduce((sum, entry) => sum + entry.systolic, 0) / bpFilteredEntries.length;
     const avgDiastolic =
       bpFilteredEntries.reduce((sum, entry) => sum + entry.diastolic, 0) / bpFilteredEntries.length;
     const trend = bpFilteredEntries[bpFilteredEntries.length - 1].systolic - bpFilteredEntries[0].systolic;
-    const trendText = trend > 0 ? "rising" : trend < 0 ? "improving" : "stable";
+    const trendText = trend > 0 ? t("profile.trend.rising") : trend < 0 ? t("profile.trend.improving") : t("profile.trend.stable");
     if (avgSystolic >= 130 || avgDiastolic >= 80) {
-      return `Recent average is ${Math.round(avgSystolic)}/${Math.round(avgDiastolic)} and trend is ${trendText}. Keep tracking and monitor response to your nutrition routine.`;
+      return t("profile.tracker.insight.bp.high", { systolic: Math.round(avgSystolic), diastolic: Math.round(avgDiastolic), trend: trendText });
     }
-    return `Recent average is ${Math.round(avgSystolic)}/${Math.round(avgDiastolic)} with a ${trendText} pattern. Current range looks stable.`;
+    return t("profile.tracker.insight.bp.normal", { systolic: Math.round(avgSystolic), diastolic: Math.round(avgDiastolic), trend: trendText });
   })();
 
   const glucoseInsight = (() => {
-    if (glucoseFilteredEntries.length < 2) return "Add daily readings to see fasting glucose trends.";
+    if (glucoseFilteredEntries.length < 2) return t("profile.tracker.insight.glucose.empty");
     const avg = glucoseFilteredEntries.reduce((sum, entry) => sum + entry.value, 0) / glucoseFilteredEntries.length;
     const trend = glucoseFilteredEntries[glucoseFilteredEntries.length - 1].value - glucoseFilteredEntries[0].value;
-    const trendText = trend > 0 ? "rising" : trend < 0 ? "improving" : "stable";
+    const trendText = trend > 0 ? t("profile.trend.rising") : trend < 0 ? t("profile.trend.improving") : t("profile.trend.stable");
     if (avg >= 5.6) {
-      return `Recent average fasting glucose is ${formatGlucoseValue(avg)} mmol/L and trend is ${trendText}. Keep monitoring daily while using your nutrition plan.`;
+      return t("profile.tracker.insight.glucose.high", { value: formatGlucoseValue(avg), trend: trendText });
     }
-    return `Recent average fasting glucose is ${formatGlucoseValue(avg)} mmol/L with a ${trendText} pattern. Current range looks good.`;
+    return t("profile.tracker.insight.glucose.normal", { value: formatGlucoseValue(avg), trend: trendText });
   })();
 
   const weightInsight = (() => {
-    if (weightFilteredEntries.length < 2) return "Add daily weight readings to see your trend.";
+    if (weightFilteredEntries.length < 2) return t("profile.tracker.insight.weight.empty");
     const avg = weightFilteredEntries.reduce((sum, entry) => sum + entry.value, 0) / weightFilteredEntries.length;
     const delta = weightFilteredEntries[weightFilteredEntries.length - 1].value - weightFilteredEntries[0].value;
-    const trendText = delta > 0 ? "upward" : delta < 0 ? "downward" : "stable";
+    const trendText = delta > 0 ? t("profile.trend.upward") : delta < 0 ? t("profile.trend.downward") : t("profile.trend.stable");
     const changeText = `${Math.abs(delta).toFixed(1)} kg`;
-    return `Average is ${avg.toFixed(1)} kg with a ${trendText} trend (${changeText} change in this period).`;
+    return t("profile.tracker.insight.weight.summary", { value: avg.toFixed(1), trend: trendText, change: changeText });
   })();
 
   const latestBpValue = useMemo(() => {
@@ -748,7 +796,7 @@ const ProfileScreen = () => {
               <>
                 <img src={profile.avatarImage} alt="Profile" style={styles.avatarImage} />
                 <div className="profile-avatar-overlay" style={styles.avatarOverlay}>
-                  <span style={styles.avatarOverlayText}>Change</span>
+                  <span style={styles.avatarOverlayText}>{t("profile.edit")}</span>
                 </div>
               </>
             ) : (
@@ -822,53 +870,53 @@ const ProfileScreen = () => {
 
       <Card style={styles.card}>
         <SectionHeader title={t("profile.healthData")} />
-        <ProfileRow label="Measurements" value={`${profile.height} cm • ${profile.weight} kg`} action="Update" onEdit={() => setIsEditingMeasurements(true)} />
-        <ProfileRow label={t("profile.dailyWeight")} value={getLatestWeight()} action="Track" onEdit={() => setActiveTracker("weight")} />
-        <ProfileRow label={t("profile.activityLevel")} value={formatValue(profile.activityLevel)} action="Update" onEdit={() => openEdit("activityLevel")} />
+        <ProfileRow label={t("profile.measurements")} value={t("profile.measurementsValue", { height: profile.height, weight: profile.weight })} action={t("profile.action.update")} onEdit={() => setIsEditingMeasurements(true)} />
+        <ProfileRow label={t("profile.dailyWeight")} value={getLatestWeight()} action={t("profile.action.track")} onEdit={() => setActiveTracker("weight")} />
+        <ProfileRow label={t("profile.activityLevel")} value={formatValue(profile.activityLevel)} action={t("profile.action.update")} onEdit={() => openEdit("activityLevel")} />
       </Card>
 
       <Card style={styles.card}>
         <SectionHeader title={t("profile.vitals")} />
         <div style={styles.infoGrid}>
-          <InfoItem label={t("profile.bloodPressure")} value={getLatestBp()} action="Track" onEdit={() => setActiveTracker("bloodPressure")} />
-          <InfoItem label={t("profile.fastingGlucose")} value={getLatestGlucose()} action="Track" onEdit={() => setActiveTracker("fastingGlucose")} />
-          <InfoItem label="HbA1c" value={formatNumber(profile.hba1c, "%")} action="Set" onEdit={() => openEdit("hba1c")} />
-          <InfoItem label={t("profile.restingHr")} value={formatNumber(profile.restingHeartRate, "bpm")} action="Set" onEdit={() => openEdit("restingHeartRate")} />
-          <InfoItem label={t("profile.waistCircumference")} value={formatNumber(profile.waistCircumference, "cm")} action="Set" onEdit={() => openEdit("waistCircumference")} />
-          <InfoItem label={t("profile.bodyFat")} value={formatNumber(profile.bodyFat, "%")} action="Set" onEdit={() => openEdit("bodyFat")} />
+          <InfoItem label={t("profile.bloodPressure")} value={getLatestBp()} action={t("profile.action.track")} onEdit={() => setActiveTracker("bloodPressure")} />
+          <InfoItem label={t("profile.fastingGlucose")} value={getLatestGlucose()} action={t("profile.action.track")} onEdit={() => setActiveTracker("fastingGlucose")} />
+          <InfoItem label={t("profile.hba1c")} value={formatNumber(profile.hba1c, "%")} action={t("profile.action.set")} onEdit={() => openEdit("hba1c")} />
+          <InfoItem label={t("profile.restingHr")} value={formatNumber(profile.restingHeartRate, "bpm")} action={t("profile.action.set")} onEdit={() => openEdit("restingHeartRate")} />
+          <InfoItem label={t("profile.waistCircumference")} value={formatNumber(profile.waistCircumference, "cm")} action={t("profile.action.set")} onEdit={() => openEdit("waistCircumference")} />
+          <InfoItem label={t("profile.bodyFat")} value={formatNumber(profile.bodyFat, "%")} action={t("profile.action.set")} onEdit={() => openEdit("bodyFat")} />
         </div>
       </Card>
 
       <Card style={styles.card}>
         <SectionHeader title={t("profile.lifestyle")} />
         <div style={styles.infoGrid}>
-          <InfoItem label={t("profile.exerciseDays")} value={formatNumber(profile.exerciseDays, "days/week")} action="Set" onEdit={() => openEdit("exerciseDays")} />
-          <InfoItem label={t("profile.minutesPerSession")} value={formatNumber(profile.minutesPerSession, "min")} action="Set" onEdit={() => openEdit("minutesPerSession")} />
-          <InfoItem label={t("profile.sleepDuration")} value={formatValue(profile.sleepDuration)} action="Set" onEdit={() => openEdit("sleepDuration")} />
-          <InfoItem label={t("profile.stressLevel")} value={formatValue(profile.stressLevel)} action="Set" onEdit={() => openEdit("stressLevel")} />
-          <InfoItem label={t("profile.dietPattern")} value={formatValue(profile.dietPattern)} action="Set" onEdit={() => openEdit("dietPattern")} />
-          <InfoItem label={t("profile.mealsPerDay")} value={formatNumber(profile.mealsPerDay)} action="Set" onEdit={() => openEdit("mealsPerDay")} />
-          <InfoItem label={t("profile.caffeineIntake")} value={formatValue(profile.caffeineIntake)} action="Set" onEdit={() => openEdit("caffeineIntake")} />
-          <InfoItem label={t("profile.waterIntake")} value={formatNumber(profile.waterIntake, "cups/day")} action="Set" onEdit={() => openEdit("waterIntake")} />
-          <InfoItem label={t("profile.allergies")} value={formatValue(profile.allergies)} action="Set" onEdit={() => openEdit("allergies")} />
+          <InfoItem label={t("profile.exerciseDays")} value={formatNumber(profile.exerciseDays, "days/week")} action={t("profile.action.set")} onEdit={() => openEdit("exerciseDays")} />
+          <InfoItem label={t("profile.minutesPerSession")} value={formatNumber(profile.minutesPerSession, "min")} action={t("profile.action.set")} onEdit={() => openEdit("minutesPerSession")} />
+          <InfoItem label={t("profile.sleepDuration")} value={formatValue(profile.sleepDuration)} action={t("profile.action.set")} onEdit={() => openEdit("sleepDuration")} />
+          <InfoItem label={t("profile.stressLevel")} value={formatValue(profile.stressLevel)} action={t("profile.action.set")} onEdit={() => openEdit("stressLevel")} />
+          <InfoItem label={t("profile.dietPattern")} value={formatValue(profile.dietPattern)} action={t("profile.action.set")} onEdit={() => openEdit("dietPattern")} />
+          <InfoItem label={t("profile.mealsPerDay")} value={formatNumber(profile.mealsPerDay)} action={t("profile.action.set")} onEdit={() => openEdit("mealsPerDay")} />
+          <InfoItem label={t("profile.caffeineIntake")} value={formatValue(profile.caffeineIntake)} action={t("profile.action.set")} onEdit={() => openEdit("caffeineIntake")} />
+          <InfoItem label={t("profile.waterIntake")} value={formatNumber(profile.waterIntake, "cups/day")} action={t("profile.action.set")} onEdit={() => openEdit("waterIntake")} />
+          <InfoItem label={t("profile.allergies")} value={formatValue(profile.allergies)} action={t("profile.action.set")} onEdit={() => openEdit("allergies")} />
         </div>
       </Card>
 
       <Card style={styles.card}>
         <SectionHeader title={t("profile.medicalHistory")} />
         <div style={styles.infoGrid}>
-          <InfoItem label={t("profile.conditions")} value={formatValue(profile.conditions)} action="Set" onEdit={() => openEdit("conditions")} />
-          <InfoItem label={t("profile.surgeries")} value={formatValue(profile.surgeries)} action="Set" onEdit={() => openEdit("surgeries")} />
-          <InfoItem label={t("profile.medications")} value={formatValue(profile.medications)} action="Set" onEdit={() => openEdit("medications")} />
-          <InfoItem label={t("profile.currentNutrition")} value={formatValue(profile.supplements)} action="Set" onEdit={() => openEdit("supplements")} />
+          <InfoItem label={t("profile.conditions")} value={formatValue(profile.conditions)} action={t("profile.action.set")} onEdit={() => openEdit("conditions")} />
+          <InfoItem label={t("profile.surgeries")} value={formatValue(profile.surgeries)} action={t("profile.action.set")} onEdit={() => openEdit("surgeries")} />
+          <InfoItem label={t("profile.medications")} value={formatValue(profile.medications)} action={t("profile.action.set")} onEdit={() => openEdit("medications")} />
+          <InfoItem label={t("profile.currentNutrition")} value={formatValue(profile.supplements)} action={t("profile.action.set")} onEdit={() => openEdit("supplements")} />
         </div>
       </Card>
 
       <Card style={styles.card}>
         <SectionHeader title={t("profile.goalsConsent")} />
         <div style={styles.infoGrid}>
-          <InfoItem label={t("profile.topPriorities")} value={formatValue(profile.topPriorities)} action="Set" onEdit={() => openEdit("topPriorities")} />
-          <InfoItem label={t("profile.dataConsent")} value={formatValue(profile.dataProcessingConsent)} action="Set" onEdit={() => openEdit("dataProcessingConsent")} />
+          <InfoItem label={t("profile.topPriorities")} value={formatValue(profile.topPriorities)} action={t("profile.action.set")} onEdit={() => openEdit("topPriorities")} />
+          <InfoItem label={t("profile.dataConsent")} value={formatValue(profile.dataProcessingConsent)} action={t("profile.action.set")} onEdit={() => openEdit("dataProcessingConsent")} />
         </div>
       </Card>
 
@@ -892,11 +940,11 @@ const ProfileScreen = () => {
             <div key={order.orderNumber} style={styles.orderItem}>
               <div>
                 <p style={styles.orderNumber}>#{order.orderNumber}</p>
-                <p style={styles.orderDate}>{new Date(order.date).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                <p style={styles.orderDate}>{new Date(order.date).toLocaleDateString(language === "zh" ? "zh-CN" : language === "bm" ? "ms-MY" : "en-MY", { day: 'numeric', month: 'short', year: 'numeric' })}</p>
               </div>
               <div style={styles.orderRight}>
                 <p style={styles.orderPrice}>RM{order.price}</p>
-                <span style={{...styles.orderStatus, ...getStatusStyle(order.status, theme)}}>{order.status}</span>
+                <span style={{...styles.orderStatus, ...getStatusStyle(order.status, theme)}}>{localizeOrderStatus(order.status)}</span>
               </div>
             </div>
           ))
@@ -965,15 +1013,15 @@ const ProfileScreen = () => {
 
       <Card style={styles.card}>
         <SectionHeader title={t("profile.privacyConnections")} />
-        <ProfileRow label={t("profile.dataProcessing")} value={profile.dataProcessing} action="Manage" onEdit={() => openEdit("dataProcessing") } />
-        <ProfileRow label={t("profile.healthDataStorage")} value={profile.dataStorage} action="Manage" onEdit={() => openEdit("dataStorage") } />
-        <ProfileRow label={t("profile.researchParticipation")} value={profile.research} action="Manage" onEdit={() => openEdit("research") } />
+        <ProfileRow label={t("profile.dataProcessing")} value={formatValue(profile.dataProcessing)} action={t("profile.action.manage")} onEdit={() => openEdit("dataProcessing") } />
+        <ProfileRow label={t("profile.healthDataStorage")} value={formatValue(profile.dataStorage)} action={t("profile.action.manage")} onEdit={() => openEdit("dataStorage") } />
+        <ProfileRow label={t("profile.researchParticipation")} value={formatValue(profile.research)} action={t("profile.action.manage")} onEdit={() => openEdit("research") } />
       </Card>
 
       <Card style={styles.card}>
         <SectionHeader title={t("profile.linkedServices")} />
-        <ProfileRow label="Apple Health" value={profile.appleHealth} action="Connect" onEdit={() => openEdit("appleHealth") } />
-        <ProfileRow label="Google Fit" value={profile.googleFit} action="Connect" onEdit={() => openEdit("googleFit") } />
+        <ProfileRow label={t("profile.appleHealthStatus")} value={formatValue(profile.appleHealth)} action={t("profile.action.connect")} onEdit={() => openEdit("appleHealth") } />
+        <ProfileRow label={t("profile.googleFitStatus")} value={formatValue(profile.googleFit)} action={t("profile.action.connect")} onEdit={() => openEdit("googleFit") } />
       </Card>
 
       <div style={styles.logoutStack}>
@@ -1010,11 +1058,11 @@ const ProfileScreen = () => {
               }}
             >
               <option value="" disabled>
-                Select
+                {t("profile.select")}
               </option>
               {editState.options.map((option) => (
                 <option key={option} value={option}>
-                  {option}
+                  {localizeProfileValue(option)}
                 </option>
               ))}
             </select>
@@ -1040,10 +1088,10 @@ const ProfileScreen = () => {
 
       {activeTracker === "bloodPressure" ? (
         <Dialog
-          title="Blood pressure daily tracker"
-          description="Log your morning readings daily to monitor trend and response to nutrition."
+          title={t("profile.tracker.bpTitle")}
+          description={t("profile.tracker.bpDescription")}
           onClose={() => setActiveTracker(null)}
-          cancelLabel="Close"
+          cancelLabel={t("profile.tracker.close")}
         >
           <div style={styles.trackerContent}>
             <div style={styles.trackerFormRowOne}>
@@ -1058,7 +1106,7 @@ const ProfileScreen = () => {
               <input
                 type="number"
                 inputMode="numeric"
-                placeholder="Systolic"
+                placeholder={t("profile.tracker.systolic")}
                 value={bpSystolic}
                 onChange={(event) => setBpSystolic(event.target.value)}
                 style={styles.trackerInput}
@@ -1066,23 +1114,23 @@ const ProfileScreen = () => {
               <input
                 type="number"
                 inputMode="numeric"
-                placeholder="Diastolic"
+                placeholder={t("profile.tracker.diastolic")}
                 value={bpDiastolic}
                 onChange={(event) => setBpDiastolic(event.target.value)}
                 style={styles.trackerInput}
               />
             </div>
             <button type="button" style={styles.trackerAddButton} onClick={addBloodPressureEntry}>
-              Add reading
+              {t("profile.tracker.addReading")}
             </button>
             <div style={styles.trackerFilterRow}>
-              <span style={styles.trackerFilterLabel}>Month</span>
+              <span style={styles.trackerFilterLabel}>{t("profile.tracker.month")}</span>
               <select
                 value={bpMonthFilter}
                 onChange={(event) => setBpMonthFilter(event.target.value)}
                 style={styles.trackerSelect}
               >
-                <option value="all">All months</option>
+                <option value="all">{t("profile.tracker.allMonths")}</option>
                 {bpMonthOptions.map((month) => (
                   <option key={month} value={month}>
                     {toMonthLabel(month)}
@@ -1110,7 +1158,7 @@ const ProfileScreen = () => {
               {bpSystolicPath ? <path d={bpSystolicPath} stroke="#DC2626" strokeWidth="2" fill="none" /> : null}
               {bpDiastolicPath ? <path d={bpDiastolicPath} stroke="#D97706" strokeWidth="2" fill="none" /> : null}
             </svg>
-            <p style={styles.trackerLegend}>Red: systolic • Amber: diastolic</p>
+            <p style={styles.trackerLegend}>{t("profile.tracker.legend.bp")}</p>
             <p style={styles.trackerInsight}>{bpInsight}</p>
             <div style={styles.trackerHistory}>
               {bpFilteredEntries
@@ -1129,10 +1177,10 @@ const ProfileScreen = () => {
 
       {activeTracker === "fastingGlucose" ? (
         <Dialog
-          title="Fasting glucose daily tracker"
-          description="Log your morning fasting glucose to see trend and progression."
+          title={t("profile.tracker.glucoseTitle")}
+          description={t("profile.tracker.glucoseDescription")}
           onClose={() => setActiveTracker(null)}
-          cancelLabel="Close"
+          cancelLabel={t("profile.tracker.close")}
         >
           <div style={styles.trackerContent}>
             <div style={styles.trackerFormRowTwo}>
@@ -1153,16 +1201,16 @@ const ProfileScreen = () => {
               />
             </div>
             <button type="button" style={styles.trackerAddButton} onClick={addGlucoseEntry}>
-              Add reading
+              {t("profile.tracker.addReading")}
             </button>
             <div style={styles.trackerFilterRow}>
-              <span style={styles.trackerFilterLabel}>Month</span>
+              <span style={styles.trackerFilterLabel}>{t("profile.tracker.month")}</span>
               <select
                 value={glucoseMonthFilter}
                 onChange={(event) => setGlucoseMonthFilter(event.target.value)}
                 style={styles.trackerSelect}
               >
-                <option value="all">All months</option>
+                <option value="all">{t("profile.tracker.allMonths")}</option>
                 {glucoseMonthOptions.map((month) => (
                   <option key={month} value={month}>
                     {toMonthLabel(month)}
@@ -1189,7 +1237,7 @@ const ProfileScreen = () => {
               ))}
               {glucosePath ? <path d={glucosePath} stroke="#2563EB" strokeWidth="2" fill="none" /> : null}
             </svg>
-            <p style={styles.trackerLegend}>Blue: fasting glucose</p>
+            <p style={styles.trackerLegend}>{t("profile.tracker.legend.glucose")}</p>
             <p style={styles.trackerInsight}>{glucoseInsight}</p>
             <div style={styles.trackerHistory}>
               {glucoseFilteredEntries
@@ -1208,10 +1256,10 @@ const ProfileScreen = () => {
 
       {activeTracker === "weight" ? (
         <Dialog
-          title="Weight daily tracker"
-          description="Log your morning weight daily to monitor trend and progression."
+          title={t("profile.tracker.weightTitle")}
+          description={t("profile.tracker.weightDescription")}
           onClose={() => setActiveTracker(null)}
-          cancelLabel="Close"
+          cancelLabel={t("profile.tracker.close")}
         >
           <div style={styles.trackerContent}>
             <div style={styles.trackerFormRowTwo}>
@@ -1231,16 +1279,16 @@ const ProfileScreen = () => {
               />
             </div>
             <button type="button" style={styles.trackerAddButton} onClick={addWeightEntry}>
-              Add reading
+              {t("profile.tracker.addReading")}
             </button>
             <div style={styles.trackerFilterRow}>
-              <span style={styles.trackerFilterLabel}>Month</span>
+              <span style={styles.trackerFilterLabel}>{t("profile.tracker.month")}</span>
               <select
                 value={weightMonthFilter}
                 onChange={(event) => setWeightMonthFilter(event.target.value)}
                 style={styles.trackerSelect}
               >
-                <option value="all">All months</option>
+                <option value="all">{t("profile.tracker.allMonths")}</option>
                 {weightMonthOptions.map((month) => (
                   <option key={month} value={month}>
                     {toMonthLabel(month)}
@@ -1267,7 +1315,7 @@ const ProfileScreen = () => {
               ))}
               {weightPath ? <path d={weightPath} stroke="#7C3AED" strokeWidth="2" fill="none" /> : null}
             </svg>
-            <p style={styles.trackerLegend}>Purple: weight</p>
+            <p style={styles.trackerLegend}>{t("profile.tracker.legend.weight")}</p>
             <p style={styles.trackerInsight}>{weightInsight}</p>
             <div style={styles.trackerHistory}>
               {weightFilteredEntries
@@ -1286,8 +1334,8 @@ const ProfileScreen = () => {
 
       {showImageUpload ? (
         <Dialog
-          title="Profile Picture"
-          description="Upload a custom profile picture or use your initials"
+          title={t("profile.image.title")}
+          description={t("profile.image.description")}
           onClose={() => setShowImageUpload(false)}
           onConfirm={() => setShowImageUpload(false)}
         >
@@ -1300,11 +1348,11 @@ const ProfileScreen = () => {
               id="avatar-upload"
             />
             <label htmlFor="avatar-upload" style={styles.uploadButton}>
-              📷 Choose Image
+              {`📷 ${t("profile.image.choose")}`}
             </label>
             {profile.avatarImage && (
               <button onClick={handleRemoveImage} style={styles.removeButton}>
-                Remove Image
+                {t("profile.image.remove")}
               </button>
             )}
           </div>
@@ -1313,14 +1361,14 @@ const ProfileScreen = () => {
 
       {isEditingMeasurements ? (
         <Dialog
-          title="Edit Measurements"
-          description="Update your height and weight."
+          title={t("profile.measurementsDialog.title")}
+          description={t("profile.measurementsDialog.description")}
           onClose={() => setIsEditingMeasurements(false)}
           onConfirm={handleConfirmMeasurements}
         >
           <div style={styles.measurementEditor}>
             <div style={styles.measurementInput}>
-              <label htmlFor="height-select" style={styles.measurementLabel}>Height</label>
+              <label htmlFor="height-select" style={styles.measurementLabel}>{t("profile.measurementsDialog.height")}</label>
               <select
                 id="height-select"
                 value={tempHeight}
@@ -1333,7 +1381,7 @@ const ProfileScreen = () => {
               </select>
             </div>
             <div style={styles.measurementInput}>
-              <label htmlFor="weight-select" style={styles.measurementLabel}>Weight</label>
+              <label htmlFor="weight-select" style={styles.measurementLabel}>{t("profile.measurementsDialog.weight")}</label>
               <select
                 id="weight-select"
                 value={tempWeight}

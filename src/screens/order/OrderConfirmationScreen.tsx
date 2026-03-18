@@ -64,7 +64,7 @@ const OrderConfirmationScreen = () => {
           <div style={styles.estimatedDelivery}>
             <p style={styles.deliveryLabel}>{t("order.confirm.estimatedDelivery")}</p>
             <p style={styles.deliveryDate}>
-              {estimatedDelivery.toLocaleDateString(language === "zh" ? "zh-CN" : "en-MY", {
+              {estimatedDelivery.toLocaleDateString(language === "zh" ? "zh-CN" : language === "bm" ? "ms-MY" : "en-MY", {
                 day: "numeric",
                 month: "short",
                 year: "numeric"

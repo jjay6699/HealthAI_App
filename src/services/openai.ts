@@ -1301,7 +1301,7 @@ export async function generateChatSupplementRecommendations(input: {
 
 Your job:
 - Read the user's situation semantically, not by exact keyword matching.
-- Understand English and Simplified Chinese symptom descriptions, paraphrases, and implied context.
+- Understand English, Simplified Chinese, and Bahasa Malaysia symptom descriptions, paraphrases, and implied context.
 - Understand broken English, missing grammar, short fragments, casual slang, and common misspellings.
 - Cross-check the user's situation ONLY against the provided product catalog.
 - Recommend products only when there is a reasonable support-oriented fit.
@@ -1441,6 +1441,8 @@ Return valid JSON only with this exact structure:
     return {
       summary: parsed.summary?.trim() || (language === "zh"
         ? "我根据你的情况和现有产品目录整理了可参考的产品建议。"
+        : language === "bm"
+        ? "Saya telah menyemak situasi anda dengan katalog produk sedia ada dan menemui beberapa produk yang mungkin berkaitan."
         : "I cross-checked your situation against your catalog and found a few products that may be relevant."),
       recommendations
     };
@@ -1495,12 +1497,15 @@ Return valid JSON only with this exact structure:
 
 const getCurrentLanguage = (): Language => {
   const stored = persistentStorage.getItem(LANGUAGE_STORAGE_KEY);
-  return stored === "zh" ? "zh" : "en";
+  if (stored === "zh" || stored === "bm") return stored;
+  return "en";
 };
 
 const getLanguageInstruction = (language: Language): string =>
   language === "zh"
     ? "Respond entirely in Simplified Chinese. Keep supplementName and supplementId unchanged."
+    : language === "bm"
+    ? "Respond entirely in Bahasa Malaysia. Keep supplementName and supplementId unchanged."
     : "Respond in English.";
 
 const localizeBloodworkAnalysis = async (

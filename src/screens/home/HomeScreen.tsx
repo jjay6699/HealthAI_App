@@ -72,7 +72,8 @@ const HomeScreen = () => {
     if (!iso) return t("home.hero.noUploads");
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return t("home.hero.noUploads");
-    return date.toLocaleDateString(language === "zh" ? "zh-CN" : "en-US", {
+    const locale = language === "zh" ? "zh-CN" : language === "bm" ? "ms-MY" : "en-US";
+    return date.toLocaleDateString(locale, {
       month: "short",
       day: "numeric",
       year: "numeric"
@@ -95,7 +96,8 @@ const HomeScreen = () => {
 
   const languageOptions: { value: Language; label: string }[] = [
     { value: "en", label: t("common.language.en") },
-    { value: "zh", label: t("common.language.zh") }
+    { value: "zh", label: t("common.language.zh") },
+    { value: "bm", label: t("common.language.bm") }
   ];
 
   return (

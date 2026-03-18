@@ -1,5 +1,4 @@
 import React, { ReactNode, createContext, useContext, useMemo, useState } from "react";
-import { SHOW_LANGUAGE_SWITCHER } from "../config/features";
 import { persistentStorage } from "../services/persistentStorage";
 import { defaultLanguage, Language, TranslationKey, translations } from "./translations";
 
@@ -15,10 +14,11 @@ const resolveInitialLanguage = (): Language => {
   if (typeof window === "undefined") return defaultLanguage;
 
   const stored = persistentStorage.getItem(LANGUAGE_STORAGE_KEY);
-  if (stored === "en" || stored === "zh") return stored;
+  if (stored === "en" || stored === "zh" || stored === "bm") return stored;
 
   const browserLanguage = window.navigator.language.toLowerCase();
   if (browserLanguage.startsWith("zh")) return "zh";
+  if (browserLanguage.startsWith("ms") || browserLanguage.startsWith("bm")) return "bm";
   return defaultLanguage;
 };
 
