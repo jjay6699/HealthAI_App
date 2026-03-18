@@ -12,6 +12,7 @@ interface OrderDetails {
   planLabel?: string;
   price: number;
   recommendations: any[];
+  couponCode?: string | null;
 }
 
 const PaymentScreen = () => {
@@ -36,23 +37,58 @@ const PaymentScreen = () => {
 
   const handleCompleteOrder = async () => {
     setIsProcessing(true);
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    const orderNumber = `NG${Date.now().toString().slice(-8)}`;
-    const newOrder = {
-      orderNumber,
-      date: new Date().toISOString(),
-      ...orderDetails,
-      status: "processing" as const
-    };
+      const deliveryAddressRaw = persistentStorage.getItem("deliveryAddress");
+      const deliveryAddress = deliveryAddressRaw ? JSON.parse(deliveryAddressRaw) : null;
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          plan: orderDetails?.plan,
+          planLabel: orderDetails?.planLabel,
+          price: orderDetails?.price,
+          recommendations: orderDetails?.recommendations || [],
+          couponCode: orderDetails?.couponCode || null,
+          paymentMethod,
+          deliveryAddress
+        })
+      });
 
-    persistentStorage.setItem("lastOrder", JSON.stringify(newOrder));
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            order?: {
+              orderNumber: string;
+              date: string;
+              plan: string;
+              planLabel?: string;
+              price: number;
+              recommendations: any[];
+              status: "processing";
+            };
+            error?: string;
+          }
+        | null;
 
-    const orderHistory = JSON.parse(persistentStorage.getItem("orderHistory") || "[]");
-    orderHistory.unshift(newOrder);
-    persistentStorage.setItem("orderHistory", JSON.stringify(orderHistory));
+      if (!response.ok || !payload?.order) {
+        throw new Error(payload?.error || "Failed to save order");
+      }
 
-    navigate("/order-confirmation");
+      const newOrder = payload.order;
+      persistentStorage.setItem("lastOrder", JSON.stringify(newOrder));
+
+      const orderHistory = JSON.parse(persistentStorage.getItem("orderHistory") || "[]");
+      orderHistory.unshift(newOrder);
+      persistentStorage.setItem("orderHistory", JSON.stringify(orderHistory));
+
+      navigate("/order-confirmation");
+    } catch (error) {
+      console.error("Failed to complete order:", error);
+      alert("Unable to complete your order right now. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   if (!orderDetails) {

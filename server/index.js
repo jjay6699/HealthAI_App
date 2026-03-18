@@ -70,6 +70,32 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_sessions_userId ON sessions(userId);
   CREATE INDEX IF NOT EXISTS idx_sessions_expiresAt ON sessions(expiresAt);
+
+  CREATE TABLE IF NOT EXISTS orders (
+    id TEXT PRIMARY KEY,
+    orderNumber TEXT NOT NULL UNIQUE,
+    userId TEXT,
+    userEmail TEXT,
+    customerName TEXT,
+    plan TEXT NOT NULL,
+    planLabel TEXT,
+    price REAL NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'MYR',
+    paymentMethod TEXT,
+    status TEXT NOT NULL,
+    couponCode TEXT,
+    recommendationsJson TEXT,
+    deliveryAddressJson TEXT,
+    stripeSessionId TEXT,
+    stripePaymentIntentId TEXT,
+    source TEXT NOT NULL DEFAULT 'app',
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    FOREIGN KEY(userId) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_orders_userId ON orders(userId);
+  CREATE INDEX IF NOT EXISTS idx_orders_createdAt ON orders(createdAt DESC);
 `);
 
 const stmtGetAll = db.prepare(
@@ -115,6 +141,64 @@ const stmtGetSession = db.prepare(
 );
 const stmtDeleteSession = db.prepare("DELETE FROM sessions WHERE token = ?");
 const stmtDeleteExpiredSessions = db.prepare("DELETE FROM sessions WHERE expiresAt < ?");
+const stmtInsertOrder = db.prepare(`
+  INSERT INTO orders (
+    id,
+    orderNumber,
+    userId,
+    userEmail,
+    customerName,
+    plan,
+    planLabel,
+    price,
+    currency,
+    paymentMethod,
+    status,
+    couponCode,
+    recommendationsJson,
+    deliveryAddressJson,
+    stripeSessionId,
+    stripePaymentIntentId,
+    source,
+    createdAt,
+    updatedAt
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const stmtListAdminUsers = db.prepare(`
+  SELECT id, email, name, provider, country, createdAt, lastLoginAt
+  FROM users
+  ORDER BY createdAt DESC
+  LIMIT ?
+`);
+const stmtListAdminOrders = db.prepare(`
+  SELECT
+    id,
+    orderNumber,
+    userId,
+    userEmail,
+    customerName,
+    plan,
+    planLabel,
+    price,
+    currency,
+    paymentMethod,
+    status,
+    couponCode,
+    recommendationsJson,
+    deliveryAddressJson,
+    stripeSessionId,
+    stripePaymentIntentId,
+    source,
+    createdAt,
+    updatedAt
+  FROM orders
+  ORDER BY createdAt DESC
+  LIMIT ?
+`);
+const stmtAdminUserCount = db.prepare("SELECT COUNT(*) AS count, MAX(createdAt) AS latestCreatedAt FROM users");
+const stmtAdminOrderStats = db.prepare(
+  "SELECT COUNT(*) AS count, COALESCE(SUM(price), 0) AS revenue, MAX(createdAt) AS latestCreatedAt FROM orders"
+);
 
 const scryptAsync = promisify(crypto.scrypt);
 const authRateLimitState = new Map();
@@ -127,10 +211,40 @@ const upsertMany = db.transaction((clientId, items) => {
 
 const app = express();
 app.disable("x-powered-by");
+const allowedOrigins = new Set(
+  [
+    process.env.APP_ORIGIN,
+    process.env.WEBSITE_ORIGIN,
+    process.env.ADMIN_WEB_ORIGIN,
+    process.env.MARKETING_SITE_ORIGIN,
+    "https://healthai.up.railway.app",
+    "https://richai.up.railway.app",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+  ].filter(Boolean)
+);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  }
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+
+  return next();
+});
 app.use(express.json({ limit: "25mb" }));
 
 const SESSION_COOKIE = "ng_session";
 const OAUTH_STATE_COOKIE = "ng_oauth_state";
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "RichAIAdmin!2026";
 const isProd = process.env.NODE_ENV === "production";
 const sessionSecret = process.env.SESSION_SECRET;
 
@@ -184,6 +298,38 @@ const createSessionForUser = (userId) => {
   const expiresAt = createdAt + 1000 * 60 * 60 * 24 * 30; // 30 days
   stmtInsertSession.run(token, userId, createdAt, expiresAt);
   return { token, expiresAt };
+};
+
+const getBasicAuthCredentials = (req) => {
+  const header = req.headers.authorization;
+  if (!header || typeof header !== "string") return null;
+  if (!header.startsWith("Basic ")) return null;
+
+  try {
+    const decoded = Buffer.from(header.slice(6), "base64").toString("utf8");
+    const separatorIndex = decoded.indexOf(":");
+    if (separatorIndex === -1) return null;
+    return {
+      username: decoded.slice(0, separatorIndex),
+      password: decoded.slice(separatorIndex + 1)
+    };
+  } catch {
+    return null;
+  }
+};
+
+const requireAdminAuth = (req, res, next) => {
+  const credentials = getBasicAuthCredentials(req);
+  if (
+    credentials &&
+    credentials.username === ADMIN_USERNAME &&
+    credentials.password === ADMIN_PASSWORD
+  ) {
+    return next();
+  }
+
+  res.setHeader("WWW-Authenticate", 'Basic realm="Admin Dashboard"');
+  return res.status(401).json({ error: "admin_auth_required" });
 };
 
 const getGoogleOAuthClient = () => {
@@ -475,6 +621,127 @@ app.post("/api/auth/logout", (req, res) => {
   res.clearCookie(SESSION_COOKIE, makeCookieOptions({ maxAge: 0 }));
   res.json({ ok: true });
 });
+
+app.post(
+  "/api/orders",
+  asyncHandler(async (req, res) => {
+    const user = getAuthedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "authentication_required" });
+    }
+
+    const plan = typeof req.body?.plan === "string" ? req.body.plan.trim() : "";
+    const planLabel = typeof req.body?.planLabel === "string" ? req.body.planLabel.trim() : null;
+    const price = Number(req.body?.price);
+    const paymentMethod =
+      typeof req.body?.paymentMethod === "string" ? req.body.paymentMethod.trim() : null;
+    const couponCode =
+      typeof req.body?.couponCode === "string" && req.body.couponCode.trim()
+        ? req.body.couponCode.trim()
+        : null;
+    const recommendations = Array.isArray(req.body?.recommendations)
+      ? req.body.recommendations
+      : [];
+    const deliveryAddress =
+      req.body?.deliveryAddress && typeof req.body.deliveryAddress === "object"
+        ? req.body.deliveryAddress
+        : null;
+    const stripeSessionId =
+      typeof req.body?.stripeSessionId === "string" ? req.body.stripeSessionId.trim() : null;
+    const stripePaymentIntentId =
+      typeof req.body?.stripePaymentIntentId === "string"
+        ? req.body.stripePaymentIntentId.trim()
+        : null;
+    const status =
+      typeof req.body?.status === "string" && req.body.status.trim()
+        ? req.body.status.trim()
+        : "processing";
+
+    if (!plan || !Number.isFinite(price) || price < 0) {
+      return res.status(400).json({ error: "invalid_order_payload" });
+    }
+
+    const now = Date.now();
+    const orderId = crypto.randomUUID();
+    const orderNumber = `NG${now.toString().slice(-8)}`;
+    const customerName =
+      typeof deliveryAddress?.fullName === "string" && deliveryAddress.fullName.trim()
+        ? deliveryAddress.fullName.trim()
+        : user.name || null;
+
+    stmtInsertOrder.run(
+      orderId,
+      orderNumber,
+      user.id,
+      user.email || null,
+      customerName,
+      plan,
+      planLabel,
+      price,
+      "MYR",
+      paymentMethod,
+      status,
+      couponCode,
+      JSON.stringify(recommendations),
+      deliveryAddress ? JSON.stringify(deliveryAddress) : null,
+      stripeSessionId,
+      stripePaymentIntentId,
+      "app",
+      now,
+      now
+    );
+
+    res.status(201).json({
+      order: {
+        id: orderId,
+        orderNumber,
+        userId: user.id,
+        userEmail: user.email || null,
+        customerName,
+        plan,
+        planLabel,
+        price,
+        currency: "MYR",
+        paymentMethod,
+        status,
+        couponCode,
+        createdAt: now,
+        updatedAt: now,
+        date: new Date(now).toISOString(),
+        recommendations
+      }
+    });
+  })
+);
+
+app.get(
+  "/api/admin/overview",
+  requireAdminAuth,
+  asyncHandler(async (req, res) => {
+    const userLimit = Math.min(500, Math.max(1, Number(req.query.userLimit) || 200));
+    const orderLimit = Math.min(500, Math.max(1, Number(req.query.orderLimit) || 200));
+    const userStats = stmtAdminUserCount.get();
+    const orderStats = stmtAdminOrderStats.get();
+    const users = stmtListAdminUsers.all(userLimit);
+    const orders = stmtListAdminOrders.all(orderLimit).map((order) => ({
+      ...order,
+      recommendations: order.recommendationsJson ? JSON.parse(order.recommendationsJson) : [],
+      deliveryAddress: order.deliveryAddressJson ? JSON.parse(order.deliveryAddressJson) : null
+    }));
+
+    res.json({
+      stats: {
+        totalUsers: userStats.count,
+        totalSales: orderStats.count,
+        totalRevenue: orderStats.revenue,
+        latestUserAt: userStats.latestCreatedAt || null,
+        latestSaleAt: orderStats.latestCreatedAt || null
+      },
+      users,
+      orders
+    });
+  })
+);
 
 app.get(
   "/api/auth/google/start",
