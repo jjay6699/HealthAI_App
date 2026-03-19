@@ -39,7 +39,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v9";
+const ANALYSIS_CACHE_VERSION = "v10";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -305,17 +305,49 @@ const buildVerifiedConcern = (marker: VerifiedAbnormalMarker) => {
   return `${directionText} ${marker.marker}${valueText}${rangeText}${noteText}`.trim();
 };
 
+const parseNumericValue = (value?: string) => {
+  if (!value) return null;
+  const match = value.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : null;
+};
+
+const parseReferenceRange = (referenceRange?: string) => {
+  if (!referenceRange) return null;
+  const normalized = referenceRange.replace(/,/g, "").replace(/[–—]/g, "-");
+  const matches = normalized.match(/-?\d+(?:\.\d+)?/g);
+  if (!matches || matches.length < 2) return null;
+  const min = Number(matches[0]);
+  const max = Number(matches[1]);
+  if (Number.isNaN(min) || Number.isNaN(max)) return null;
+  return { min, max };
+};
+
+const inferRowStatus = (row: ExtractedReportRow): ExtractedReportRow["status"] => {
+  if (row.status === "comment") return "comment";
+
+  const numericValue = parseNumericValue(row.value);
+  const numericRange = parseReferenceRange(row.referenceRange);
+  if (numericValue !== null && numericRange) {
+    if (numericValue < numericRange.min) return "low";
+    if (numericValue > numericRange.max) return "high";
+    return "normal";
+  }
+
+  return row.status;
+};
+
 const buildRowConcern = (row: ExtractedReportRow) => {
+  const effectiveStatus = inferRowStatus(row);
   const statusText =
-    row.status === "high"
+    effectiveStatus === "high"
       ? "is high"
-      : row.status === "low"
+      : effectiveStatus === "low"
       ? "is low"
-      : row.status === "normal"
+      : effectiveStatus === "normal"
       ? "is within range"
-      : row.status === "comment"
+      : effectiveStatus === "comment"
       ? "comment"
-      : row.status === "flagged"
+      : effectiveStatus === "flagged"
       ? "is flagged"
       : "is abnormal";
 
@@ -323,7 +355,7 @@ const buildRowConcern = (row: ExtractedReportRow) => {
   const rangeText = row.referenceRange ? ` (reference range: ${row.referenceRange})` : "";
   const noteText = row.note ? ` ${row.note}` : "";
 
-  if (row.status === "comment") {
+  if (effectiveStatus === "comment") {
     return `${row.marker}${row.note ? `: ${row.note}` : ""}`.trim();
   }
 
@@ -404,6 +436,7 @@ const mergeExtractedReportRows = (
   const appendedInsights: BloodworkAnalysis["detailedInsights"] = [];
 
   for (const row of rows) {
+    const effectiveStatus = inferRowStatus(row);
     const markerKey = normalizeForMatch(row.marker);
     if (!markerKey) continue;
 
@@ -414,7 +447,7 @@ const mergeExtractedReportRows = (
 
     if (alreadyCovered) continue;
 
-    if (row.status && concernStatuses.has(row.status)) {
+    if (effectiveStatus && concernStatuses.has(effectiveStatus)) {
       const concernLine = buildRowConcern(row);
       existingConcernText.add(normalizeForMatch(concernLine));
       appendedConcerns.push(concernLine);
@@ -428,7 +461,7 @@ const mergeExtractedReportRows = (
       continue;
     }
 
-    if (row.status === "normal" && row.value && row.referenceRange) {
+    if (effectiveStatus === "normal" && row.value && row.referenceRange) {
       const strengthLine = `${row.marker} is within normal range at ${row.value}${row.unit ? ` ${row.unit}` : ""} (reference range: ${row.referenceRange}).`;
       existingStrengthText.add(normalizeForMatch(strengthLine));
       appendedStrengths.push(strengthLine);
