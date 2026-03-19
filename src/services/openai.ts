@@ -1,6 +1,7 @@
 import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
 import { SUPPLEMENT_DESCRIPTIONS } from "../data/supplementDescriptions";
 import { pdfToImages, extractStructuredTextPagesFromPdf, extractTextFromPdf } from "../utils/pdfProcessor";
+import { extractStructuredTextFromImage } from "../utils/imageOcr";
 import { persistentStorage } from "./persistentStorage";
 import type { Language } from "../i18n";
 
@@ -39,7 +40,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v15";
+const ANALYSIS_CACHE_VERSION = "v16";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -736,6 +737,32 @@ const parseStructuredLineRow = (line: string, panel?: string): ExtractedReportRo
   };
 };
 
+const parseStructuredTextLines = (lines: string[]): ExtractedReportRow[] => {
+  const rows: ExtractedReportRow[] = [];
+  let currentPanel: string | undefined;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    if (PANEL_PATTERNS.some((pattern) => pattern.test(line))) {
+      currentPanel = line;
+      continue;
+    }
+
+    if (/^(test name|result|unit|reference range|investigation|observed value|biological ref range|method)\b/i.test(line)) {
+      continue;
+    }
+
+    const parsed = parseStructuredLineRow(line, currentPanel);
+    if (parsed) {
+      rows.push(parsed);
+    }
+  }
+
+  return rows;
+};
+
 const parseStructuredPdfRows = (pages: { text: string }[]): ExtractedReportRow[] => {
   const rows: ExtractedReportRow[] = [];
 
@@ -744,27 +771,34 @@ const parseStructuredPdfRows = (pages: { text: string }[]): ExtractedReportRow[]
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean);
-
-    let currentPanel: string | undefined;
-
-    for (const line of lines) {
-      if (PANEL_PATTERNS.some((pattern) => pattern.test(line))) {
-        currentPanel = line;
-        continue;
-      }
-
-      if (/^(test name|result|unit|reference range|investigation|observed value|biological ref range|method)\b/i.test(line)) {
-        continue;
-      }
-
-      const parsed = parseStructuredLineRow(line, currentPanel);
-      if (parsed) {
-        rows.push(parsed);
-      }
-    }
+    rows.push(...parseStructuredTextLines(lines));
   }
 
   return rows;
+};
+
+const extractImageOcrBundle = async (
+  images: { base64: string; fileType: string; label: string }[]
+) => {
+  const blocks: string[] = [];
+  const rows: ExtractedReportRow[] = [];
+
+  for (const image of images) {
+    try {
+      const ocr = await extractStructuredTextFromImage(
+        image.base64,
+        normalizeImageMimeType(image.fileType)
+      );
+      if (ocr.text) {
+        blocks.push(`Document: ${image.label}\nType: Image health report\nOCR text:\n${ocr.text}`);
+      }
+      rows.push(...parseStructuredTextLines(ocr.lines));
+    } catch (error) {
+      console.warn("Image OCR failed:", image.label, error);
+    }
+  }
+
+  return { blocks, rows };
 };
 
 const mergeAnalysisWithParsedRows = (
@@ -1509,26 +1543,18 @@ export async function analyzeBloodworkFile(
     (s) => `${s.id}: ${s.name} - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
   ).join("\n");
 
-  // Determine the image format - ensure it's a supported format
-  let imageFormat = fileType;
-  if (fileType.includes('jpeg') || fileType.includes('jpg')) {
-    imageFormat = 'image/jpeg';
-  } else if (fileType.includes('png')) {
-    imageFormat = 'image/png';
-  } else if (fileType.includes('gif')) {
-    imageFormat = 'image/gif';
-  } else if (fileType.includes('webp')) {
-    imageFormat = 'image/webp';
-  } else {
-    // Default to jpeg if unknown
-    imageFormat = 'image/jpeg';
-  }
+  const imageFormat = normalizeImageMimeType(fileType);
 
   try {
+    const imageOcr = await extractImageOcrBundle([
+      { base64: base64Image, fileType: imageFormat, label: "Uploaded image" }
+    ]);
     const verificationReportContent = [
       {
         type: "text" as const,
-        text: "Single bloodwork report image for abnormal-marker verification."
+        text: `Single bloodwork report image for abnormal-marker verification.
+
+${imageOcr.blocks.join("\n\n") || "OCR text unavailable."}`
       },
       {
         type: "image_url" as const,
@@ -1653,7 +1679,11 @@ ${getLanguageInstruction(language)}`
       verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []),
       extractStructuredReportRows(verificationReportContent, language).catch(() => [])
     ]);
-    const completedRows = await backfillExpectedMarkers(verificationReportContent, language, extractedRows);
+    const completedRows = await backfillExpectedMarkers(
+      verificationReportContent,
+      language,
+      [...imageOcr.rows, ...extractedRows]
+    );
     const normalized = normalizeRecommendations(
       mergeAnalysisWithParsedRows(
         mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers),
@@ -1692,28 +1722,26 @@ export async function analyzeBloodworkImages(
   ).join("\n");
 
   const imageParts = images.map((img) => {
-    let imageFormat = img.fileType;
-    if (imageFormat.includes("jpeg") || imageFormat.includes("jpg")) {
-      imageFormat = "image/jpeg";
-    } else if (imageFormat.includes("png")) {
-      imageFormat = "image/png";
-    } else if (imageFormat.includes("gif")) {
-      imageFormat = "image/gif";
-    } else if (imageFormat.includes("webp")) {
-      imageFormat = "image/webp";
-    } else {
-      imageFormat = "image/jpeg";
-    }
+    const imageFormat = normalizeImageMimeType(img.fileType);
     return {
       type: "image_url" as const,
       image_url: { url: `data:${imageFormat};base64,${img.base64}`, detail: "high" }
     };
   });
+  const imageOcr = await extractImageOcrBundle(
+    images.map((img, index) => ({
+      base64: img.base64,
+      fileType: img.fileType,
+      label: `Uploaded image ${index + 1}`
+    }))
+  );
 
   const verificationReportContent = [
     {
       type: "text" as const,
-      text: "Multi-image bloodwork report for abnormal-marker verification."
+      text: `Multi-image bloodwork report for abnormal-marker verification.
+
+${imageOcr.blocks.join("\n\n") || "OCR text unavailable."}`
     },
     ...imageParts
   ];
@@ -1810,7 +1838,11 @@ ${getLanguageInstruction(language)}`
       verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []),
       extractStructuredReportRows(verificationReportContent, language).catch(() => [])
     ]);
-    const completedRows = await backfillExpectedMarkers(verificationReportContent, language, extractedRows);
+    const completedRows = await backfillExpectedMarkers(
+      verificationReportContent,
+      language,
+      [...imageOcr.rows, ...extractedRows]
+    );
     const normalized = normalizeRecommendations(
       mergeAnalysisWithParsedRows(
         mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers),
@@ -1886,6 +1918,16 @@ export async function analyzeHealthDocumentBundle(files: File[]): Promise<Bloodw
     }
 
     const base64 = await fileToBase64Data(file);
+    const imageOcr = await extractImageOcrBundle([
+      { base64, fileType: file.type, label: file.name }
+    ]);
+    deterministicRows.push(...imageOcr.rows);
+    if (imageOcr.blocks.length > 0) {
+      bundleContent.push({
+        type: "text",
+        text: imageOcr.blocks.join("\n\n")
+      });
+    }
     bundleContent.push({
       type: "text",
       text: `Document: ${file.name}\nType: ${file.type || "image health report"}`
