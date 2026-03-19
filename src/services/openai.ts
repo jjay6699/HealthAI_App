@@ -579,10 +579,50 @@ const buildParsedRowConcern = (row: ParsedReportRow) =>
 const buildParsedRowStrength = (row: ParsedReportRow) =>
   `${row.marker} is within normal range${row.value ? ` at ${row.value}${row.unit ? ` ${row.unit}` : ""}` : ""}${row.referenceRange ? ` (reference range: ${row.referenceRange})` : ""}.`.replace(/\.\s*\./g, ".").trim();
 
+const deriveSupplementalRows = (rows: ExtractedReportRow[]): ExtractedReportRow[] => {
+  const derivedRows: ExtractedReportRow[] = [];
+  const normalizedMarkers = new Set(rows.map((row) => normalizeForMatch(row.marker)));
+  const findRow = (marker: string) =>
+    rows.find((row) => getMarkerAliases(row.marker).includes(normalizeForMatch(marker)));
+
+  if (!normalizedMarkers.has("non hdl")) {
+    const totalCholesterol = findRow("Total Cholesterol");
+    const hdl = findRow("HDL Cholesterol");
+    const totalValue = parseNumericValue(totalCholesterol?.value);
+    const hdlValue = parseNumericValue(hdl?.value);
+    const unit = totalCholesterol?.unit || hdl?.unit;
+
+    if (totalValue !== null && hdlValue !== null && unit && (!hdl?.unit || hdl.unit === unit)) {
+      const derivedValue = Number((totalValue - hdlValue).toFixed(1));
+      const normalizedUnit = normalizeForMatch(unit);
+      let referenceRange: string | undefined;
+      if (normalizedUnit === "mmol l" || normalizedUnit === "mmol/l") {
+        referenceRange = "<3.4";
+      } else if (normalizedUnit === "mg dl" || normalizedUnit === "mg/dl") {
+        referenceRange = "<130";
+      }
+
+      derivedRows.push({
+        panel: totalCholesterol?.panel || hdl?.panel,
+        marker: "Non HDL",
+        value: derivedValue.toString(),
+        unit,
+        referenceRange,
+        status: referenceRange ? undefined : "unknown",
+        note: "Derived from total cholesterol minus HDL because the printed Non HDL row was not reliably parsed from the image.",
+        whyItMatters: "Non-HDL cholesterol captures cholesterol carried by atherogenic particles and is commonly reviewed alongside LDL."
+      });
+    }
+  }
+
+  return derivedRows;
+};
+
 const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
   const deduped = new Map<string, ParsedReportRow>();
+  const sourceRows = [...rows, ...deriveSupplementalRows(rows)];
 
-  for (const row of rows) {
+  for (const row of sourceRows) {
     const marker = row.marker?.trim();
     if (!marker) continue;
 
