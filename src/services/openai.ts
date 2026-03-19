@@ -40,7 +40,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v17";
+const ANALYSIS_CACHE_VERSION = "v19";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -581,11 +581,17 @@ const buildParsedRowStrength = (row: ParsedReportRow) =>
 
 const deriveSupplementalRows = (rows: ExtractedReportRow[]): ExtractedReportRow[] => {
   const derivedRows: ExtractedReportRow[] = [];
-  const normalizedMarkers = new Set(rows.map((row) => normalizeForMatch(row.marker)));
+  const hasRenderableMarkerRow = (marker: string) =>
+    rows.some((row) => {
+      const matchesMarker = getMarkerAliases(row.marker).includes(normalizeForMatch(marker));
+      if (!matchesMarker) return false;
+      const status = inferRowStatus(row);
+      return Boolean(row.value?.trim()) && (Boolean(row.referenceRange?.trim()) || (status && status !== "unknown"));
+    });
   const findRow = (marker: string) =>
     rows.find((row) => getMarkerAliases(row.marker).includes(normalizeForMatch(marker)));
 
-  if (!normalizedMarkers.has("non hdl")) {
+  if (!hasRenderableMarkerRow("Non HDL")) {
     const totalCholesterol = findRow("Total Cholesterol");
     const hdl = findRow("HDL Cholesterol");
     const totalValue = parseNumericValue(totalCholesterol?.value);
