@@ -6,7 +6,7 @@ import Button from "../../components/Button";
 import AIChat from "../../components/AIChat";
 import Dialog from "../../components/Dialog";
 import { AppTheme, useTheme } from "../../theme";
-import { analyzeBloodworkFile, analyzeBloodworkPdf } from "../../services/openai";
+import { analyzeBloodworkFile, analyzeBloodworkImages, analyzeBloodworkPdf } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
 import { useI18n } from "../../i18n";
 
@@ -71,27 +71,43 @@ const UploadScreen = () => {
   }, [isAnalyzing, analysisSteps.length]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
 
     setIsAnalyzing(true);
     setError(null);
 
     try {
-      console.log("Analyzing file:", file.name);
+      console.log("Analyzing files:", files.map((file) => file.name).join(", "));
 
       let analysis;
+      const hasPdf = files.some((file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
 
-      // Check if it's a PDF or image
-      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-        // Handle PDF files
+      if (hasPdf && files.length > 1) {
+        throw new Error("Please upload either one PDF or multiple images, not a mix of files.");
+      }
+
+      if (hasPdf) {
+        const file = files[0];
         const [result] = await Promise.all([
           analyzeBloodworkPdf(file),
           new Promise(resolve => setTimeout(resolve, 6000)) // Minimum 6 seconds for UX
         ]);
         analysis = result;
+      } else if (files.length > 1) {
+        const images = await Promise.all(
+          files.map(async (file) => ({
+            base64: await fileToBase64(file),
+            fileType: file.type || "image/jpeg"
+          }))
+        );
+        const [result] = await Promise.all([
+          analyzeBloodworkImages(images),
+          new Promise(resolve => setTimeout(resolve, 6000)) // Minimum 6 seconds for UX
+        ]);
+        analysis = result;
       } else {
-        // Handle image files
+        const file = files[0];
         const base64 = await fileToBase64(file);
         const [result] = await Promise.all([
           analyzeBloodworkFile(base64, file.type),
@@ -103,14 +119,15 @@ const UploadScreen = () => {
       // Save (locally + to Railway-backed SQLite when available)
       persistentStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
       const uploadedAt = new Date().toISOString();
-      const fileType = file.type || "unknown";
-      const fileSize = file.size;
+      const fileName = files.map((file) => file.name).join(", ");
+      const fileType = hasPdf ? "application/pdf" : files.length > 1 ? "images" : (files[0].type || "unknown");
+      const fileSize = files.reduce((total, file) => total + file.size, 0);
 
       persistentStorage.setItem(
         "bloodworkAnalysisMeta",
         JSON.stringify({
           uploadedAt,
-          fileName: file.name,
+          fileName,
           fileType,
           fileSize
         })
@@ -126,9 +143,9 @@ const UploadScreen = () => {
         }
       }
       history.unshift({
-        id: `${uploadedAt}:${file.name}:${fileSize}`,
+        id: `${uploadedAt}:${fileName}:${fileSize}`,
         uploadedAt,
-        fileName: file.name,
+        fileName,
         fileType,
         fileSize,
         summary: analysis.summary,
@@ -264,6 +281,7 @@ const UploadScreen = () => {
           <input
             type="file"
             accept=".pdf,.jpg,.jpeg,.png,.webp"
+            multiple
             onChange={handleFileUpload}
             style={{ display: "none" }}
             disabled={isAnalyzing}
