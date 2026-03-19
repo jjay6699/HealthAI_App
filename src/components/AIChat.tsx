@@ -924,6 +924,31 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
     });
   }, [text.welcome]);
 
+  useEffect(() => {
+    if (questionnaireCompleted || questionnaireDismissed || questionnaireActive || showQuestionnairePrompt) {
+      return;
+    }
+
+    setMessages((prev) => {
+      if (
+        prev.length === 1 &&
+        prev[0]?.role === "assistant" &&
+        prev[0]?.content === text.welcome
+      ) {
+        return [...prev, { role: "assistant", content: text.personalizePrompt }];
+      }
+      return prev;
+    });
+    setShowQuestionnairePrompt(true);
+  }, [
+    questionnaireActive,
+    questionnaireCompleted,
+    questionnaireDismissed,
+    showQuestionnairePrompt,
+    text.personalizePrompt,
+    text.welcome
+  ]);
+
 
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1273,17 +1298,6 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
     const currentInput = input;
     setLastSymptomQuery(currentInput);
     setInput("");
-
-    const isGreeting = /^(hi|hello|hey|good morning|good afternoon|good evening|你好|您好)\b/i.test(currentInput.trim());
-    if (isGreeting && !questionnaireCompleted && !questionnaireDismissed && !questionnaireActive) {
-      const promptMessage: Message = {
-        role: "assistant",
-        content: text.personalizePrompt
-      };
-      setMessages(prev => [...prev, promptMessage]);
-      setShowQuestionnairePrompt(true);
-      return;
-    }
 
     await sendMessageToAI(currentInput);
   };
