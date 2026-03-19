@@ -1,6 +1,6 @@
 import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
 import { SUPPLEMENT_DESCRIPTIONS } from "../data/supplementDescriptions";
-import { pdfToImages, extractTextFromPdf } from "../utils/pdfProcessor";
+import { pdfToImages, extractStructuredTextPagesFromPdf, extractTextFromPdf } from "../utils/pdfProcessor";
 import { persistentStorage } from "./persistentStorage";
 import type { Language } from "../i18n";
 
@@ -39,7 +39,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v13";
+const ANALYSIS_CACHE_VERSION = "v15";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -145,6 +145,90 @@ interface ExtractedReportRow {
 }
 
 const concernStatusSet = new Set(["high", "low", "abnormal", "flagged"]);
+const EXPECTED_COMMON_MARKERS = [
+  "Total Cholesterol",
+  "Triglycerides",
+  "HDL Cholesterol",
+  "LDL Cholesterol",
+  "Non HDL",
+  "hs C-Reactive Protein",
+  "Total Bilirubin",
+  "Total Protein",
+  "Albumin",
+  "Globulin",
+  "A/G ratio",
+  "ALP",
+  "ALT (SGPT)",
+  "AST (SGOT)",
+  "GGT",
+  "Hemoglobin",
+  "PCV (HCT)",
+  "RBC Count",
+  "MCV",
+  "MCH",
+  "MCHC",
+  "RDW (CV)",
+  "Total WBC Count",
+  "Neutrophils",
+  "Lymphocytes",
+  "Monocytes",
+  "Eosinophils",
+  "Basophils",
+  "Absolute Neutrophil Count (ANC)",
+  "Absolute Lymphocyte Count (ALC)",
+  "Absolute Monocyte Count",
+  "Absolute Eosinophil Count (AEC)",
+  "Absolute Basophil Count",
+  "Platelets Count"
+] as const;
+
+const MARKER_DEFINITIONS: Array<{ marker: string; patterns: RegExp[] }> = [
+  { marker: "Total Cholesterol", patterns: [/^total cholesterol\b/i] },
+  { marker: "Triglycerides", patterns: [/^triglycerides\b/i] },
+  { marker: "HDL Cholesterol", patterns: [/^hdl cholesterol\b/i, /^high density lipoprotein\b/i] },
+  { marker: "LDL Cholesterol", patterns: [/^ldl cholesterol\b/i, /^low density lipoprotein\b/i] },
+  { marker: "Non HDL", patterns: [/^non hdl\b/i, /^non[-\s]?hdl\b/i] },
+  { marker: "hs C-Reactive Protein", patterns: [/^hs c[-\s]?reactive protein\b/i, /^hscrp\b/i] },
+  { marker: "Total Bilirubin", patterns: [/^total bilirubin\b/i] },
+  { marker: "Total Protein", patterns: [/^total protein\b/i] },
+  { marker: "Albumin", patterns: [/^albumin\b/i] },
+  { marker: "Globulin", patterns: [/^globulin\b/i] },
+  { marker: "A/G ratio", patterns: [/^a\/g ratio\b/i, /^a g ratio\b/i] },
+  { marker: "ALP", patterns: [/^alp\b/i, /^alkaline phosphatase\b/i] },
+  { marker: "ALT (SGPT)", patterns: [/^alt\s*\(sgpt\)\b/i, /^alt\b/i] },
+  { marker: "AST (SGOT)", patterns: [/^ast\s*\(sgot\)\b/i, /^ast\b/i] },
+  { marker: "GGT", patterns: [/^ggt\b/i] },
+  { marker: "Hemoglobin", patterns: [/^hemoglobin\b/i, /^haemoglobin\b/i] },
+  { marker: "PCV (HCT)", patterns: [/^pcv\s*\(hct\)\b/i, /^pcv\b/i, /^hct\b/i] },
+  { marker: "RBC Count", patterns: [/^rbc count\b/i] },
+  { marker: "MCV", patterns: [/^mcv\b/i] },
+  { marker: "MCH", patterns: [/^mch\b/i] },
+  { marker: "MCHC", patterns: [/^mchc\b/i] },
+  { marker: "RDW (CV)", patterns: [/^rdw\s*\(cv\)\b/i, /^rdw\b/i] },
+  { marker: "Total WBC Count", patterns: [/^total wbc count\b/i, /^wbc count\b/i] },
+  { marker: "Neutrophils", patterns: [/^neutrophils\b/i] },
+  { marker: "Lymphocytes", patterns: [/^lymphocytes\b/i] },
+  { marker: "Monocytes", patterns: [/^monocytes\b/i] },
+  { marker: "Eosinophils", patterns: [/^eosinophils\b/i] },
+  { marker: "Basophils", patterns: [/^basophils\b/i] },
+  { marker: "Absolute Neutrophil Count (ANC)", patterns: [/^absolute neutrophil count\s*\(anc\)\b/i, /^absolute neutrophil count\b/i] },
+  { marker: "Absolute Lymphocyte Count (ALC)", patterns: [/^absolute lymphocyte count\s*\(alc\)\b/i, /^absolute lymphocyte count\b/i] },
+  { marker: "Absolute Monocyte Count", patterns: [/^absolute monocyte count\b/i] },
+  { marker: "Absolute Eosinophil Count (AEC)", patterns: [/^absolute eosinophil count\s*\(aec\)\b/i, /^absolute eosinophil count\b/i] },
+  { marker: "Absolute Basophil Count", patterns: [/^absolute basophil count\b/i] },
+  { marker: "Platelets Count", patterns: [/^platelets count\b/i, /^platelet count\b/i] }
+];
+
+const PANEL_PATTERNS = [
+  /lipid studies/i,
+  /liver function test/i,
+  /hematology/i,
+  /complete blood picture/i,
+  /complete blood count/i,
+  /renal function/i,
+  /thyroid/i,
+  /urinalysis/i
+];
 
 const supplementById = new Map(AVAILABLE_SUPPLEMENTS.map((s) => [s.id, s]));
 const supplementByName = new Map(
@@ -593,6 +677,96 @@ const textMentionsMarker = (text: string, marker: string) => {
   return aliases.some((alias) => normalizedText.includes(alias));
 };
 
+const parseStructuredLineRow = (line: string, panel?: string): ExtractedReportRow | null => {
+  const trimmed = line.replace(/\s+/g, " ").trim();
+  if (!trimmed) return null;
+
+  const commentMatch = trimmed.match(/^(note|comments?|blood picture|wbcs|platelet-count)\s*:?\s*(.*)$/i);
+  if (commentMatch) {
+    return {
+      panel,
+      marker: commentMatch[1],
+      note: commentMatch[2] || undefined,
+      status: "comment",
+      whyItMatters: commentMatch[2] ? "This report note may add context to the laboratory findings." : undefined
+    };
+  }
+
+  const markerDefinition = MARKER_DEFINITIONS.find((definition) =>
+    definition.patterns.some((pattern) => pattern.test(trimmed))
+  );
+  if (!markerDefinition) return null;
+
+  const matchedPattern = markerDefinition.patterns.find((pattern) => pattern.test(trimmed));
+  const markerMatch = matchedPattern ? trimmed.match(matchedPattern) : null;
+  if (!markerMatch) return null;
+
+  let remainder = trimmed.slice(markerMatch[0].length).trim();
+  remainder = remainder.replace(/^[\:\-]+/, "").trim();
+
+  const rangeMatch = remainder.match(/((?:<|<=|>|>=)\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*-\s*\d+(?:\.\d+)?)\s*$/);
+  const referenceRange = rangeMatch ? rangeMatch[1].replace(/\s+/g, " ").trim() : undefined;
+  if (referenceRange && typeof rangeMatch?.index === "number") {
+    remainder = remainder.slice(0, rangeMatch.index).trim();
+  }
+
+  const unitMatch = remainder.match(/([A-Za-z%][A-Za-z0-9\/.%]*)\s*$/);
+  const unit = unitMatch ? unitMatch[1].trim() : undefined;
+  if (unit && typeof unitMatch?.index === "number") {
+    remainder = remainder.slice(0, unitMatch.index).trim();
+  }
+
+  const valueMatch = remainder.match(/(?:\b([HL])\b\s*)?(\d+(?:\.\d+)?)\s*$/i);
+  const value = valueMatch ? valueMatch[2] : undefined;
+  const note = valueMatch?.[1] ? `Flag ${valueMatch[1].toUpperCase()} shown in report.` : undefined;
+
+  if (!value && !referenceRange) {
+    return null;
+  }
+
+  return {
+    panel,
+    marker: markerDefinition.marker,
+    value,
+    unit,
+    referenceRange,
+    status: valueMatch?.[1]?.toUpperCase() === "H" ? "high" : valueMatch?.[1]?.toUpperCase() === "L" ? "low" : "unknown",
+    note,
+    whyItMatters: undefined
+  };
+};
+
+const parseStructuredPdfRows = (pages: { text: string }[]): ExtractedReportRow[] => {
+  const rows: ExtractedReportRow[] = [];
+
+  for (const page of pages) {
+    const lines = page.text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    let currentPanel: string | undefined;
+
+    for (const line of lines) {
+      if (PANEL_PATTERNS.some((pattern) => pattern.test(line))) {
+        currentPanel = line;
+        continue;
+      }
+
+      if (/^(test name|result|unit|reference range|investigation|observed value|biological ref range|method)\b/i.test(line)) {
+        continue;
+      }
+
+      const parsed = parseStructuredLineRow(line, currentPanel);
+      if (parsed) {
+        rows.push(parsed);
+      }
+    }
+  }
+
+  return rows;
+};
+
 const mergeAnalysisWithParsedRows = (
   analysis: BloodworkAnalysis,
   rows: ExtractedReportRow[]
@@ -801,6 +975,84 @@ Return JSON with this exact shape:
 
   const parsed = JSON.parse(content) as { rows?: ExtractedReportRow[] };
   return (parsed.rows || []).filter((row) => typeof row?.marker === "string" && row.marker.trim().length > 0);
+};
+
+const extractExpectedMarkers = async (
+  reportContent: unknown,
+  language: Language,
+  expectedMarkers: readonly string[]
+): Promise<ExtractedReportRow[]> => {
+  const response = await createChatCompletion({
+    model: ANALYSIS_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          `You are a targeted clinical row extractor. Find only the requested markers if they appear in the uploaded report. ${getLanguageInstruction(language)} Return valid JSON only.`
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Search the report for these exact or near-exact markers and extract them if present:
+${expectedMarkers.map((marker) => `- ${marker}`).join("\n")}
+
+Rules:
+- Return only rows for requested markers that are actually visible in the report.
+- Keep the printed value, unit, and reference range if visible.
+- If the marker is not present, do not invent it.
+- Preserve markers like "Non HDL", "A/G ratio", "ALT (SGPT)", and "AST (SGOT)" exactly when possible.
+
+Return JSON with this exact shape:
+{
+  "rows": [
+    {
+      "panel": "panel name if known",
+      "marker": "marker/test label",
+      "value": "observed value if any",
+      "unit": "unit if any",
+      "referenceRange": "printed range if any",
+      "status": "high|low|normal|abnormal|flagged|comment|unknown",
+      "note": "short extraction note if needed",
+      "whyItMatters": "one short plain-language explanation of why this matters"
+    }
+  ]
+}`
+          },
+          ...(Array.isArray(reportContent) ? reportContent : [reportContent])
+        ]
+      }
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) return [];
+
+  const parsed = JSON.parse(content) as { rows?: ExtractedReportRow[] };
+  return (parsed.rows || []).filter((row) => typeof row?.marker === "string" && row.marker.trim().length > 0);
+};
+
+const backfillExpectedMarkers = async (
+  reportContent: unknown,
+  language: Language,
+  extractedRows: ExtractedReportRow[]
+): Promise<ExtractedReportRow[]> => {
+  const existingAliases = new Set(
+    extractedRows.flatMap((row) => getMarkerAliases(row.marker))
+  );
+  const missing = EXPECTED_COMMON_MARKERS.filter(
+    (marker) => !getMarkerAliases(marker).some((alias) => existingAliases.has(alias))
+  );
+
+  if (missing.length === 0) {
+    return extractedRows;
+  }
+
+  const recoveredRows = await extractExpectedMarkers(reportContent, language, missing).catch(() => []);
+  return [...extractedRows, ...recoveredRows];
 };
 
 /**
@@ -1055,8 +1307,11 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
 
   try {
     // Convert PDF to images
-    const images = await pdfToImages(file);
-    const extractedPdfText = await extractTextFromPdf(file).catch(() => "");
+    const [images, extractedPdfText, structuredPages] = await Promise.all([
+      pdfToImages(file),
+      extractTextFromPdf(file).catch(() => ""),
+      extractStructuredTextPagesFromPdf(file).catch(() => [])
+    ]);
 
     if (images.length === 0) {
       throw new Error("No pages found in PDF");
@@ -1206,14 +1461,20 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
+    const deterministicRows = parseStructuredPdfRows(structuredPages);
     const [verifiedMarkers, extractedRows] = await Promise.all([
       verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []),
       extractStructuredReportRows(verificationReportContent, language).catch(() => [])
     ]);
+    const completedRows = await backfillExpectedMarkers(
+      verificationReportContent,
+      language,
+      [...deterministicRows, ...extractedRows]
+    );
     const normalized = normalizeRecommendations(
       mergeAnalysisWithParsedRows(
         mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers),
-        extractedRows
+        completedRows
       )
     );
     const localized = await localizeBloodworkAnalysis(normalized, language);
@@ -1392,10 +1653,11 @@ ${getLanguageInstruction(language)}`
       verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []),
       extractStructuredReportRows(verificationReportContent, language).catch(() => [])
     ]);
+    const completedRows = await backfillExpectedMarkers(verificationReportContent, language, extractedRows);
     const normalized = normalizeRecommendations(
       mergeAnalysisWithParsedRows(
         mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers),
-        extractedRows
+        completedRows
       )
     );
     const localized = await localizeBloodworkAnalysis(normalized, language);
@@ -1548,10 +1810,11 @@ ${getLanguageInstruction(language)}`
       verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []),
       extractStructuredReportRows(verificationReportContent, language).catch(() => [])
     ]);
+    const completedRows = await backfillExpectedMarkers(verificationReportContent, language, extractedRows);
     const normalized = normalizeRecommendations(
       mergeAnalysisWithParsedRows(
         mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers),
-        extractedRows
+        completedRows
       )
     );
     const localized = await localizeBloodworkAnalysis(normalized, language);
@@ -1588,16 +1851,19 @@ export async function analyzeHealthDocumentBundle(files: File[]): Promise<Bloodw
     | { type: "text"; text: string }
     | { type: "image_url"; image_url: { url: string; detail: "high" } }
   > = [];
+  const deterministicRows: ExtractedReportRow[] = [];
 
   for (const file of files) {
     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 
     if (isPdf) {
-      const [pages, extractedText] = await Promise.all([
+      const [pages, extractedText, structuredPages] = await Promise.all([
         pdfToImages(file),
-        extractTextFromPdf(file).catch(() => "")
+        extractTextFromPdf(file).catch(() => ""),
+        extractStructuredTextPagesFromPdf(file).catch(() => [])
       ]);
 
+      deterministicRows.push(...parseStructuredPdfRows(structuredPages));
       bundleContent.push({
         type: "text",
         text: `Document: ${file.name}\nType: PDF health report\nOCR text:\n${extractedText || "No OCR text available"}`
@@ -1612,6 +1878,10 @@ export async function analyzeHealthDocumentBundle(files: File[]): Promise<Bloodw
           }
         });
       }
+      bundleContent.push({
+        type: "text",
+        text: `Structured page text for ${file.name}:\n${structuredPages.map((page) => `Page ${page.pageNumber}\n${page.text}`).join("\n\n")}`
+      });
       continue;
     }
 
@@ -1715,7 +1985,8 @@ ${getLanguageInstruction(language)}`
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
     const extractedRows = await extractStructuredReportRows(bundleContent, language).catch(() => []);
-    const normalized = normalizeRecommendations(mergeAnalysisWithParsedRows(analysis, extractedRows));
+    const completedRows = await backfillExpectedMarkers(bundleContent, language, [...deterministicRows, ...extractedRows]);
+    const normalized = normalizeRecommendations(mergeAnalysisWithParsedRows(analysis, completedRows));
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
     return localized;

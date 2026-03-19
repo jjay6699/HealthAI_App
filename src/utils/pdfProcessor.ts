@@ -5,6 +5,11 @@ import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 // Configure pdf.js worker so it can run in the browser bundle
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
+export interface PdfTextPage {
+  pageNumber: number;
+  text: string;
+}
+
 /**
  * Converts a PDF file to images (one per page)
  * Returns an array of base64 encoded images
@@ -75,3 +80,55 @@ export async function extractTextFromPdf(file: File): Promise<string> {
   return fullText.trim();
 }
 
+export async function extractStructuredTextPagesFromPdf(file: File): Promise<PdfTextPage[]> {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pages: PdfTextPage[] = [];
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    const items = (textContent.items as any[])
+      .map((item) => ({
+        text: String(item.str || "").trim(),
+        x: Array.isArray(item.transform) ? Number(item.transform[4] || 0) : 0,
+        y: Array.isArray(item.transform) ? Number(item.transform[5] || 0) : 0
+      }))
+      .filter((item) => item.text);
+
+    items.sort((a, b) => {
+      if (Math.abs(b.y - a.y) > 2) return b.y - a.y;
+      return a.x - b.x;
+    });
+
+    const lines: Array<{ y: number; parts: typeof items }> = [];
+    for (const item of items) {
+      const existingLine = lines.find((line) => Math.abs(line.y - item.y) <= 2.5);
+      if (existingLine) {
+        existingLine.parts.push(item);
+      } else {
+        lines.push({ y: item.y, parts: [item] });
+      }
+    }
+
+    const pageText = lines
+      .sort((a, b) => b.y - a.y)
+      .map((line) =>
+        line.parts
+          .sort((a, b) => a.x - b.x)
+          .map((part) => part.text)
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim()
+      )
+      .filter(Boolean)
+      .join("\n");
+
+    pages.push({
+      pageNumber: pageNum,
+      text: pageText
+    });
+  }
+
+  return pages;
+}
