@@ -181,7 +181,7 @@ const createStyles = (theme: AppTheme) => {
       lineHeight: 1.08,
       letterSpacing: 0.2,
       textAlign: "center" as const,
-      fontFamily: 'Georgia, "Times New Roman", serif',
+      fontFamily: "inherit",
       textWrap: "balance" as const
     },
     subtitle: {
