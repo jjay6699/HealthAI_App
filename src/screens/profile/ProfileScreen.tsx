@@ -336,7 +336,23 @@ const ProfileScreen = () => {
     restingHeartRate: { label: t("profile.restingHrBpm"), type: "number", inputMode: "numeric" },
     waistCircumference: { label: `${t("profile.waistCircumference")} (cm)`, type: "number", inputMode: "numeric" },
     bodyFat: { label: `${t("profile.bodyFat")} (%)`, type: "number", inputMode: "decimal" },
-    dietPattern: { label: t("profile.dietPattern"), options: ["Balanced", "Mediterranean", "Plant-based", "Vegetarian", "Vegan", "Low-carb", "Keto", "Paleo"] },
+    dietPattern: {
+      label: t("profile.dietPattern"),
+      options: [
+        "Balanced",
+        "Mediterranean",
+        "Plant-based",
+        "Vegetarian",
+        "Vegan",
+        "Low-carb",
+        "Keto",
+        "Paleo",
+        "Standard American Diet (SAD)",
+        "Fast Food Heavy",
+        "High-Junk / Junk Food",
+        "No Specific Pattern"
+      ]
+    },
     mealsPerDay: { label: t("profile.mealsPerDay"), type: "number", inputMode: "numeric" },
     caffeineIntake: { label: t("profile.caffeineIntake"), options: ["None", "Low (1 cup)", "Moderate (2-3 cups)", "High (4+ cups)"] },
     waterIntake: { label: `${t("profile.waterIntake")} (cups/day)`, type: "number", inputMode: "numeric" },
@@ -489,6 +505,10 @@ const ProfileScreen = () => {
       case "Low-carb": return t("profile.diet.lowcarb");
       case "Keto": return t("profile.diet.keto");
       case "Paleo": return t("profile.diet.paleo");
+      case "Standard American Diet (SAD)": return t("profile.diet.sad");
+      case "Fast Food Heavy": return t("profile.diet.fastfood");
+      case "High-Junk / Junk Food": return t("profile.diet.junk");
+      case "No Specific Pattern": return t("profile.diet.nopattern");
       case "None": return t("profile.caffeine.none");
       case "Low (1 cup)": return t("profile.caffeine.low");
       case "Moderate (2-3 cups)": return t("profile.caffeine.moderate");

@@ -126,7 +126,20 @@ const steps: {
         key: "dietPattern",
         label: "Primary pattern",
         placeholder: "Select",
-        options: ["Balanced", "Mediterranean", "Plant-based", "Vegetarian", "Vegan", "Low-carb", "Keto", "Paleo"]
+        options: [
+          "Balanced",
+          "Mediterranean",
+          "Plant-based",
+          "Vegetarian",
+          "Vegan",
+          "Low-carb",
+          "Keto",
+          "Paleo",
+          "Standard American Diet (SAD)",
+          "Fast Food Heavy",
+          "High-Junk / Junk Food",
+          "No Specific Pattern"
+        ]
       },
       { key: "mealsPerDay", label: "Meals per day", placeholder: "e.g., 3", type: "number", inputMode: "numeric" },
       { key: "allergies", label: "Allergies", placeholder: "List" },
