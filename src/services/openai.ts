@@ -39,7 +39,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v12";
+const ANALYSIS_CACHE_VERSION = "v13";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -370,17 +370,17 @@ const parseNumericValue = (value?: string) => {
 
 const parseReferenceRange = (referenceRange?: string) => {
   if (!referenceRange) return null;
-  const normalized = referenceRange.replace(/,/g, "").replace(/[??]/g, "-");
-  const matches = normalized.match(/-?\d+(?:\.\d+)?/g);
+  const normalized = referenceRange.replace(/,/g, "").replace(/[??]/g, "-").trim();
+  const matches = normalized.match(/\d+(?:\.\d+)?/g);
   if (!matches || matches.length === 0) return null;
 
-  const upperMatch = normalized.match(/^(?:<|<=)\s*(-?\d+(?:\.\d+)?)/);
+  const upperMatch = normalized.match(/^(?:<|<=)\s*(\d+(?:\.\d+)?)/);
   if (upperMatch) {
     const upper = Number(upperMatch[1]);
     return Number.isNaN(upper) ? null : { type: "upper" as const, upper };
   }
 
-  const lowerMatch = normalized.match(/^(?:>|>=)\s*(-?\d+(?:\.\d+)?)/);
+  const lowerMatch = normalized.match(/^(?:>|>=)\s*(\d+(?:\.\d+)?)/);
   if (lowerMatch) {
     const lower = Number(lowerMatch[1]);
     return Number.isNaN(lower) ? null : { type: "lower" as const, lower };
