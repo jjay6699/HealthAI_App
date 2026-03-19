@@ -39,7 +39,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v11";
+const ANALYSIS_CACHE_VERSION = "v12";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -139,7 +139,7 @@ interface ExtractedReportRow {
   value?: string;
   unit?: string;
   referenceRange?: string;
-  status?: "high" | "low" | "normal" | "abnormal" | "flagged" | "comment";
+  status?: "high" | "low" | "normal" | "abnormal" | "flagged" | "comment" | "unknown";
   note?: string;
   whyItMatters?: string;
 }
@@ -303,6 +303,49 @@ const normalizeForMatch = (value: string) =>
     .replace(/[^a-z0-9]+/gi, " ")
     .trim();
 
+const getMarkerAliases = (marker: string) => {
+  const normalized = normalizeForMatch(marker);
+  const aliases = new Set<string>([normalized]);
+
+  if (/\bldl\b|low density lipoprotein/.test(normalized)) {
+    aliases.add("ldl");
+    aliases.add("ldl cholesterol");
+    aliases.add("low density lipoprotein");
+  }
+  if (/\bhdl\b|high density lipoprotein/.test(normalized)) {
+    aliases.add("hdl");
+    aliases.add("hdl cholesterol");
+    aliases.add("high density lipoprotein");
+  }
+  if (/total cholesterol/.test(normalized)) {
+    aliases.add("total cholesterol");
+    aliases.add("cholesterol");
+  }
+  if (/triglycer/.test(normalized)) {
+    aliases.add("triglycerides");
+    aliases.add("tg");
+  }
+  if (/non hdl/.test(normalized)) {
+    aliases.add("non hdl");
+    aliases.add("non hdl cholesterol");
+  }
+  if (/alt|sgpt/.test(normalized)) {
+    aliases.add("alt");
+    aliases.add("sgpt");
+    aliases.add("alt sgpt");
+  }
+  if (/ast|sgot/.test(normalized)) {
+    aliases.add("ast");
+    aliases.add("sgot");
+    aliases.add("ast sgot");
+  }
+  if (/alp/.test(normalized)) {
+    aliases.add("alp");
+  }
+
+  return [...aliases];
+};
+
 const buildVerifiedConcern = (marker: VerifiedAbnormalMarker) => {
   const directionText =
     marker.abnormalDirection === "high"
@@ -353,12 +396,35 @@ const parseReferenceRange = (referenceRange?: string) => {
   return null;
 };
 
+const isSuspiciousRangeForMarker = (
+  marker: string,
+  range:
+    | { type: "upper"; upper: number }
+    | { type: "lower"; lower: number }
+    | { type: "between"; min: number; max: number }
+) => {
+  const normalized = normalizeForMatch(marker);
+
+  if ((/\bldl\b|total cholesterol|non hdl|triglycer|alt|ast|alp|ggt|bilirubin|crp/.test(normalized)) && range.type === "lower") {
+    return true;
+  }
+
+  if ((/\bhdl\b|high density lipoprotein/.test(normalized)) && range.type === "upper") {
+    return true;
+  }
+
+  return false;
+};
+
 const inferRowStatus = (row: ExtractedReportRow): ExtractedReportRow["status"] => {
   if (row.status === "comment") return "comment";
 
   const numericValue = parseNumericValue(row.value);
   const numericRange = parseReferenceRange(row.referenceRange);
   if (numericValue !== null && numericRange) {
+    if (isSuspiciousRangeForMarker(row.marker, numericRange)) {
+      return "unknown";
+    }
     if (numericRange.type === "between") {
       if (numericValue < numericRange.min) return "low";
       if (numericValue > numericRange.max) return "high";
@@ -523,8 +589,8 @@ const buildDeterministicFindings = (rows: ParsedReportRow[]) => {
 
 const textMentionsMarker = (text: string, marker: string) => {
   const normalizedText = normalizeForMatch(text);
-  const normalizedMarker = normalizeForMatch(marker);
-  return normalizedText.includes(normalizedMarker) || normalizedMarker.includes(normalizedText);
+  const aliases = getMarkerAliases(marker);
+  return aliases.some((alias) => normalizedText.includes(alias));
 };
 
 const mergeAnalysisWithParsedRows = (
