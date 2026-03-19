@@ -121,6 +121,17 @@ interface VerifiedAbnormalMarker {
   note?: string;
 }
 
+interface ExtractedReportRow {
+  panel?: string;
+  marker: string;
+  value?: string;
+  unit?: string;
+  referenceRange?: string;
+  status?: "high" | "low" | "normal" | "abnormal" | "flagged" | "comment";
+  note?: string;
+  whyItMatters?: string;
+}
+
 const supplementById = new Map(AVAILABLE_SUPPLEMENTS.map((s) => [s.id, s]));
 const supplementByName = new Map(
   AVAILABLE_SUPPLEMENTS.map((s) => [s.name.toLowerCase(), s])
@@ -294,6 +305,31 @@ const buildVerifiedConcern = (marker: VerifiedAbnormalMarker) => {
   return `${directionText} ${marker.marker}${valueText}${rangeText}${noteText}`.trim();
 };
 
+const buildRowConcern = (row: ExtractedReportRow) => {
+  const statusText =
+    row.status === "high"
+      ? "is high"
+      : row.status === "low"
+      ? "is low"
+      : row.status === "normal"
+      ? "is within range"
+      : row.status === "comment"
+      ? "comment"
+      : row.status === "flagged"
+      ? "is flagged"
+      : "is abnormal";
+
+  const valueText = row.value ? ` at ${row.value}${row.unit ? ` ${row.unit}` : ""}` : "";
+  const rangeText = row.referenceRange ? ` (reference range: ${row.referenceRange})` : "";
+  const noteText = row.note ? ` ${row.note}` : "";
+
+  if (row.status === "comment") {
+    return `${row.marker}${row.note ? `: ${row.note}` : ""}`.trim();
+  }
+
+  return `${row.marker} ${statusText}${valueText}${rangeText}.${noteText}`.replace(/\.\s*\./g, ".").trim();
+};
+
 const mergeVerifiedAbnormalMarkers = (
   analysis: BloodworkAnalysis,
   markers: VerifiedAbnormalMarker[]
@@ -345,6 +381,65 @@ const mergeVerifiedAbnormalMarkers = (
         impact: "Added by verification pass to ensure less-prominent out-of-range markers are not omitted."
       }
     ]
+  };
+};
+
+const mergeExtractedReportRows = (
+  analysis: BloodworkAnalysis,
+  rows: ExtractedReportRow[]
+): BloodworkAnalysis => {
+  if (rows.length === 0) return analysis;
+
+  const concernStatuses = new Set(["high", "low", "abnormal", "flagged", "comment"]);
+  const existingConcernText = new Set((analysis.concerns || []).map((item) => normalizeForMatch(item)));
+  const existingStrengthText = new Set((analysis.strengths || []).map((item) => normalizeForMatch(item)));
+  const existingInsightText = normalizeForMatch(
+    (analysis.detailedInsights || [])
+      .flatMap((item) => [item.category, item.findings, item.impact])
+      .join(" ")
+  );
+
+  const appendedConcerns: string[] = [];
+  const appendedStrengths: string[] = [];
+  const appendedInsights: BloodworkAnalysis["detailedInsights"] = [];
+
+  for (const row of rows) {
+    const markerKey = normalizeForMatch(row.marker);
+    if (!markerKey) continue;
+
+    const alreadyCovered =
+      [...existingConcernText].some((item) => item.includes(markerKey) || markerKey.includes(item)) ||
+      [...existingStrengthText].some((item) => item.includes(markerKey) || markerKey.includes(item)) ||
+      existingInsightText.includes(markerKey);
+
+    if (alreadyCovered) continue;
+
+    if (row.status && concernStatuses.has(row.status)) {
+      const concernLine = buildRowConcern(row);
+      existingConcernText.add(normalizeForMatch(concernLine));
+      appendedConcerns.push(concernLine);
+      appendedInsights.push({
+        category: row.panel || "Additional finding",
+        findings: concernLine,
+        impact:
+          row.whyItMatters?.trim() ||
+          "This finding may be relevant to your symptoms, overall health pattern, or follow-up planning."
+      });
+      continue;
+    }
+
+    if (row.status === "normal" && row.value && row.referenceRange) {
+      const strengthLine = `${row.marker} is within normal range at ${row.value}${row.unit ? ` ${row.unit}` : ""} (reference range: ${row.referenceRange}).`;
+      existingStrengthText.add(normalizeForMatch(strengthLine));
+      appendedStrengths.push(strengthLine);
+    }
+  }
+
+  return {
+    ...analysis,
+    concerns: [...analysis.concerns, ...appendedConcerns],
+    strengths: [...analysis.strengths, ...appendedStrengths].slice(0, 8),
+    detailedInsights: [...analysis.detailedInsights, ...appendedInsights]
   };
 };
 
@@ -404,6 +499,70 @@ Rules:
   return (parsed.abnormalMarkers || []).filter((marker) => typeof marker?.marker === "string" && marker.marker.trim().length > 0);
 };
 
+const extractStructuredReportRows = async (
+  reportContent: unknown,
+  language: Language
+): Promise<ExtractedReportRow[]> => {
+  const response = await createChatCompletion({
+    model: ANALYSIS_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          `You are an exhaustive clinical report extraction engine. Your only job is to read every visible line in the provided report and return structured rows. ${getLanguageInstruction(language)} Return valid JSON only.`
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Read every visible line in the uploaded report.
+
+You must extract:
+- every biomarker/test row with a value if visible
+- the printed reference range if visible
+- whether the row appears high, low, normal, abnormal, flagged, or is a clinician/report comment
+- report comments such as "relative lymphocytosis seen", "platelets adequate", or similar
+
+Important rules:
+- Be exhaustive. Do not skip indices, differential counts, percentages, comments, or less prominent rows.
+- If a value is bolded, starred, flagged, H/L, or outside the shown range, mark status accordingly.
+- If a report comment indicates an abnormal pattern, include it as status "comment".
+- Keep each row short and structured.
+- If something is partially unreadable, still include the row and mention that in note.
+- Do not summarize. Extract rows only.
+
+Return JSON with this exact shape:
+{
+  "rows": [
+    {
+      "panel": "panel name if known",
+      "marker": "marker/test/comment label",
+      "value": "observed value if any",
+      "unit": "unit if any",
+      "referenceRange": "printed range if any",
+      "status": "high|low|normal|abnormal|flagged|comment",
+      "note": "short extraction note if needed",
+      "whyItMatters": "one short plain-language explanation of why this matters"
+    }
+  ]
+}`
+          },
+          ...(Array.isArray(reportContent) ? reportContent : [reportContent])
+        ]
+      }
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) return [];
+
+  const parsed = JSON.parse(content) as { rows?: ExtractedReportRow[] };
+  return (parsed.rows || []).filter((row) => typeof row?.marker === "string" && row.marker.trim().length > 0);
+};
+
 /**
  * Analyzes bloodwork data using OpenAI and recommends nutrition products
  */
@@ -442,7 +601,7 @@ Please analyze the bloodwork and provide:
 2. Key concerns or areas that need attention (ONLY values outside reference ranges)
 3. Positive findings or strengths (ONLY values clearly within healthy ranges)
 4. Specific nutrition recommendations from our list that would address any deficiencies or support optimal health
-5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
+5. Detailed insights by health category. For each abnormal or noteworthy issue, explain in plain consumer-friendly language what was found and why it may matter in everyday terms.
 
 Before giving recommendations, confirm you checked common lipid/metabolic markers if present: LDL, HDL, total cholesterol, triglycerides (TG), non-HDL, ApoB, glucose, HbA1c. If any of these are missing from the report, explicitly note them as "missing/unreported".
 
@@ -807,8 +966,16 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const verifiedMarkers = await verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []);
-    const normalized = normalizeRecommendations(mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers));
+    const [verifiedMarkers, extractedRows] = await Promise.all([
+      verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []),
+      extractStructuredReportRows(verificationReportContent, language).catch(() => [])
+    ]);
+    const normalized = normalizeRecommendations(
+      mergeExtractedReportRows(
+        mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers),
+        extractedRows
+      )
+    );
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
     return localized;
@@ -893,7 +1060,7 @@ Please provide:
 2. Key concerns or areas that need attention (ONLY values outside reference ranges)
 3. Positive findings or strengths (ONLY values clearly within healthy ranges)
 4. Specific nutrition recommendations from our list that would address any deficiencies or support optimal health
-5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
+5. Detailed insights by health category. For each abnormal or noteworthy issue, explain in plain consumer-friendly language what was found and why it may matter in everyday terms.
 
 ${BLOODWORK_EXTRACTION_RULES}
 
@@ -981,8 +1148,16 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const verifiedMarkers = await verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []);
-    const normalized = normalizeRecommendations(mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers));
+    const [verifiedMarkers, extractedRows] = await Promise.all([
+      verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []),
+      extractStructuredReportRows(verificationReportContent, language).catch(() => [])
+    ]);
+    const normalized = normalizeRecommendations(
+      mergeExtractedReportRows(
+        mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers),
+        extractedRows
+      )
+    );
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
     return localized;
@@ -1064,7 +1239,7 @@ Please provide:
 2. Key concerns or areas that need attention (ONLY values outside reference ranges)
 3. Positive findings or strengths (ONLY values clearly within healthy ranges)
 4. Specific nutrition recommendations from our list that would address any deficiencies or support optimal health
-5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
+5. Detailed insights by health category. For each abnormal or noteworthy issue, explain in plain consumer-friendly language what was found and why it may matter in everyday terms.
 
 ${BLOODWORK_EXTRACTION_RULES}
 
@@ -1129,8 +1304,16 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const verifiedMarkers = await verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []);
-    const normalized = normalizeRecommendations(mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers));
+    const [verifiedMarkers, extractedRows] = await Promise.all([
+      verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []),
+      extractStructuredReportRows(verificationReportContent, language).catch(() => [])
+    ]);
+    const normalized = normalizeRecommendations(
+      mergeExtractedReportRows(
+        mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers),
+        extractedRows
+      )
+    );
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
     return localized;
@@ -1231,7 +1414,7 @@ Please provide:
 2. Key concerns or findings that need attention, including bloodwork abnormalities AND notable ECG/imaging/report findings
 3. Positive findings or strengths from any document in the packet
 4. Specific nutrition recommendations from our list that fit the overall packet
-5. Detailed insights by health category, including cardiovascular findings if ECG/report findings are present
+5. Detailed insights by health category, including cardiovascular findings if ECG/report findings are present. Explain each issue in plain consumer-friendly language, similar to a health app explanation, but without citations.
 
 Rules:
 - Review every uploaded document before summarizing.
@@ -1291,7 +1474,8 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const normalized = normalizeRecommendations(analysis);
+    const extractedRows = await extractStructuredReportRows(bundleContent, language).catch(() => []);
+    const normalized = normalizeRecommendations(mergeExtractedReportRows(analysis, extractedRows));
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
     return localized;
