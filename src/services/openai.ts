@@ -39,7 +39,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v10";
+const ANALYSIS_CACHE_VERSION = "v11";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -313,13 +313,30 @@ const parseNumericValue = (value?: string) => {
 
 const parseReferenceRange = (referenceRange?: string) => {
   if (!referenceRange) return null;
-  const normalized = referenceRange.replace(/,/g, "").replace(/[–—]/g, "-");
+  const normalized = referenceRange.replace(/,/g, "").replace(/[??]/g, "-");
   const matches = normalized.match(/-?\d+(?:\.\d+)?/g);
-  if (!matches || matches.length < 2) return null;
-  const min = Number(matches[0]);
-  const max = Number(matches[1]);
-  if (Number.isNaN(min) || Number.isNaN(max)) return null;
-  return { min, max };
+  if (!matches || matches.length === 0) return null;
+
+  const upperMatch = normalized.match(/^(?:<|<=)\s*(-?\d+(?:\.\d+)?)/);
+  if (upperMatch) {
+    const upper = Number(upperMatch[1]);
+    return Number.isNaN(upper) ? null : { type: "upper" as const, upper };
+  }
+
+  const lowerMatch = normalized.match(/^(?:>|>=)\s*(-?\d+(?:\.\d+)?)/);
+  if (lowerMatch) {
+    const lower = Number(lowerMatch[1]);
+    return Number.isNaN(lower) ? null : { type: "lower" as const, lower };
+  }
+
+  if (matches.length >= 2) {
+    const min = Number(matches[0]);
+    const max = Number(matches[1]);
+    if (Number.isNaN(min) || Number.isNaN(max)) return null;
+    return { type: "between" as const, min, max };
+  }
+
+  return null;
 };
 
 const inferRowStatus = (row: ExtractedReportRow): ExtractedReportRow["status"] => {
@@ -328,9 +345,17 @@ const inferRowStatus = (row: ExtractedReportRow): ExtractedReportRow["status"] =
   const numericValue = parseNumericValue(row.value);
   const numericRange = parseReferenceRange(row.referenceRange);
   if (numericValue !== null && numericRange) {
-    if (numericValue < numericRange.min) return "low";
-    if (numericValue > numericRange.max) return "high";
-    return "normal";
+    if (numericRange.type === "between") {
+      if (numericValue < numericRange.min) return "low";
+      if (numericValue > numericRange.max) return "high";
+      return "normal";
+    }
+    if (numericRange.type === "upper") {
+      return numericValue <= numericRange.upper ? "normal" : "high";
+    }
+    if (numericRange.type === "lower") {
+      return numericValue >= numericRange.lower ? "normal" : "low";
+    }
   }
 
   return row.status;
