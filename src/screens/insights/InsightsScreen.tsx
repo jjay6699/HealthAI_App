@@ -148,9 +148,36 @@ const InsightsScreen = () => {
         : isMalay
         ? "Sumber: laporan darah PDF yang dimuat naik"
         : "Source: uploaded PDF bloodwork"
+      : analysisMeta?.fileType === "document-bundle"
+      ? isChinese
+        ? "æ¥æºï¼šå¤šä»½å¥åº·æŠ¥å‘Šç»¼åˆåˆ†æž"
+        : isMalay
+        ? "Sumber: analisis gabungan beberapa dokumen kesihatan"
+        : "Source: combined health document analysis"
       : analysisMeta?.fileName
       ? `${isChinese ? "来源" : isMalay ? "Sumber" : "Source"}: ${analysisMeta.fileName}`
       : null;
+  const parsedSectionTitle = isChinese ? "å·²è§£æžæŒ‡æ ‡" : isMalay ? "Penanda yang dihuraikan" : "Parsed markers";
+  const parsedSectionBody = isChinese
+    ? "ä»¥æŠ¥å‘Šä¸­çš„æ•°å€¼ä¸Žå‚è€ƒèŒƒå›´ä¸ºå‡†è¿›è¡Œåˆ¤å®šã€‚"
+    : isMalay
+    ? "Status ini ditentukan daripada nilai dan julat rujukan yang dicetak pada laporan."
+    : "These statuses are determined from the printed values and reference ranges on the report.";
+  const visibleParsedRows = (displayAnalysis.parsedRows || []).filter((row) => row.status !== "unknown");
+  const toStatusLabel = (status: string) => {
+    if (status === "high") return isChinese ? "åé«˜" : isMalay ? "Tinggi" : "High";
+    if (status === "low") return isChinese ? "åä½Ž" : isMalay ? "Rendah" : "Low";
+    if (status === "normal") return isChinese ? "æ­£å¸¸" : isMalay ? "Normal" : "Normal";
+    if (status === "flagged") return isChinese ? "å·²æ ‡è®°" : isMalay ? "Ditanda" : "Flagged";
+    if (status === "comment") return isChinese ? "å¤‡æ³¨" : isMalay ? "Ulasan" : "Comment";
+    return isChinese ? "å¼‚å¸¸" : isMalay ? "Abnormal" : "Abnormal";
+  };
+  const parsedStatusStyle = (status: string) => {
+    if (status === "high" || status === "abnormal" || status === "flagged") return styles.parsedStatusHigh;
+    if (status === "low") return styles.parsedStatusLow;
+    if (status === "normal") return styles.parsedStatusNormal;
+    return styles.parsedStatusComment;
+  };
 
   return (
     <div style={styles.page}>
@@ -163,6 +190,31 @@ const InsightsScreen = () => {
         <SectionHeader title={t("insights.summary")} />
         <p style={styles.summaryText}>{displayAnalysis.summary}</p>
       </Card>
+
+      {visibleParsedRows.length > 0 && (
+        <Card style={styles.parsedCard}>
+          <SectionHeader title={parsedSectionTitle} />
+          <p style={styles.parsedBody}>{parsedSectionBody}</p>
+          <div style={styles.parsedList}>
+            {visibleParsedRows.map((row, index) => (
+              <div key={`${row.marker}-${row.value || index}`} style={styles.parsedRow}>
+                <div style={styles.parsedRowTop}>
+                  <span style={styles.parsedMarker}>{row.marker}</span>
+                  <span style={{ ...styles.parsedStatus, ...parsedStatusStyle(row.status) }}>
+                    {toStatusLabel(row.status)}
+                  </span>
+                </div>
+                <p style={styles.parsedMeta}>
+                  {[row.value ? `${row.value}${row.unit ? ` ${row.unit}` : ""}` : null, row.referenceRange ? `Range ${row.referenceRange}` : null]
+                    .filter(Boolean)
+                    .join(" • ")}
+                </p>
+                {row.explanation ? <p style={styles.parsedExplanation}>{row.explanation}</p> : null}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Concerns */}
       {displayAnalysis.concerns && displayAnalysis.concerns.length > 0 && (
@@ -268,11 +320,77 @@ const createStyles = (theme: AppTheme) => ({
     flexDirection: "column" as const,
     gap: theme.spacing.md
   },
+  parsedCard: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: theme.spacing.md
+  },
   summaryText: {
     fontSize: 15,
     color: theme.colors.text,
     margin: 0,
     lineHeight: "24px"
+  },
+  parsedBody: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    margin: 0
+  },
+  parsedList: {
+    display: "grid",
+    gap: theme.spacing.md
+  },
+  parsedRow: {
+    padding: `${theme.spacing.md}px`,
+    borderRadius: theme.radii.lg,
+    border: `1px solid ${theme.colors.divider}`,
+    background: theme.colors.surface
+  },
+  parsedRowTop: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm
+  },
+  parsedMarker: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: theme.colors.text
+  },
+  parsedStatus: {
+    padding: "4px 8px",
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 700,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.3
+  },
+  parsedStatusHigh: {
+    background: theme.colors.accentPeach,
+    color: theme.colors.warning
+  },
+  parsedStatusLow: {
+    background: "#EEF2FF",
+    color: "#4F46E5"
+  },
+  parsedStatusNormal: {
+    background: theme.colors.accentMint,
+    color: theme.colors.success
+  },
+  parsedStatusComment: {
+    background: "#F3F4F6",
+    color: theme.colors.textSecondary
+  },
+  parsedMeta: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    margin: `${theme.spacing.xs}px 0 0`
+  },
+  parsedExplanation: {
+    fontSize: 13,
+    color: theme.colors.text,
+    lineHeight: "20px",
+    margin: `${theme.spacing.sm}px 0 0`
   },
   concernsCard: {
     display: "flex",

@@ -100,6 +100,17 @@ export interface SupplementRecommendation {
   dosageGramsPerDay?: number;
 }
 
+export interface ParsedReportRow {
+  panel?: string;
+  marker: string;
+  value?: string;
+  unit?: string;
+  referenceRange?: string;
+  status: "high" | "low" | "normal" | "abnormal" | "flagged" | "comment" | "unknown";
+  note?: string;
+  explanation?: string;
+}
+
 export interface BloodworkAnalysis {
   summary: string;
   concerns: string[];
@@ -110,6 +121,7 @@ export interface BloodworkAnalysis {
     findings: string;
     impact: string;
   }[];
+  parsedRows?: ParsedReportRow[];
 }
 
 interface VerifiedAbnormalMarker {
@@ -131,6 +143,8 @@ interface ExtractedReportRow {
   note?: string;
   whyItMatters?: string;
 }
+
+const concernStatusSet = new Set(["high", "low", "abnormal", "flagged"]);
 
 const supplementById = new Map(AVAILABLE_SUPPLEMENTS.map((s) => [s.id, s]));
 const supplementByName = new Map(
@@ -387,6 +401,168 @@ const buildRowConcern = (row: ExtractedReportRow) => {
   return `${row.marker} ${statusText}${valueText}${rangeText}.${noteText}`.replace(/\.\s*\./g, ".").trim();
 };
 
+const buildParsedRowExplanation = (row: ParsedReportRow) => {
+  if (row.explanation?.trim()) return row.explanation.trim();
+
+  if (row.status === "high") {
+    return "This marker is above the lab's stated range, so it may need follow-up in the context of your overall health picture.";
+  }
+  if (row.status === "low") {
+    return "This marker is below the lab's stated range, so it may reflect an area worth monitoring more closely.";
+  }
+  if (row.status === "flagged" || row.status === "abnormal") {
+    return "This result appears outside the expected pattern in the report and may need clinical interpretation alongside your symptoms and history.";
+  }
+  if (row.status === "normal") {
+    return "This marker sits within the printed lab range on this report.";
+  }
+  if (row.status === "comment") {
+    return "This note was included in the report comments and may add clinical context to the lab values.";
+  }
+  return "This row was extracted from the report but could not be fully classified from the printed range alone.";
+};
+
+const buildParsedRowConcern = (row: ParsedReportRow) =>
+  `${row.marker} is ${row.status}${row.value ? ` at ${row.value}${row.unit ? ` ${row.unit}` : ""}` : ""}${row.referenceRange ? ` (reference range: ${row.referenceRange})` : ""}.`.replace(/\.\s*\./g, ".").trim();
+
+const buildParsedRowStrength = (row: ParsedReportRow) =>
+  `${row.marker} is within normal range${row.value ? ` at ${row.value}${row.unit ? ` ${row.unit}` : ""}` : ""}${row.referenceRange ? ` (reference range: ${row.referenceRange})` : ""}.`.replace(/\.\s*\./g, ".").trim();
+
+const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
+  const deduped = new Map<string, ParsedReportRow>();
+
+  for (const row of rows) {
+    const marker = row.marker?.trim();
+    if (!marker) continue;
+
+    const normalizedPanel = row.panel?.trim() || undefined;
+    const normalizedValue = row.value?.trim() || undefined;
+    const normalizedUnit = row.unit?.trim() || undefined;
+    const normalizedRange = row.referenceRange?.trim() || undefined;
+    const normalizedNote = row.note?.trim() || undefined;
+    const status = inferRowStatus(row) || "unknown";
+
+    const parsedRow: ParsedReportRow = {
+      panel: normalizedPanel,
+      marker,
+      value: normalizedValue,
+      unit: normalizedUnit,
+      referenceRange: normalizedRange,
+      status,
+      note: normalizedNote,
+      explanation: row.whyItMatters?.trim() || undefined
+    };
+
+    const key = [
+      normalizeForMatch(marker),
+      normalizedValue || "",
+      normalizedRange || "",
+      status
+    ].join("|");
+
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, parsedRow);
+      continue;
+    }
+
+    if ((!existing.note && parsedRow.note) || (!existing.explanation && parsedRow.explanation)) {
+      deduped.set(key, {
+        ...existing,
+        note: existing.note || parsedRow.note,
+        explanation: existing.explanation || parsedRow.explanation
+      });
+    }
+  }
+
+  return [...deduped.values()];
+};
+
+const rowMentionsSignalComment = (row: ParsedReportRow) => {
+  const haystack = normalizeForMatch(`${row.marker} ${row.note || ""} ${row.explanation || ""}`);
+  return /(lymphocytosis|neutropenia|eosinophilia|basophilia|monocytosis|thrombocytopenia|thrombocytosis|anemia|anaemia|abnormal|elevated|low|high|flagged|seen|present)/.test(haystack);
+};
+
+const buildDeterministicFindings = (rows: ParsedReportRow[]) => {
+  const concerns: string[] = [];
+  const strengths: string[] = [];
+  const detailedInsights: BloodworkAnalysis["detailedInsights"] = [];
+
+  for (const row of rows) {
+    if (concernStatusSet.has(row.status)) {
+      const concern = buildParsedRowConcern(row);
+      concerns.push(concern);
+      detailedInsights.push({
+        category: row.panel || "Parsed marker",
+        findings: concern,
+        impact: buildParsedRowExplanation(row)
+      });
+      continue;
+    }
+
+    if (row.status === "comment" && rowMentionsSignalComment(row)) {
+      detailedInsights.push({
+        category: row.panel || "Report comment",
+        findings: `${row.marker}${row.note ? `: ${row.note}` : ""}`.trim(),
+        impact: buildParsedRowExplanation(row)
+      });
+      continue;
+    }
+
+    if (row.status === "normal" && row.value && row.referenceRange) {
+      strengths.push(buildParsedRowStrength(row));
+    }
+  }
+
+  return {
+    concerns,
+    strengths: strengths.slice(0, 8),
+    detailedInsights: detailedInsights.slice(0, 10)
+  };
+};
+
+const textMentionsMarker = (text: string, marker: string) => {
+  const normalizedText = normalizeForMatch(text);
+  const normalizedMarker = normalizeForMatch(marker);
+  return normalizedText.includes(normalizedMarker) || normalizedMarker.includes(normalizedText);
+};
+
+const mergeAnalysisWithParsedRows = (
+  analysis: BloodworkAnalysis,
+  rows: ExtractedReportRow[]
+): BloodworkAnalysis => {
+  const parsedRows = finalizeParsedRows(rows);
+  if (parsedRows.length === 0) {
+    return analysis;
+  }
+
+  const parsedMarkers = parsedRows.map((row) => row.marker);
+  const deterministic = buildDeterministicFindings(parsedRows);
+  const filteredConcerns = (analysis.concerns || []).filter(
+    (item) => !parsedMarkers.some((marker) => textMentionsMarker(item, marker))
+  );
+  const filteredStrengths = (analysis.strengths || []).filter(
+    (item) => !parsedMarkers.some((marker) => textMentionsMarker(item, marker))
+  );
+  const filteredInsights = (analysis.detailedInsights || []).filter(
+    (item) =>
+      !parsedMarkers.some(
+        (marker) =>
+          textMentionsMarker(item.category, marker) ||
+          textMentionsMarker(item.findings, marker) ||
+          textMentionsMarker(item.impact, marker)
+      )
+  );
+
+  return {
+    ...analysis,
+    concerns: [...deterministic.concerns, ...filteredConcerns],
+    strengths: [...deterministic.strengths, ...filteredStrengths].slice(0, 8),
+    detailedInsights: [...deterministic.detailedInsights, ...filteredInsights],
+    parsedRows
+  };
+};
+
 const mergeVerifiedAbnormalMarkers = (
   analysis: BloodworkAnalysis,
   markers: VerifiedAbnormalMarker[]
@@ -438,66 +614,6 @@ const mergeVerifiedAbnormalMarkers = (
         impact: "Added by verification pass to ensure less-prominent out-of-range markers are not omitted."
       }
     ]
-  };
-};
-
-const mergeExtractedReportRows = (
-  analysis: BloodworkAnalysis,
-  rows: ExtractedReportRow[]
-): BloodworkAnalysis => {
-  if (rows.length === 0) return analysis;
-
-  const concernStatuses = new Set(["high", "low", "abnormal", "flagged", "comment"]);
-  const existingConcernText = new Set((analysis.concerns || []).map((item) => normalizeForMatch(item)));
-  const existingStrengthText = new Set((analysis.strengths || []).map((item) => normalizeForMatch(item)));
-  const existingInsightText = normalizeForMatch(
-    (analysis.detailedInsights || [])
-      .flatMap((item) => [item.category, item.findings, item.impact])
-      .join(" ")
-  );
-
-  const appendedConcerns: string[] = [];
-  const appendedStrengths: string[] = [];
-  const appendedInsights: BloodworkAnalysis["detailedInsights"] = [];
-
-  for (const row of rows) {
-    const effectiveStatus = inferRowStatus(row);
-    const markerKey = normalizeForMatch(row.marker);
-    if (!markerKey) continue;
-
-    const alreadyCovered =
-      [...existingConcernText].some((item) => item.includes(markerKey) || markerKey.includes(item)) ||
-      [...existingStrengthText].some((item) => item.includes(markerKey) || markerKey.includes(item)) ||
-      existingInsightText.includes(markerKey);
-
-    if (alreadyCovered) continue;
-
-    if (effectiveStatus && concernStatuses.has(effectiveStatus)) {
-      const concernLine = buildRowConcern(row);
-      existingConcernText.add(normalizeForMatch(concernLine));
-      appendedConcerns.push(concernLine);
-      appendedInsights.push({
-        category: row.panel || "Additional finding",
-        findings: concernLine,
-        impact:
-          row.whyItMatters?.trim() ||
-          "This finding may be relevant to your symptoms, overall health pattern, or follow-up planning."
-      });
-      continue;
-    }
-
-    if (effectiveStatus === "normal" && row.value && row.referenceRange) {
-      const strengthLine = `${row.marker} is within normal range at ${row.value}${row.unit ? ` ${row.unit}` : ""} (reference range: ${row.referenceRange}).`;
-      existingStrengthText.add(normalizeForMatch(strengthLine));
-      appendedStrengths.push(strengthLine);
-    }
-  }
-
-  return {
-    ...analysis,
-    concerns: [...analysis.concerns, ...appendedConcerns],
-    strengths: [...analysis.strengths, ...appendedStrengths].slice(0, 8),
-    detailedInsights: [...analysis.detailedInsights, ...appendedInsights]
   };
 };
 
@@ -1029,7 +1145,7 @@ ${getLanguageInstruction(language)}`
       extractStructuredReportRows(verificationReportContent, language).catch(() => [])
     ]);
     const normalized = normalizeRecommendations(
-      mergeExtractedReportRows(
+      mergeAnalysisWithParsedRows(
         mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers),
         extractedRows
       )
@@ -1211,7 +1327,7 @@ ${getLanguageInstruction(language)}`
       extractStructuredReportRows(verificationReportContent, language).catch(() => [])
     ]);
     const normalized = normalizeRecommendations(
-      mergeExtractedReportRows(
+      mergeAnalysisWithParsedRows(
         mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers),
         extractedRows
       )
@@ -1367,7 +1483,7 @@ ${getLanguageInstruction(language)}`
       extractStructuredReportRows(verificationReportContent, language).catch(() => [])
     ]);
     const normalized = normalizeRecommendations(
-      mergeExtractedReportRows(
+      mergeAnalysisWithParsedRows(
         mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers),
         extractedRows
       )
@@ -1533,7 +1649,7 @@ ${getLanguageInstruction(language)}`
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
     const extractedRows = await extractStructuredReportRows(bundleContent, language).catch(() => []);
-    const normalized = normalizeRecommendations(mergeExtractedReportRows(analysis, extractedRows));
+    const normalized = normalizeRecommendations(mergeAnalysisWithParsedRows(analysis, extractedRows));
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
     return localized;
