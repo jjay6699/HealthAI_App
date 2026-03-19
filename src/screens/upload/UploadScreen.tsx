@@ -6,7 +6,11 @@ import Button from "../../components/Button";
 import AIChat from "../../components/AIChat";
 import Dialog from "../../components/Dialog";
 import { AppTheme, useTheme } from "../../theme";
-import { analyzeBloodworkFile, analyzeBloodworkImages, analyzeBloodworkPdf } from "../../services/openai";
+import {
+  analyzeBloodworkFile,
+  analyzeBloodworkPdf,
+  analyzeHealthDocumentBundle
+} from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
 import { useI18n } from "../../i18n";
 
@@ -83,26 +87,16 @@ const UploadScreen = () => {
       let analysis;
       const hasPdf = files.some((file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
 
-      if (hasPdf && files.length > 1) {
-        throw new Error("Please upload either one PDF or multiple images, not a mix of files.");
-      }
-
-      if (hasPdf) {
-        const file = files[0];
+      if (files.length > 1) {
         const [result] = await Promise.all([
-          analyzeBloodworkPdf(file),
+          analyzeHealthDocumentBundle(files),
           new Promise(resolve => setTimeout(resolve, 6000)) // Minimum 6 seconds for UX
         ]);
         analysis = result;
-      } else if (files.length > 1) {
-        const images = await Promise.all(
-          files.map(async (file) => ({
-            base64: await fileToBase64(file),
-            fileType: file.type || "image/jpeg"
-          }))
-        );
+      } else if (hasPdf) {
+        const file = files[0];
         const [result] = await Promise.all([
-          analyzeBloodworkImages(images),
+          analyzeBloodworkPdf(file),
           new Promise(resolve => setTimeout(resolve, 6000)) // Minimum 6 seconds for UX
         ]);
         analysis = result;
@@ -120,7 +114,7 @@ const UploadScreen = () => {
       persistentStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
       const uploadedAt = new Date().toISOString();
       const fileName = files.map((file) => file.name).join(", ");
-      const fileType = hasPdf ? "application/pdf" : files.length > 1 ? "images" : (files[0].type || "unknown");
+      const fileType = files.length > 1 ? "document-bundle" : hasPdf ? "application/pdf" : (files[0].type || "unknown");
       const fileSize = files.reduce((total, file) => total + file.size, 0);
 
       persistentStorage.setItem(

@@ -45,6 +45,33 @@ const LANGUAGE_STORAGE_KEY = "appLanguage";
 
 const ANALYSIS_MODEL = "gpt-4o";
 
+const normalizeImageMimeType = (fileType: string) => {
+  if (fileType.includes("jpeg") || fileType.includes("jpg")) {
+    return "image/jpeg";
+  }
+  if (fileType.includes("png")) {
+    return "image/png";
+  }
+  if (fileType.includes("gif")) {
+    return "image/gif";
+  }
+  if (fileType.includes("webp")) {
+    return "image/webp";
+  }
+  return "image/jpeg";
+};
+
+const fileToBase64Data = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(",")[1] || "");
+    };
+    reader.onerror = () => reject(reader.error || new Error("Failed to read file"));
+  });
+
 const BLOODWORK_EXTRACTION_RULES = `Extraction requirements:
 - Review every row in every table before summarizing. Do not skip urinalysis/FEME/urine chemistry, hematology, biochemistry, hormones, inflammatory markers, microscopy, or any appendix page.
 - Treat asterisk/star/flag markers, H/L markers, bolded values, and values outside the printed reference range as abnormal.
@@ -1113,6 +1140,167 @@ ${getLanguageInstruction(language)}`
   }
 }
 
+export async function analyzeHealthDocumentBundle(files: File[]): Promise<BloodworkAnalysis> {
+  const language = getCurrentLanguage();
+  const cacheKey = buildAnalysisCacheKey("document-bundle", {
+    files: files.map((file) => ({
+      name: file.name,
+      size: file.size,
+      lastModified: file.lastModified,
+      type: file.type
+    })),
+    supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id),
+    language
+  });
+  const cached = getCachedAnalysis(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const supplementsList = AVAILABLE_SUPPLEMENTS.map(
+    (s) => `${s.id}: ${s.name} - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
+  ).join("\n");
+
+  const bundleContent: Array<
+    | { type: "text"; text: string }
+    | { type: "image_url"; image_url: { url: string; detail: "high" } }
+  > = [];
+
+  for (const file of files) {
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+
+    if (isPdf) {
+      const [pages, extractedText] = await Promise.all([
+        pdfToImages(file),
+        extractTextFromPdf(file).catch(() => "")
+      ]);
+
+      bundleContent.push({
+        type: "text",
+        text: `Document: ${file.name}\nType: PDF health report\nOCR text:\n${extractedText || "No OCR text available"}`
+      });
+
+      for (const page of pages) {
+        bundleContent.push({
+          type: "image_url",
+          image_url: {
+            url: `data:image/jpeg;base64,${page}`,
+            detail: "high"
+          }
+        });
+      }
+      continue;
+    }
+
+    const base64 = await fileToBase64Data(file);
+    bundleContent.push({
+      type: "text",
+      text: `Document: ${file.name}\nType: ${file.type || "image health report"}`
+    });
+    bundleContent.push({
+      type: "image_url",
+      image_url: {
+        url: `data:${normalizeImageMimeType(file.type)};base64,${base64}`,
+        detail: "high"
+      }
+    });
+  }
+
+  try {
+    const response = await createChatCompletion({
+      model: ANALYSIS_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: "You are a health and nutrition expert who analyzes uploaded health document sets. The uploaded packet may include bloodwork, ECG reports, imaging/scans, and clinician report pages. Review every uploaded document before summarizing. Do not ignore ECG, imaging, or scan findings just because bloodwork is present. Use plain, non-medical language where possible and always return valid JSON."
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Analyze this complete uploaded health-document packet.
+
+The document set may include blood test reports, ECG reports, imaging/scans, and mixed clinical documents. You must inspect ALL uploaded documents first and base the result on the entire packet, not just the blood report.
+
+AVAILABLE NUTRITION PRODUCTS:
+${supplementsList}
+
+Please provide:
+1. A brief summary of the user's overall picture using all uploaded documents
+2. Key concerns or findings that need attention, including bloodwork abnormalities AND notable ECG/imaging/report findings
+3. Positive findings or strengths from any document in the packet
+4. Specific nutrition recommendations from our list that fit the overall packet
+5. Detailed insights by health category, including cardiovascular findings if ECG/report findings are present
+
+Rules:
+- Review every uploaded document before summarizing.
+- If bloodwork is present, extract biomarker values, units, and reference ranges where visible.
+- If ECG or scan findings are present, include them in the summary, concerns, and detailed insights even if they are qualitative rather than numeric.
+- Do not pretend a finding came from bloodwork if it came from ECG, imaging, or another report.
+- Recommendations must be justified by the overall packet. They may cite abnormal biomarkers, ECG findings, scan findings, or other report findings when relevant.
+- If a document is unclear or partially unreadable, mention uncertainty briefly rather than ignoring it.
+- Only recommend items from AVAILABLE NUTRITION PRODUCTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
+- Recommendations must be between 3 and 8 items when there is enough information. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
+- Use layman-friendly language.
+- Base blend rule: include exactly one protein base (Pea Protein Original OR Pea Protein Cacao) and exactly one fiber base (Australian Instant Oats OR Organic Psyllium Husk) unless contraindicated by the findings.
+
+IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of the findings. Only use the guidance below for nutrition products you already decided to recommend; do NOT use it to choose nutrition products.
+Use grams only (e.g., "3 g per serving size"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
+Also include numeric field dosageGramsPerDay (number of grams per serving size).
+Ensure the total daily grams across all recommended nutrition products sums to 10 g per serving size (2 tbsp total blend).
+
+Respond in JSON format with this structure:
+{
+  "summary": "Brief overall health summary using all uploaded documents",
+  "concerns": ["concern 1", "concern 2"],
+  "strengths": ["strength 1", "strength 2"],
+  "recommendations": [
+    {
+      "supplementId": "supplement-id",
+      "supplementName": "Nutrition Product Name",
+      "reason": "Why this nutrition product is recommended based on the full uploaded packet",
+      "priority": "high|medium|low",
+      "dosage": "Daily intake amount in grams (e.g., '3 g per serving size')",
+      "dosageGramsPerDay": 3
+    }
+  ],
+  "detailedInsights": [
+    {
+      "category": "Category name",
+      "findings": "What the uploaded documents show",
+      "impact": "What this means for health"
+    }
+  ]
+}
+
+${getLanguageInstruction(language)}`
+            },
+            ...bundleContent
+          ]
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: ANALYSIS_TEMPERATURE,
+      max_tokens: 2200
+    });
+
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error("No response from OpenAI");
+    }
+
+    const analysis: BloodworkAnalysis = JSON.parse(content);
+    const normalized = normalizeRecommendations(analysis);
+    const localized = await localizeBloodworkAnalysis(normalized, language);
+    setCachedAnalysis(cacheKey, localized);
+    return localized;
+  } catch (error) {
+    console.error("Error analyzing mixed health document bundle:", error);
+    throw new Error("Failed to analyze the uploaded document set. Please ensure the files are clear and try again.");
+  }
+}
+
 /**
  * Generates personalized health insights based on bloodwork analysis
  */
@@ -1357,8 +1545,6 @@ Return valid JSON only with this exact structure:
       "dosage": "short dosage guidance"
     }
   ]
-}
-
 Output rules:
 - The JSON structure is internal. Do not echo field names or schema labels inside summary or reason text.
 - Summary and reason text must be natural user-facing language only.
