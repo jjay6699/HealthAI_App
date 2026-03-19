@@ -15,18 +15,18 @@ const baseTranslations = {
     "nav.history": "History",
     "nav.profile": "Profile",
 
-    "splash.title.line1": "Turn Lab Results",
-    "splash.title.line2": "Into Clarity",
+    "splash.title.line1": "Decode Your Lab",
+    "splash.title.line2": "Results Instantly",
     "splash.subtitle":
-      "Understand your biomarkers with clinician-grade insights while keeping your data completely private.",
-    "splash.card.clinician.title": "Clinician Reviewed",
+      "Transform confusing clinical test reports into a personalized roadmap for your health",
+    "splash.card.clinician.title": "Deep Clinical Decoding",
     "splash.card.clinician.description":
-      "Your biomarkers are interpreted using clinical reference ranges.",
-    "splash.card.private.title": "Device Private",
+      "Our AI translates dense medical jargon into clear lifestyle and nutritional insights tailored exactly to your body.",
+    "splash.card.private.title": "100% Local & Secure",
     "splash.card.private.description":
-      "Your health data stays on your device and is never uploaded.",
-    "splash.cta": "Start Biomarker Analysis",
-    "splash.privacy": "Your data stays on your device.",
+      "Your highly sensitive health data is never uploaded or shared. It is processed right here on your screen.",
+    "splash.cta": "Discover Your Baseline",
+    "splash.privacy": "Tap to analyze securely on-device.",
 
     "home.switcher.label": "Language",
     "home.hero.lastUpload": "Last upload",
