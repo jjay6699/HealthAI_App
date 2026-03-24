@@ -40,7 +40,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v19";
+const ANALYSIS_CACHE_VERSION = "v20";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -200,13 +200,13 @@ const MARKER_DEFINITIONS: Array<{ marker: string; patterns: RegExp[] }> = [
   { marker: "AST (SGOT)", patterns: [/^ast\s*\(sgot\)\b/i, /^ast\b/i] },
   { marker: "GGT", patterns: [/^ggt\b/i] },
   { marker: "Hemoglobin", patterns: [/^hemoglobin\b/i, /^haemoglobin\b/i] },
-  { marker: "PCV (HCT)", patterns: [/^pcv\s*\(hct\)\b/i, /^pcv\b/i, /^hct\b/i] },
-  { marker: "RBC Count", patterns: [/^rbc count\b/i] },
+  { marker: "PCV (HCT)", patterns: [/^pcv\s*\(hct\)\b/i, /^pcv\b/i, /^hct\b/i, /^hematocrit\b/i, /^haematocrit\b/i] },
+  { marker: "RBC Count", patterns: [/^rbc count\b/i, /^rbc\b/i] },
   { marker: "MCV", patterns: [/^mcv\b/i] },
   { marker: "MCH", patterns: [/^mch\b/i] },
   { marker: "MCHC", patterns: [/^mchc\b/i] },
   { marker: "RDW (CV)", patterns: [/^rdw\s*\(cv\)\b/i, /^rdw\b/i] },
-  { marker: "Total WBC Count", patterns: [/^total wbc count\b/i, /^wbc count\b/i] },
+  { marker: "Total WBC Count", patterns: [/^total wbc count\b/i, /^wbc count\b/i, /^tlc\b/i, /^total leucocyte count\b/i, /^total leukocyte count\b/i] },
   { marker: "Neutrophils", patterns: [/^neutrophils\b/i] },
   { marker: "Lymphocytes", patterns: [/^lymphocytes\b/i] },
   { marker: "Monocytes", patterns: [/^monocytes\b/i] },
@@ -216,7 +216,7 @@ const MARKER_DEFINITIONS: Array<{ marker: string; patterns: RegExp[] }> = [
   { marker: "Absolute Lymphocyte Count (ALC)", patterns: [/^absolute lymphocyte count\s*\(alc\)\b/i, /^absolute lymphocyte count\b/i] },
   { marker: "Absolute Monocyte Count", patterns: [/^absolute monocyte count\b/i] },
   { marker: "Absolute Eosinophil Count (AEC)", patterns: [/^absolute eosinophil count\s*\(aec\)\b/i, /^absolute eosinophil count\b/i] },
-  { marker: "Absolute Basophil Count", patterns: [/^absolute basophil count\b/i] },
+  { marker: "Absolute Basophil Count", patterns: [/^absolute basophil count\b/i, /^absolute basophils count\b/i, /^absolute basophils\b/i] },
   { marker: "Platelets Count", patterns: [/^platelets count\b/i, /^platelet count\b/i] }
 ];
 
@@ -431,6 +431,26 @@ const getMarkerAliases = (marker: string) => {
   return [...aliases];
 };
 
+const canonicalizeMarkerName = (marker: string) => {
+  const normalized = normalizeForMatch(marker);
+  const matchedDefinition = MARKER_DEFINITIONS.find((definition) =>
+    getMarkerAliases(definition.marker).some((alias) => alias === normalized) ||
+    definition.patterns.some((pattern) => pattern.test(marker))
+  );
+
+  if (matchedDefinition) {
+    return matchedDefinition.marker;
+  }
+
+  if (/\bhaemoglobin\b/i.test(marker)) return "Hemoglobin";
+  if (/^rbc\b/i.test(marker)) return "RBC Count";
+  if (/^hct\b|hematocrit|haematocrit/i.test(marker)) return "PCV (HCT)";
+  if (/^tlc\b|total leucocyte count|total leukocyte count/i.test(marker)) return "Total WBC Count";
+  if (/absolute basophils/i.test(marker)) return "Absolute Basophil Count";
+
+  return marker.trim();
+};
+
 const buildVerifiedConcern = (marker: VerifiedAbnormalMarker) => {
   const directionText =
     marker.abnormalDirection === "high"
@@ -629,7 +649,7 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
   const sourceRows = [...rows, ...deriveSupplementalRows(rows)];
 
   for (const row of sourceRows) {
-    const marker = row.marker?.trim();
+    const marker = canonicalizeMarkerName(row.marker || "");
     if (!marker) continue;
 
     const normalizedPanel = row.panel?.trim() || undefined;
