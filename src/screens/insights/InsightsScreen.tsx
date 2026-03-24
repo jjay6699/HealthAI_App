@@ -32,6 +32,47 @@ const primaryTakeaways = [
   }
 ];
 
+const normalizeMarkerName = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+const parseNumericValue = (value?: string) => {
+  if (!value) return null;
+  const match = value.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : null;
+};
+
+const ensureVisibleParsedRows = (analysis: BloodworkAnalysis | null) => {
+  const rows = [...(analysis?.parsedRows || [])];
+  const hasNonHdl = rows.some((row) => normalizeMarkerName(row.marker) === "non hdl");
+  if (hasNonHdl) {
+    return rows.filter((row) => row.status !== "unknown");
+  }
+
+  const totalCholesterol = rows.find((row) => normalizeMarkerName(row.marker) === "total cholesterol");
+  const hdl = rows.find((row) => normalizeMarkerName(row.marker) === "hdl cholesterol");
+  const totalValue = parseNumericValue(totalCholesterol?.value);
+  const hdlValue = parseNumericValue(hdl?.value);
+  const unit = totalCholesterol?.unit || hdl?.unit;
+  const normalizedUnit = normalizeMarkerName(unit || "");
+
+  if (totalValue !== null && hdlValue !== null && unit) {
+    const referenceRange = normalizedUnit === "mmol l" ? "<3.4" : normalizedUnit === "mg dl" ? "<130" : undefined;
+    rows.splice(4, 0, {
+      marker: "Non HDL",
+      value: Number((totalValue - hdlValue).toFixed(1)).toString(),
+      unit,
+      referenceRange,
+      status: referenceRange ? "normal" : "unknown",
+      explanation: "Non-HDL cholesterol captures cholesterol carried by atherogenic particles and is commonly reviewed alongside LDL."
+    });
+  }
+
+  return rows.filter((row) => row.status !== "unknown");
+};
+
 const InsightsScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -163,7 +204,7 @@ const InsightsScreen = () => {
     : isMalay
     ? "Status ini ditentukan daripada nilai dan julat rujukan yang dicetak pada laporan."
     : "These statuses are determined from the printed values and reference ranges on the report.";
-  const visibleParsedRows = (displayAnalysis.parsedRows || []).filter((row) => row.status !== "unknown");
+  const visibleParsedRows = ensureVisibleParsedRows(displayAnalysis);
   const toStatusLabel = (status: string) => {
     if (status === "high") return isChinese ? "åé«˜" : isMalay ? "Tinggi" : "High";
     if (status === "low") return isChinese ? "åä½Ž" : isMalay ? "Rendah" : "Low";
