@@ -40,7 +40,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v22";
+const ANALYSIS_CACHE_VERSION = "v23";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -660,6 +660,10 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
   const sourceRows = [...rows, ...deriveSupplementalRows(rows)];
 
   for (const row of sourceRows) {
+    if (row.status === "comment") {
+      continue;
+    }
+
     const marker = canonicalizeMarkerName(row.marker || "");
     if (!marker) continue;
     const markerId = getCanonicalMarkerId(marker);
@@ -722,11 +726,6 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
   return [...deduped.values()];
 };
 
-const rowMentionsSignalComment = (row: ParsedReportRow) => {
-  const haystack = normalizeForMatch(`${row.marker} ${row.note || ""} ${row.explanation || ""}`);
-  return /(lymphocytosis|neutropenia|eosinophilia|basophilia|monocytosis|thrombocytopenia|thrombocytosis|anemia|anaemia|abnormal|elevated|low|high|flagged|seen|present)/.test(haystack);
-};
-
 const buildDeterministicFindings = (rows: ParsedReportRow[]) => {
   const concerns: string[] = [];
   const strengths: string[] = [];
@@ -739,15 +738,6 @@ const buildDeterministicFindings = (rows: ParsedReportRow[]) => {
       detailedInsights.push({
         category: row.panel || "Parsed marker",
         findings: concern,
-        impact: buildParsedRowExplanation(row)
-      });
-      continue;
-    }
-
-    if (row.status === "comment" && rowMentionsSignalComment(row)) {
-      detailedInsights.push({
-        category: row.panel || "Report comment",
-        findings: `${row.marker}${row.note ? `: ${row.note}` : ""}`.trim(),
         impact: buildParsedRowExplanation(row)
       });
       continue;
