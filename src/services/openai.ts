@@ -40,7 +40,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v21";
+const ANALYSIS_CACHE_VERSION = "v22";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 

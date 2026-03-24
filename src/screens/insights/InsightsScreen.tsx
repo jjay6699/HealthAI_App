@@ -46,8 +46,13 @@ const parseNumericValue = (value?: string) => {
 
 const ensureVisibleParsedRows = (analysis: BloodworkAnalysis | null) => {
   const rows = [...(analysis?.parsedRows || [])];
-  const hasNonHdl = rows.some((row) => normalizeMarkerName(row.marker) === "non hdl");
-  if (hasNonHdl) {
+  const hasRenderableNonHdl = rows.some(
+    (row) =>
+      (row.markerId === "non_hdl" || normalizeMarkerName(row.marker) === "non hdl") &&
+      row.status !== "unknown" &&
+      Boolean(row.value)
+  );
+  if (hasRenderableNonHdl) {
     return rows.filter((row) => row.status !== "unknown");
   }
 
