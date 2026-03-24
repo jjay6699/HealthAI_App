@@ -40,7 +40,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v20";
+const ANALYSIS_CACHE_VERSION = "v21";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -102,6 +102,7 @@ export interface SupplementRecommendation {
 }
 
 export interface ParsedReportRow {
+  markerId: string;
   panel?: string;
   marker: string;
   value?: string;
@@ -123,6 +124,11 @@ export interface BloodworkAnalysis {
     impact: string;
   }[];
   parsedRows?: ParsedReportRow[];
+  parsingDebug?: {
+    rawRowCount: number;
+    finalRowCount: number;
+    derivedMarkerIds?: string[];
+  };
 }
 
 interface VerifiedAbnormalMarker {
@@ -431,6 +437,11 @@ const getMarkerAliases = (marker: string) => {
   return [...aliases];
 };
 
+const getCanonicalMarkerId = (marker: string) => {
+  const canonicalMarker = canonicalizeMarkerName(marker);
+  return normalizeForMatch(canonicalMarker).replace(/\s+/g, "_");
+};
+
 const canonicalizeMarkerName = (marker: string) => {
   const normalized = normalizeForMatch(marker);
   const matchedDefinition = MARKER_DEFINITIONS.find((definition) =>
@@ -651,6 +662,7 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
   for (const row of sourceRows) {
     const marker = canonicalizeMarkerName(row.marker || "");
     if (!marker) continue;
+    const markerId = getCanonicalMarkerId(marker);
 
     const normalizedPanel = row.panel?.trim() || undefined;
     const normalizedValue = row.value?.trim() || undefined;
@@ -660,6 +672,7 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
     const status = inferRowStatus(row) || "unknown";
 
     const parsedRow: ParsedReportRow = {
+      markerId,
       panel: normalizedPanel,
       marker,
       value: normalizedValue,
@@ -671,14 +684,28 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
     };
 
     const key = [
-      normalizeForMatch(marker),
-      normalizedValue || "",
-      normalizedRange || "",
-      status
+      markerId,
+      status === "comment" ? normalizedNote || "" : ""
     ].join("|");
 
     const existing = deduped.get(key);
     if (!existing) {
+      deduped.set(key, parsedRow);
+      continue;
+    }
+
+    const existingScore =
+      (existing.value ? 4 : 0) +
+      (existing.referenceRange ? 3 : 0) +
+      (existing.status !== "unknown" ? 2 : 0) +
+      (existing.note ? 1 : 0);
+    const parsedScore =
+      (parsedRow.value ? 4 : 0) +
+      (parsedRow.referenceRange ? 3 : 0) +
+      (parsedRow.status !== "unknown" ? 2 : 0) +
+      (parsedRow.note ? 1 : 0);
+
+    if (parsedScore > existingScore) {
       deduped.set(key, parsedRow);
       continue;
     }
@@ -899,7 +926,14 @@ const mergeAnalysisWithParsedRows = (
     concerns: [...deterministic.concerns, ...filteredConcerns],
     strengths: [...deterministic.strengths, ...filteredStrengths].slice(0, 8),
     detailedInsights: [...deterministic.detailedInsights, ...filteredInsights],
-    parsedRows
+    parsedRows,
+    parsingDebug: {
+      rawRowCount: rows.length,
+      finalRowCount: parsedRows.length,
+      derivedMarkerIds: parsedRows
+        .filter((row) => row.note?.includes("Derived from"))
+        .map((row) => row.markerId)
+    }
   };
 };
 
@@ -2521,6 +2555,8 @@ export async function translateBloodworkAnalysis(
   analysis: BloodworkAnalysis,
   language: Language
 ): Promise<BloodworkAnalysis> {
+  if (language === "en") return analysis;
+
   const cacheKey = buildAnalysisCacheKey("bloodwork-translation", {
     language,
     analysis

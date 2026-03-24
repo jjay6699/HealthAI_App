@@ -61,6 +61,7 @@ const ensureVisibleParsedRows = (analysis: BloodworkAnalysis | null) => {
   if (totalValue !== null && hdlValue !== null && unit) {
     const referenceRange = normalizedUnit === "mmol l" ? "<3.4" : normalizedUnit === "mg dl" ? "<130" : undefined;
     rows.splice(4, 0, {
+      markerId: "non_hdl",
       marker: "Non HDL",
       value: Number((totalValue - hdlValue).toFixed(1)).toString(),
       unit,
@@ -117,6 +118,12 @@ const InsightsScreen = () => {
     }
 
     setIsAnalysisLoading(true);
+
+    if (language === "en") {
+      setDisplayAnalysis(analysis);
+      setIsAnalysisLoading(false);
+      return;
+    }
 
     translateBloodworkAnalysis(analysis, language)
       .then((translated) => {
@@ -204,7 +211,7 @@ const InsightsScreen = () => {
     : isMalay
     ? "Status ini ditentukan daripada nilai dan julat rujukan yang dicetak pada laporan."
     : "These statuses are determined from the printed values and reference ranges on the report.";
-  const visibleParsedRows = ensureVisibleParsedRows(displayAnalysis);
+  const visibleParsedRows = ensureVisibleParsedRows(analysis);
   const toStatusLabel = (status: string) => {
     if (status === "high") return isChinese ? "åé«˜" : isMalay ? "Tinggi" : "High";
     if (status === "low") return isChinese ? "åä½Ž" : isMalay ? "Rendah" : "Low";
