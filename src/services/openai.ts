@@ -111,7 +111,7 @@ export interface ParsedReportRow {
   status: "high" | "low" | "normal" | "abnormal" | "flagged" | "comment" | "unknown";
   note?: string;
   explanation?: string;
-  source?: "deterministic" | "ai";
+  source?: "deterministic" | "ai" | "validated";
 }
 
 export interface BloodworkAnalysis {
@@ -154,7 +154,7 @@ interface ExtractedReportRow {
   status?: "high" | "low" | "normal" | "abnormal" | "flagged" | "comment" | "unknown";
   note?: string;
   whyItMatters?: string;
-  source?: "deterministic" | "ai";
+  source?: "deterministic" | "ai" | "validated";
 }
 
 interface SourceToken {
@@ -872,13 +872,13 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
     }
 
     const existingScore =
-      (existing.source === "deterministic" ? 6 : 0) +
+      (existing.source === "validated" ? 10 : existing.source === "deterministic" ? 6 : 0) +
       (existing.value ? 4 : 0) +
       (existing.referenceRange ? 3 : 0) +
       (existing.status !== "unknown" ? 2 : 0) +
       (existing.note ? 1 : 0);
     const parsedScore =
-      (row.source === "deterministic" ? 6 : 0) +
+      (row.source === "validated" ? 10 : row.source === "deterministic" ? 6 : 0) +
       (parsedRow.value ? 4 : 0) +
       (parsedRow.referenceRange ? 3 : 0) +
       (parsedRow.status !== "unknown" ? 2 : 0) +
@@ -1497,6 +1497,86 @@ Return JSON with this exact shape:
   ).map((row) => ({ ...row, source: "ai" as const }));
 };
 
+const validateExtractedRowsAgainstReport = async (
+  reportContent: unknown,
+  language: Language,
+  rows: ExtractedReportRow[],
+  candidateRowTexts: string[]
+): Promise<ExtractedReportRow[]> => {
+  const rowList = rows
+    .filter((row) => row.marker?.trim())
+    .map(
+      (row, index) =>
+        `${index + 1}. ${row.marker} | value=${row.value || ""} | unit=${row.unit || ""} | range=${row.referenceRange || ""}`
+    )
+    .join("\n");
+
+  if (!rowList) {
+    return [];
+  }
+
+  const response = await createChatCompletion({
+    model: ANALYSIS_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          `You are a clinical row validation engine. Your only job is to compare extracted bloodwork rows against the actual uploaded report and correct any wrong values, units, or ranges. ${getLanguageInstruction(language)} Return valid JSON only.`
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Validate these extracted rows against the actual report:
+${rowList}
+
+Candidate table rows detected from OCR/PDF layout:
+${candidateRowTexts.map((row, index) => `${index + 1}. ${row}`).join("\n")}
+
+Rules:
+- Keep only rows that are visibly present in the report.
+- Correct any extracted value, unit, or range that does not match the report.
+- Never use a number from a different row or a diagnostic note block.
+- If you cannot confidently verify a value for a marker, omit that corrected row rather than guessing.
+- Do not invent new markers that were not already in the extracted list.
+
+Return JSON with this exact shape:
+{
+  "rows": [
+    {
+      "panel": "panel name if known",
+      "marker": "marker/test label",
+      "value": "corrected value if visible",
+      "unit": "corrected unit if visible",
+      "referenceRange": "corrected range if visible",
+      "status": "high|low|normal|abnormal|flagged|comment|unknown",
+      "note": "short validation note if needed",
+      "whyItMatters": "one short plain-language explanation of why this matters"
+    }
+  ]
+}`
+          },
+          ...(Array.isArray(reportContent) ? reportContent : [reportContent])
+        ]
+      }
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) return [];
+
+  const parsed = JSON.parse(content) as { rows?: ExtractedReportRow[] };
+  return (parsed.rows || []).filter(
+    (row) =>
+      typeof row?.marker === "string" &&
+      row.marker.trim().length > 0 &&
+      shouldKeepExtractedRow(reportContent, row, candidateRowTexts)
+  ).map((row) => ({ ...row, source: "validated" as const }));
+};
+
 const finalizeExtractedRows = async (
   reportContent: unknown,
   language: Language,
@@ -1519,6 +1599,17 @@ const finalizeExtractedRows = async (
       combinedRows = [...combinedRows, ...retryRows];
       completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
     }
+  }
+
+  const validatedRows = await validateExtractedRowsAgainstReport(
+    reportContent,
+    language,
+    combinedRows,
+    candidateRowTexts
+  ).catch(() => []);
+  if (validatedRows.length > 0) {
+    combinedRows = [...combinedRows, ...validatedRows];
+    completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
   }
 
   return {
