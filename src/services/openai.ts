@@ -40,7 +40,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v27";
+const ANALYSIS_CACHE_VERSION = "v28";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -153,11 +153,14 @@ interface ExtractedReportRow {
 
 const concernStatusSet = new Set(["high", "low", "abnormal", "flagged"]);
 const EXPECTED_COMMON_MARKERS = [
+  "ESR",
   "Total Cholesterol",
   "Triglycerides",
   "HDL Cholesterol",
   "LDL Cholesterol",
   "Non HDL",
+  "Glucose",
+  "HbA1c",
   "hs C-Reactive Protein",
   "Total Bilirubin",
   "Total Protein",
@@ -190,11 +193,14 @@ const EXPECTED_COMMON_MARKERS = [
 ] as const;
 
 const MARKER_DEFINITIONS: Array<{ marker: string; patterns: RegExp[] }> = [
+  { marker: "ESR", patterns: [/^esr\b/i, /^erythrocyte sedimentation rate\b/i] },
   { marker: "Total Cholesterol", patterns: [/^total cholesterol\b/i] },
   { marker: "Triglycerides", patterns: [/^triglycerides\b/i] },
   { marker: "HDL Cholesterol", patterns: [/^hdl cholesterol\b/i, /^high density lipoprotein\b/i] },
   { marker: "LDL Cholesterol", patterns: [/^ldl cholesterol\b/i, /^low density lipoprotein\b/i] },
   { marker: "Non HDL", patterns: [/^non hdl\b/i, /^non[-\s]?hdl\b/i] },
+  { marker: "Glucose", patterns: [/^glucose\b/i, /^fasting glucose\b/i, /^blood glucose\b/i] },
+  { marker: "HbA1c", patterns: [/^hba1c\b/i, /^hb a1c\b/i, /^hba1c\s*\(hplc\)\b/i, /^glycated hemoglobin\b/i] },
   { marker: "hs C-Reactive Protein", patterns: [/^hs c[-\s]?reactive protein\b/i, /^hscrp\b/i] },
   { marker: "Total Bilirubin", patterns: [/^total bilirubin\b/i] },
   { marker: "Total Protein", patterns: [/^total protein\b/i] },
@@ -211,19 +217,19 @@ const MARKER_DEFINITIONS: Array<{ marker: string; patterns: RegExp[] }> = [
   { marker: "MCV", patterns: [/^mcv\b/i] },
   { marker: "MCH", patterns: [/^mch\b/i] },
   { marker: "MCHC", patterns: [/^mchc\b/i] },
-  { marker: "RDW (CV)", patterns: [/^rdw\s*\(cv\)\b/i, /^rdw\b/i] },
-  { marker: "Total WBC Count", patterns: [/^total wbc count\b/i, /^wbc count\b/i, /^tlc\b/i, /^total leucocyte count\b/i, /^total leukocyte count\b/i] },
-  { marker: "Neutrophils", patterns: [/^neutrophils\b/i] },
-  { marker: "Lymphocytes", patterns: [/^lymphocytes\b/i] },
-  { marker: "Monocytes", patterns: [/^monocytes\b/i] },
-  { marker: "Eosinophils", patterns: [/^eosinophils\b/i] },
-  { marker: "Basophils", patterns: [/^basophils\b/i] },
+  { marker: "RDW (CV)", patterns: [/^rdw\s*\(cv\)\b/i, /^rdw value\b/i, /^rdw\b/i] },
+  { marker: "Total WBC Count", patterns: [/^total wbc count\b/i, /^wbc count\b/i, /^wbc\b/i, /^tlc\b/i, /^total leucocyte count\b/i, /^total leukocyte count\b/i] },
+  { marker: "Neutrophils", patterns: [/^neutrophils?\b/i, /^polymorphs\b/i] },
+  { marker: "Lymphocytes", patterns: [/^lymphocytes?\b/i] },
+  { marker: "Monocytes", patterns: [/^monocytes?\b/i] },
+  { marker: "Eosinophils", patterns: [/^eosinophils?\b/i] },
+  { marker: "Basophils", patterns: [/^basophils?\b/i] },
   { marker: "Absolute Neutrophil Count (ANC)", patterns: [/^absolute neutrophil count\s*\(anc\)\b/i, /^absolute neutrophil count\b/i] },
   { marker: "Absolute Lymphocyte Count (ALC)", patterns: [/^absolute lymphocyte count\s*\(alc\)\b/i, /^absolute lymphocyte count\b/i] },
   { marker: "Absolute Monocyte Count", patterns: [/^absolute monocyte count\b/i] },
   { marker: "Absolute Eosinophil Count (AEC)", patterns: [/^absolute eosinophil count\s*\(aec\)\b/i, /^absolute eosinophil count\b/i] },
   { marker: "Absolute Basophil Count", patterns: [/^absolute basophil count\b/i, /^absolute basophils count\b/i, /^absolute basophils\b/i] },
-  { marker: "Platelets Count", patterns: [/^platelets count\b/i, /^platelet count\b/i] }
+  { marker: "Platelets Count", patterns: [/^platelets count\b/i, /^platelet count\b/i, /^platelet\b/i] }
 ];
 
 const PANEL_PATTERNS = [
@@ -469,16 +475,22 @@ const reportExplicitlyMentionsMarker = (reportContent: unknown, marker: string) 
 };
 
 const rowHasExplicitTextEvidence = (reportContent: unknown, row: ExtractedReportRow) => {
-  const matchingLines = collectNormalizedReportLines(reportContent).filter((line) =>
-    getMarkerAliases(row.marker).some((alias) => line.includes(alias))
-  );
+  const reportLines = collectNormalizedReportLines(reportContent);
+  const matchingLineIndexes = reportLines
+    .map((line, index) =>
+      getMarkerAliases(row.marker).some((alias) => line.includes(alias)) ? index : -1
+    )
+    .filter((index) => index >= 0);
 
-  if (matchingLines.length === 0) return false;
+  if (matchingLineIndexes.length === 0) return false;
   if (row.status === "comment") return true;
   if (!row.value) return true;
 
   const normalizedValue = normalizeForMatch(row.value);
-  return matchingLines.some((line) => line.includes(normalizedValue));
+  return matchingLineIndexes.some((index) => {
+    const window = reportLines.slice(Math.max(0, index - 1), Math.min(reportLines.length, index + 2));
+    return window.some((line) => line.includes(normalizedValue));
+  });
 };
 
 const getCanonicalMarkerId = (marker: string) => {
@@ -498,8 +510,11 @@ const canonicalizeMarkerName = (marker: string) => {
   }
 
   if (/\bhaemoglobin\b/i.test(marker)) return "Hemoglobin";
+  if (/^esr\b|erythrocyte sedimentation rate/i.test(marker)) return "ESR";
   if (/^rbc\b/i.test(marker)) return "RBC Count";
   if (/^hct\b|hematocrit|haematocrit/i.test(marker)) return "PCV (HCT)";
+  if (/^hba1c\b|hb a1c|glycated hemoglobin/i.test(marker)) return "HbA1c";
+  if (/^glucose\b|fasting glucose|blood glucose/i.test(marker)) return "Glucose";
   if (/^tlc\b|total leucocyte count|total leukocyte count/i.test(marker)) return "Total WBC Count";
   if (/absolute basophils/i.test(marker)) return "Absolute Basophil Count";
 
