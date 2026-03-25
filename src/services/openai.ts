@@ -2,7 +2,7 @@ import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
 import { SUPPLEMENT_DESCRIPTIONS } from "../data/supplementDescriptions";
 import { pdfToImages, extractStructuredTextPagesFromPdf, extractTextFromPdf } from "../utils/pdfProcessor";
 import { extractStructuredTextFromImage } from "../utils/imageOcr";
-import { preprocessBloodworkImage } from "../utils/imagePreprocess";
+import { cropImageBands, preprocessBloodworkImage } from "../utils/imagePreprocess";
 import { persistentStorage } from "./persistentStorage";
 import type { Language } from "../i18n";
 
@@ -691,6 +691,61 @@ const extractCandidateRowTexts = (rowBands: SourceRowBand[]) =>
   rowBands
     .map((row) => row.text.replace(/\s+/g, " ").trim())
     .filter((text) => rowLooksLikeVisibleData(text));
+
+const buildRowCropBands = (rowBands: SourceRowBand[]) => {
+  const relevantRows = rowBands
+    .filter((row): row is SourceRowBand & { y: number } => typeof row.y === "number" && rowLooksLikeVisibleData(row.text))
+    .sort((a, b) => a.y - b.y);
+
+  if (relevantRows.length === 0) {
+    return [];
+  }
+
+  const groups: Array<Array<SourceRowBand & { y: number }>> = [];
+  for (let index = 0; index < relevantRows.length; index += 4) {
+    groups.push(relevantRows.slice(index, index + 4));
+  }
+
+  return groups.map((group, index) => {
+    const first = group[0];
+    const last = group[group.length - 1];
+    const previous = groups[index - 1]?.[groups[index - 1].length - 1];
+    const next = groups[index + 1]?.[0];
+
+    const top = previous ? (previous.y + first.y) / 2 : first.y - 26;
+    const bottom = next ? (last.y + next.y) / 2 : last.y + 40;
+    return {
+      top: Math.max(0, top),
+      bottom: Math.max(top + 24, bottom)
+    };
+  });
+};
+
+const buildRowCropImageParts = async (
+  pages: Array<{ base64: string; mimeType: string; rowBands: SourceRowBand[] }>
+) => {
+  const parts: Array<{ type: "image_url"; image_url: { url: string; detail: "high" } }> = [];
+
+  for (const page of pages) {
+    const bands = buildRowCropBands(page.rowBands).slice(0, 6);
+    if (bands.length === 0) {
+      continue;
+    }
+
+    const crops = await cropImageBands(page.base64, page.mimeType, bands).catch(() => []);
+    for (const crop of crops) {
+      parts.push({
+        type: "image_url",
+        image_url: {
+          url: `data:${crop.mimeType};base64,${crop.base64}`,
+          detail: "high"
+        }
+      });
+    }
+  }
+
+  return parts;
+};
 
 const isAsciiToken = (text: string) => /[A-Za-z0-9]/.test(text);
 
@@ -2191,16 +2246,22 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
   // Analyze all pages for full coverage
   const allPages = images;
 
-    const cacheKey = buildAnalysisCacheKey("pdf", {
-      pdfFingerprint,
-      pageImageHashes: allPages.map((img) => hashString(img)),
-      supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id),
-      language
-    });
+    const rowCropParts = await buildRowCropImageParts(
+      allPages.map((pageImage, index) => ({
+        base64: pageImage,
+        mimeType: "image/jpeg",
+        rowBands: normalizeSourceRowBands([
+          {
+            pageNumber: index + 1,
+            rows: structuredPages.find((page) => page.pageNumber === index + 1)?.rows || []
+          }
+        ])
+      }))
+    );
     const verificationReportContent = [
       {
         type: "text" as const,
-        text: `PDF bloodwork report for verification.\n\nOCR text:\n${extractedPdfText || "No OCR text available"}`
+        text: "PDF bloodwork report with additional zoomed row strips for exact value verification."
       },
       ...allPages.map((pageImage) => ({
         type: "image_url" as const,
@@ -2208,7 +2269,8 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
           url: `data:image/jpeg;base64,${pageImage}`,
           detail: "high" as const
         }
-      }))
+      })),
+      ...rowCropParts
     ];
 
     const response = await createChatCompletion({
@@ -2377,12 +2439,17 @@ export async function analyzeBloodworkFile(
     const imageOcr = await extractImageOcrBundle([
       { base64: processedImage.base64, fileType: processedImage.mimeType, label: "Uploaded image" }
     ]);
+    const rowCropParts = await buildRowCropImageParts([
+      {
+        base64: processedImage.base64,
+        mimeType: processedImage.mimeType,
+        rowBands: imageOcr.rowBands
+      }
+    ]);
     const verificationReportContent = [
       {
         type: "text" as const,
-        text: `Single bloodwork report image for abnormal-marker verification.
-
-${imageOcr.blocks.join("\n\n") || "OCR text unavailable."}`
+        text: "Single bloodwork report image with additional zoomed row strips for exact value verification."
       },
       {
         type: "image_url" as const,
@@ -2390,7 +2457,8 @@ ${imageOcr.blocks.join("\n\n") || "OCR text unavailable."}`
           url: `data:${imageFormat};base64,${base64Image}`,
           detail: "high" as const
         }
-      }
+      },
+      ...rowCropParts
     ];
 
     const response = await createChatCompletion({
@@ -2559,15 +2627,21 @@ export async function analyzeBloodworkImages(
       label: `Uploaded image ${index + 1}`
     }))
   );
+  const rowCropParts = await buildRowCropImageParts(
+    processedImages.map((img, index) => ({
+      base64: img.base64,
+      mimeType: img.mimeType,
+      rowBands: imageOcr.rowBands.filter((row) => (row.pageNumber || 1) === index + 1)
+    }))
+  );
 
   const verificationReportContent = [
     {
       type: "text" as const,
-      text: `Multi-image bloodwork report for abnormal-marker verification.
-
-${imageOcr.blocks.join("\n\n") || "OCR text unavailable."}`
+      text: "Multi-image bloodwork report with additional zoomed row strips for exact value verification."
     },
-    ...imageParts
+    ...imageParts,
+    ...rowCropParts
   ];
 
   try {

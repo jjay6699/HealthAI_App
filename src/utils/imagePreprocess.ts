@@ -114,3 +114,59 @@ export async function preprocessBloodworkImage(
     base64: processedDataUrl.split(",")[1]
   };
 }
+
+export interface VerticalCropBand {
+  top: number;
+  bottom: number;
+}
+
+export async function cropImageBands(
+  base64Image: string,
+  mimeType: string,
+  bands: VerticalCropBand[]
+): Promise<Array<{ base64: string; mimeType: string }>> {
+  const dataUrl = `data:${mimeType};base64,${base64Image}`;
+  const image = await loadImageElement(dataUrl);
+  const safeBands = bands
+    .map((band) => ({
+      top: Math.max(0, Math.min(image.height - 1, Math.floor(band.top))),
+      bottom: Math.max(1, Math.min(image.height, Math.ceil(band.bottom)))
+    }))
+    .filter((band) => band.bottom - band.top >= 24);
+
+  const crops: Array<{ base64: string; mimeType: string }> = [];
+  for (const band of safeBands) {
+    const cropHeight = band.bottom - band.top;
+    const scale = Math.min(2, Math.max(1, 220 / cropHeight));
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(cropHeight * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Canvas context not available for crop generation");
+    }
+
+    context.drawImage(
+      image,
+      0,
+      band.top,
+      image.width,
+      cropHeight,
+      0,
+      0,
+      width,
+      height
+    );
+
+    const cropDataUrl = canvas.toDataURL("image/jpeg", 0.95);
+    crops.push({
+      mimeType: "image/jpeg",
+      base64: cropDataUrl.split(",")[1]
+    });
+  }
+
+  return crops;
+}
