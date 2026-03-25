@@ -740,6 +740,29 @@ const buildSyntheticLineFromRowBand = (row: SourceRowBand, anchors: TableColumnA
   return [markerText, valueText, unitText, rangeText].filter(Boolean).join(" ").trim();
 };
 
+const getDeterministicRowQuality = (row: ExtractedReportRow | null) => {
+  if (!row) return -1;
+  return (row.value ? 4 : 0) + (row.referenceRange ? 3 : 0) + (row.unit ? 2 : 0) + (row.note ? 1 : 0);
+};
+
+const chooseBestDeterministicRow = (
+  rawLine: string,
+  syntheticLine: string | null,
+  panel?: string
+): ExtractedReportRow | null => {
+  const rawParsed = parseStructuredLineRow(rawLine, panel);
+  const syntheticParsed = syntheticLine ? parseStructuredLineRow(syntheticLine, panel) : null;
+
+  const rawScore = getDeterministicRowQuality(rawParsed);
+  const syntheticScore = getDeterministicRowQuality(syntheticParsed);
+
+  if (rawScore >= syntheticScore) {
+    return rawParsed;
+  }
+
+  return syntheticParsed;
+};
+
 const getCanonicalMarkerId = (marker: string) => {
   const canonicalMarker = canonicalizeMarkerName(marker);
   return normalizeForMatch(canonicalMarker).replace(/\s+/g, "_");
@@ -1124,8 +1147,8 @@ const parseStructuredRowBands = (
       }
     }
 
-    const rowText = currentAnchors ? buildSyntheticLineFromRowBand(band, currentAnchors) : line;
-    const parsed = parseStructuredLineRow(rowText, currentPanel);
+    const syntheticLine = currentAnchors ? buildSyntheticLineFromRowBand(band, currentAnchors) : null;
+    const parsed = chooseBestDeterministicRow(line, syntheticLine, currentPanel);
     if (parsed) {
       rows.push(parsed);
     }
@@ -1451,6 +1474,148 @@ Return JSON with this exact shape:
   ).map((row) => ({ ...row, source: "ai" as const }));
 };
 
+const extractVisibleBloodworkRowsFromVisualReport = async (
+  reportContent: unknown,
+  language: Language
+): Promise<ExtractedReportRow[]> => {
+  const extractionContent = getVisualOnlyReportContent(reportContent);
+  const response = await createChatCompletion({
+    model: ANALYSIS_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          `You are a bloodwork table transcription engine. Your only job is to read the uploaded report images exactly as printed and return the visible bloodwork rows in table order. ${getLanguageInstruction(language)} Return valid JSON only.`
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Read the uploaded bloodwork report images carefully.
+
+Return every visible bloodwork table row in the order it appears on the report.
+
+Rules:
+- Use only what is visibly printed in the report image.
+- Transcribe exact printed values, units, and reference ranges.
+- Do not summarize.
+- Do not infer hidden or partially missing digits.
+- Never copy a value from a neighboring row.
+- Never use interpretation notes, diagnosis thresholds, or comment blocks as biomarker rows.
+- If a marker name is visible but its value is unclear, leave value blank.
+- It is acceptable for "status" to be "unknown" if no explicit flag is printed.
+- Do not include report comments like "platelets appear adequate" as numeric biomarker rows.
+
+Return JSON with this exact shape:
+{
+  "rows": [
+    {
+      "panel": "panel name if visible",
+      "marker": "printed marker name",
+      "value": "exact printed value if visible",
+      "unit": "exact printed unit if visible",
+      "referenceRange": "exact printed reference range if visible",
+      "status": "high|low|normal|abnormal|flagged|comment|unknown",
+      "note": "optional short note only if something is partially unreadable"
+    }
+  ]
+}`
+          },
+          ...(Array.isArray(extractionContent) ? extractionContent : [extractionContent])
+        ]
+      }
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0,
+    max_tokens: 4200
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) return [];
+
+  const parsed = JSON.parse(content) as { rows?: ExtractedReportRow[] };
+  return (parsed.rows || [])
+    .filter((row) => typeof row?.marker === "string" && row.marker.trim().length > 0 && shouldKeepExtractedRow(reportContent, row))
+    .map((row) => ({ ...row, source: "ai" as const }));
+};
+
+const verifyVisibleBloodworkRowsFromVisualReport = async (
+  reportContent: unknown,
+  language: Language,
+  rows: ExtractedReportRow[]
+): Promise<ExtractedReportRow[]> => {
+  const extractionContent = getVisualOnlyReportContent(reportContent);
+  const rowList = rows
+    .filter((row) => row.marker?.trim())
+    .map(
+      (row, index) =>
+        `${index + 1}. panel=${row.panel || ""} | marker=${row.marker} | value=${row.value || ""} | unit=${row.unit || ""} | range=${row.referenceRange || ""}`
+    )
+    .join("\n");
+
+  if (!rowList) {
+    return [];
+  }
+
+  const response = await createChatCompletion({
+    model: ANALYSIS_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          `You are a bloodwork row verification engine. Your only job is to compare extracted bloodwork rows against the uploaded report images and correct any mismatched digits, units, or ranges. ${getLanguageInstruction(language)} Return valid JSON only.`
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Verify these extracted bloodwork rows against the uploaded report images:
+${rowList}
+
+Rules:
+- Re-check every row directly against the visible report image.
+- Correct any wrong value, unit, or reference range.
+- Keep only rows that are visibly present.
+- Never move a number from one row to another.
+- Never use diagnosis thresholds or comment sections as biomarker rows.
+- If a value cannot be confirmed, leave it blank instead of guessing.
+- Return the final corrected row list in report order.
+
+Return JSON with this exact shape:
+{
+  "rows": [
+    {
+      "panel": "panel name if visible",
+      "marker": "printed marker name",
+      "value": "corrected exact value if visible",
+      "unit": "corrected exact unit if visible",
+      "referenceRange": "corrected exact range if visible",
+      "status": "high|low|normal|abnormal|flagged|comment|unknown",
+      "note": "optional short note only if something remains partially unreadable"
+    }
+  ]
+}`
+          },
+          ...(Array.isArray(extractionContent) ? extractionContent : [extractionContent])
+        ]
+      }
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0,
+    max_tokens: 4200
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) return [];
+
+  const parsed = JSON.parse(content) as { rows?: ExtractedReportRow[] };
+  return (parsed.rows || [])
+    .filter((row) => typeof row?.marker === "string" && row.marker.trim().length > 0 && shouldKeepExtractedRow(reportContent, row))
+    .map((row) => ({ ...row, source: "validated" as const }));
+};
+
 const extractExpectedMarkers = async (
   reportContent: unknown,
   language: Language,
@@ -1689,6 +1854,30 @@ const finalizeExtractedRows = async (
   candidateRowTexts: string[],
   panelCounts: Record<string, number>
 ) => {
+  if (reportContentHasVisualInput(reportContent)) {
+    const visualRows = await extractVisibleBloodworkRowsFromVisualReport(reportContent, language).catch(() => []);
+    let combinedRows = [...visualRows];
+    let completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
+
+    const verifiedRows = await verifyVisibleBloodworkRowsFromVisualReport(
+      reportContent,
+      language,
+      combinedRows
+    ).catch(() => []);
+
+    if (verifiedRows.length > 0) {
+      combinedRows = verifiedRows;
+      completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
+    }
+
+    return {
+      combinedRows,
+      candidateRowTexts,
+      panelCounts,
+      completeness
+    };
+  }
+
   const extractedRows = await extractStructuredReportRows(reportContent, language, candidateRowTexts).catch(() => []);
   let combinedRows = [...deterministicRows, ...extractedRows];
   let completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
