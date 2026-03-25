@@ -40,7 +40,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v31";
+const ANALYSIS_CACHE_VERSION = "v32";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -1733,11 +1733,6 @@ export async function analyzeBloodwork(
     supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id),
     language
   });
-  const cached = getCachedAnalysis(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
   const supplementsList = AVAILABLE_SUPPLEMENTS.map(
     (s) => `${s.name} (${s.size}) - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
   ).join("\n");
@@ -1851,7 +1846,6 @@ ${getLanguageInstruction(language)}`;
     const analysis: BloodworkAnalysis = JSON.parse(content);
     const normalized = normalizeRecommendations(analysis);
     const localized = await localizeBloodworkAnalysis(normalized, language);
-    setCachedAnalysis(cacheKey, localized);
     return localized;
   } catch (error) {
     console.error("Error analyzing bloodwork:", error);
@@ -1869,11 +1863,6 @@ export async function generateSupplementRecommendationsFromContext(input: {
     supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id),
     language
   });
-  const cached = getCachedAnalysis(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
   const supplementsList = AVAILABLE_SUPPLEMENTS.map(
     (s) => `${s.id}: ${s.name} - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
   ).join("\n");
@@ -1952,7 +1941,6 @@ ${getLanguageInstruction(language)}`;
     const analysis: BloodworkAnalysis = JSON.parse(content);
     const normalized = normalizeRecommendations(analysis);
     const localized = await localizeBloodworkAnalysis(normalized, language);
-    setCachedAnalysis(cacheKey, localized);
     return localized;
   } catch (error) {
     console.error("Error generating supplement recommendations from context:", error);
@@ -1992,11 +1980,6 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
       supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id),
       language
     });
-    const cached = getCachedAnalysis(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
     const verificationReportContent = [
       {
         type: "text" as const,
@@ -2142,7 +2125,6 @@ ${getLanguageInstruction(language)}`
       })
     );
     const localized = await localizeBloodworkAnalysis(normalized, language);
-    setCachedAnalysis(cacheKey, localized);
     return localized;
   } catch (error) {
     console.error("Error analyzing PDF bloodwork file:", error);
@@ -2164,11 +2146,6 @@ export async function analyzeBloodworkFile(
     supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id),
     language
   });
-  const cached = getCachedAnalysis(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
   const supplementsList = AVAILABLE_SUPPLEMENTS.map(
     (s) => `${s.id}: ${s.name} - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
   ).join("\n");
@@ -2319,7 +2296,6 @@ ${getLanguageInstruction(language)}`
       })
     );
     const localized = await localizeBloodworkAnalysis(normalized, language);
-    setCachedAnalysis(cacheKey, localized);
     return localized;
   } catch (error) {
     console.error("Error analyzing bloodwork file:", error);
