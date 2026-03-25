@@ -486,7 +486,14 @@ const parseNumericValue = (value?: string) => {
 
 const parseReferenceRange = (referenceRange?: string) => {
   if (!referenceRange) return null;
-  const normalized = referenceRange.replace(/,/g, "").replace(/[??]/g, "-").trim();
+  const normalized = referenceRange
+    .replace(/,/g, "")
+    .replace(/[??]/g, "-")
+    .replace(/[＜﹤⟨〈]/g, "<")
+    .replace(/[＞﹥⟩〉]/g, ">")
+    .replace(/[≤]/g, "<=")
+    .replace(/[≥]/g, ">=")
+    .trim();
   const matches = normalized.match(/\d+(?:\.\d+)?/g);
   if (!matches || matches.length === 0) return null;
 
@@ -512,35 +519,12 @@ const parseReferenceRange = (referenceRange?: string) => {
   return null;
 };
 
-const isSuspiciousRangeForMarker = (
-  marker: string,
-  range:
-    | { type: "upper"; upper: number }
-    | { type: "lower"; lower: number }
-    | { type: "between"; min: number; max: number }
-) => {
-  const normalized = normalizeForMatch(marker);
-
-  if ((/\bldl\b|total cholesterol|non hdl|triglycer|alt|ast|alp|ggt|bilirubin|crp/.test(normalized)) && range.type === "lower") {
-    return true;
-  }
-
-  if ((/\bhdl\b|high density lipoprotein/.test(normalized)) && range.type === "upper") {
-    return true;
-  }
-
-  return false;
-};
-
 const inferRowStatus = (row: ExtractedReportRow): ExtractedReportRow["status"] => {
   if (row.status === "comment") return "comment";
 
   const numericValue = parseNumericValue(row.value);
   const numericRange = parseReferenceRange(row.referenceRange);
   if (numericValue !== null && numericRange) {
-    if (isSuspiciousRangeForMarker(row.marker, numericRange)) {
-      return "unknown";
-    }
     if (numericRange.type === "between") {
       if (numericValue < numericRange.min) return "low";
       if (numericValue > numericRange.max) return "high";

@@ -46,7 +46,14 @@ const parseNumericValue = (value?: string) => {
 
 const parseReferenceRange = (referenceRange?: string) => {
   if (!referenceRange) return null;
-  const normalized = referenceRange.replace(/,/g, "").replace(/[??]/g, "-").trim();
+  const normalized = referenceRange
+    .replace(/,/g, "")
+    .replace(/[??]/g, "-")
+    .replace(/[＜﹤⟨〈]/g, "<")
+    .replace(/[＞﹥⟩〉]/g, ">")
+    .replace(/[≤]/g, "<=")
+    .replace(/[≥]/g, ">=")
+    .trim();
   const matches = normalized.match(/\d+(?:\.\d+)?/g);
   if (!matches || matches.length === 0) return null;
 
