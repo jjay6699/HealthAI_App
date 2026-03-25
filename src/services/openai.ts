@@ -2187,7 +2187,7 @@ ${imageOcr.blocks.join("\n\n") || "OCR text unavailable."}`
       {
         type: "image_url" as const,
         image_url: {
-          url: `data:${processedImage.mimeType};base64,${processedImage.base64}`,
+          url: `data:${imageFormat};base64,${base64Image}`,
           detail: "high" as const
         }
       }
@@ -2285,7 +2285,7 @@ ${getLanguageInstruction(language)}`
             {
               type: "image_url",
               image_url: {
-                url: `data:${processedImage.mimeType};base64,${processedImage.base64}`,
+                url: `data:${imageFormat};base64,${base64Image}`,
                 detail: "high"
               }
             }
@@ -2331,17 +2331,6 @@ export async function analyzeBloodworkImages(
   images: { base64: string; fileType: string }[]
 ): Promise<BloodworkAnalysis> {
   const language = getCurrentLanguage();
-  const cacheKey = buildAnalysisCacheKey("images", {
-    imageHashes: images.map((img) => hashString(img.base64)),
-    fileTypes: images.map((img) => img.fileType),
-    supplementIds: AVAILABLE_SUPPLEMENTS.map((s) => s.id),
-    language
-  });
-  const cached = getCachedAnalysis(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
   const supplementsList = AVAILABLE_SUPPLEMENTS.map(
     (s) => `${s.id}: ${s.name} - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
   ).join("\n");
@@ -2356,10 +2345,11 @@ export async function analyzeBloodworkImages(
     })
   );
 
-  const imageParts = processedImages.map((img) => {
+  const imageParts = images.map((img) => {
+    const imageFormat = normalizeImageMimeType(img.fileType);
     return {
       type: "image_url" as const,
-      image_url: { url: `data:${img.mimeType};base64,${img.base64}`, detail: "high" }
+      image_url: { url: `data:${imageFormat};base64,${img.base64}`, detail: "high" }
     };
   });
   const imageOcr = await extractImageOcrBundle(
@@ -2482,7 +2472,6 @@ ${getLanguageInstruction(language)}`
       })
     );
     const localized = await localizeBloodworkAnalysis(normalized, language);
-    setCachedAnalysis(cacheKey, localized);
     return localized;
   } catch (error) {
     console.error("Error analyzing bloodwork images:", error);
