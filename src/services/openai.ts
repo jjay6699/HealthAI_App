@@ -40,7 +40,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v28";
+const ANALYSIS_CACHE_VERSION = "v29";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -484,12 +484,20 @@ const rowHasExplicitTextEvidence = (reportContent: unknown, row: ExtractedReport
 
   if (matchingLineIndexes.length === 0) return false;
   if (row.status === "comment") return true;
-  if (!row.value) return true;
+  if (!row.value && !row.referenceRange) return true;
 
-  const normalizedValue = normalizeForMatch(row.value);
   return matchingLineIndexes.some((index) => {
-    const window = reportLines.slice(Math.max(0, index - 1), Math.min(reportLines.length, index + 2));
-    return window.some((line) => line.includes(normalizedValue));
+    const window = reportLines.slice(Math.max(0, index - 2), Math.min(reportLines.length, index + 3));
+    const hasValue =
+      !row.value ||
+      window.some((line) => line.includes(normalizeForMatch(row.value || "")));
+    const rangeNumbers = (row.referenceRange || "").match(/\d+(?:\.\d+)?/g) || [];
+    const hasRange =
+      !row.referenceRange ||
+      rangeNumbers.length === 0 ||
+      window.some((line) => rangeNumbers.some((num) => line.includes(num)));
+
+    return hasValue || hasRange;
   });
 };
 
