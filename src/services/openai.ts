@@ -632,6 +632,19 @@ const shouldKeepExtractedRow = (
   row: ExtractedReportRow,
   candidateRowTexts: string[] = []
 ) => {
+  if (reportContentHasVisualInput(reportContent)) {
+    const canonicalMarker = canonicalizeMarkerName(row.marker || "");
+    if (!canonicalMarker) {
+      return false;
+    }
+
+    if (row.status === "comment") {
+      return Boolean(row.note?.trim());
+    }
+
+    return Boolean(row.value?.trim() || row.referenceRange?.trim() || row.unit?.trim());
+  }
+
   if (candidateRowTexts.length > 0) {
     return rowMatchesCandidateText(row, candidateRowTexts);
   }
@@ -640,24 +653,7 @@ const shouldKeepExtractedRow = (
     return true;
   }
 
-  if (!reportContentHasVisualInput(reportContent)) {
-    return false;
-  }
-
-  const canonicalMarker = canonicalizeMarkerName(row.marker || "");
-  if (!canonicalMarker) {
-    return false;
-  }
-
-  if (row.status === "comment") {
-    return Boolean(row.note?.trim());
-  }
-
-  if (!Boolean(row.value?.trim() || row.referenceRange?.trim() || row.unit?.trim())) {
-    return false;
-  }
-
-  return true;
+  return false;
 };
 
 const normalizeSourceRowBands = (
@@ -1495,7 +1491,8 @@ Return JSON with this exact shape:
       }
     ],
     response_format: { type: "json_object" },
-    temperature: 0
+    temperature: 0,
+    max_tokens: 3500
   });
 
   const content = response.choices[0].message.content;
@@ -1574,7 +1571,8 @@ Return JSON with this exact shape:
       }
     ],
     response_format: { type: "json_object" },
-    temperature: 0
+    temperature: 0,
+    max_tokens: 2200
   });
 
   const content = response.choices[0].message.content;
@@ -1655,7 +1653,8 @@ Return JSON with this exact shape:
       }
     ],
     response_format: { type: "json_object" },
-    temperature: 0
+    temperature: 0,
+    max_tokens: 2600
   });
 
   const content = response.choices[0].message.content;
@@ -1704,20 +1703,6 @@ const finalizeExtractedRows = async (
   if (validatedRows.length > 0) {
     combinedRows = [...combinedRows, ...validatedRows];
     completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
-  }
-
-  if (prefersVisualTruth) {
-    const existingMarkerIds = new Set(
-      finalizeParsedRows(combinedRows).map((row) => row.markerId)
-    );
-    const deterministicFallbackRows = deterministicRows.filter((row) => {
-      const markerId = getCanonicalMarkerId(row.marker || "");
-      return markerId && !existingMarkerIds.has(markerId);
-    });
-    if (deterministicFallbackRows.length > 0) {
-      combinedRows = [...combinedRows, ...deterministicFallbackRows];
-      completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
-    }
   }
 
   return {
@@ -3132,7 +3117,8 @@ export async function translateBloodworkAnalysis(
       }
     ],
     response_format: { type: "json_object" },
-    temperature: 0
+    temperature: 0,
+    max_tokens: 3200
   });
 
   const content = response.choices[0].message.content;
