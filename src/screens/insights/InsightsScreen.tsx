@@ -44,38 +44,62 @@ const parseNumericValue = (value?: string) => {
   return match ? Number(match[0]) : null;
 };
 
+const parseReferenceRange = (referenceRange?: string) => {
+  if (!referenceRange) return null;
+  const normalized = referenceRange.replace(/,/g, "").replace(/[??]/g, "-").trim();
+  const matches = normalized.match(/\d+(?:\.\d+)?/g);
+  if (!matches || matches.length === 0) return null;
+
+  const upperMatch = normalized.match(/^(?:<|<=)\s*(\d+(?:\.\d+)?)/);
+  if (upperMatch) {
+    const upper = Number(upperMatch[1]);
+    return Number.isNaN(upper) ? null : { type: "upper" as const, upper };
+  }
+
+  const lowerMatch = normalized.match(/^(?:>|>=)\s*(\d+(?:\.\d+)?)/);
+  if (lowerMatch) {
+    const lower = Number(lowerMatch[1]);
+    return Number.isNaN(lower) ? null : { type: "lower" as const, lower };
+  }
+
+  if (matches.length >= 2) {
+    const min = Number(matches[0]);
+    const max = Number(matches[1]);
+    if (Number.isNaN(min) || Number.isNaN(max)) return null;
+    return { type: "between" as const, min, max };
+  }
+
+  return null;
+};
+
+const inferRowStatus = (row: { marker: string; value?: string; referenceRange?: string; status: string }) => {
+  const numericValue = parseNumericValue(row.value);
+  const numericRange = parseReferenceRange(row.referenceRange);
+
+  if (numericValue !== null && numericRange) {
+    if (numericRange.type === "between") {
+      if (numericValue < numericRange.min) return "low";
+      if (numericValue > numericRange.max) return "high";
+      return "normal";
+    }
+
+    if (numericRange.type === "upper") {
+      return numericValue <= numericRange.upper ? "normal" : "high";
+    }
+
+    if (numericRange.type === "lower") {
+      return numericValue >= numericRange.lower ? "normal" : "low";
+    }
+  }
+
+  return row.status;
+};
+
 const ensureVisibleParsedRows = (analysis: BloodworkAnalysis | null) => {
-  const rows = [...(analysis?.parsedRows || [])];
-  const hasRenderableNonHdl = rows.some(
-    (row) =>
-      (row.markerId === "non_hdl" || normalizeMarkerName(row.marker) === "non hdl") &&
-      row.status !== "unknown" &&
-      Boolean(row.value)
-  );
-  if (hasRenderableNonHdl) {
-    return rows.filter((row) => row.status !== "unknown");
-  }
-
-  const totalCholesterol = rows.find((row) => normalizeMarkerName(row.marker) === "total cholesterol");
-  const hdl = rows.find((row) => normalizeMarkerName(row.marker) === "hdl cholesterol");
-  const totalValue = parseNumericValue(totalCholesterol?.value);
-  const hdlValue = parseNumericValue(hdl?.value);
-  const unit = totalCholesterol?.unit || hdl?.unit;
-  const normalizedUnit = normalizeMarkerName(unit || "");
-
-  if (totalValue !== null && hdlValue !== null && unit) {
-    const referenceRange = normalizedUnit === "mmol l" ? "<3.4" : normalizedUnit === "mg dl" ? "<130" : undefined;
-    rows.splice(4, 0, {
-      markerId: "non_hdl",
-      marker: "Non HDL",
-      value: Number((totalValue - hdlValue).toFixed(1)).toString(),
-      unit,
-      referenceRange,
-      status: referenceRange ? "normal" : "unknown",
-      explanation: "Non-HDL cholesterol captures cholesterol carried by atherogenic particles and is commonly reviewed alongside LDL."
-    });
-  }
-
+  const rows = (analysis?.parsedRows || []).map((row) => ({
+    ...row,
+    status: inferRowStatus(row)
+  }));
   return rows.filter((row) => row.status !== "unknown");
 };
 
