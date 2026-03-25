@@ -8,6 +8,7 @@ import Dialog from "../../components/Dialog";
 import { AppTheme, useTheme } from "../../theme";
 import {
   analyzeBloodworkFile,
+  analyzeBloodworkImages,
   analyzeBloodworkPdf,
   analyzeHealthDocumentBundle
 } from "../../services/openai";
@@ -86,8 +87,21 @@ const UploadScreen = () => {
 
       let analysis;
       const hasPdf = files.some((file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
+      const allImages = files.every((file) => (file.type || "").startsWith("image/"));
 
-      if (files.length > 1) {
+      if (files.length > 1 && allImages) {
+        const images = await Promise.all(
+          files.map(async (file) => ({
+            base64: await fileToBase64(file),
+            fileType: file.type || "image/jpeg"
+          }))
+        );
+        const [result] = await Promise.all([
+          analyzeBloodworkImages(images),
+          new Promise(resolve => setTimeout(resolve, 6000))
+        ]);
+        analysis = result;
+      } else if (files.length > 1) {
         const [result] = await Promise.all([
           analyzeHealthDocumentBundle(files),
           new Promise(resolve => setTimeout(resolve, 6000)) // Minimum 6 seconds for UX
@@ -114,7 +128,14 @@ const UploadScreen = () => {
       persistentStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
       const uploadedAt = new Date().toISOString();
       const fileName = files.map((file) => file.name).join(", ");
-      const fileType = files.length > 1 ? "document-bundle" : hasPdf ? "application/pdf" : (files[0].type || "unknown");
+      const fileType =
+        files.length > 1 && allImages
+          ? "images"
+          : files.length > 1
+          ? "document-bundle"
+          : hasPdf
+          ? "application/pdf"
+          : (files[0].type || "unknown");
       const fileSize = files.reduce((total, file) => total + file.size, 0);
 
       persistentStorage.setItem(
