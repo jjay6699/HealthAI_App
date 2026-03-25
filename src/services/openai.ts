@@ -944,14 +944,26 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
       continue;
     }
 
+    const existingHasLockedDeterministicValue =
+      existing.source === "deterministic" && Boolean(existing.value || existing.referenceRange || existing.unit);
+    const incomingIsNonDeterministic = row.source !== "deterministic";
+    if (existingHasLockedDeterministicValue && incomingIsNonDeterministic) {
+      deduped.set(key, {
+        ...existing,
+        note: existing.note || parsedRow.note,
+        explanation: existing.explanation || parsedRow.explanation
+      });
+      continue;
+    }
+
     const existingScore =
-      (existing.source === "validated" ? 10 : existing.source === "deterministic" ? 6 : 0) +
+      (existing.source === "deterministic" ? 12 : existing.source === "validated" ? 8 : 0) +
       (existing.value ? 4 : 0) +
       (existing.referenceRange ? 3 : 0) +
       (existing.status !== "unknown" ? 2 : 0) +
       (existing.note ? 1 : 0);
     const parsedScore =
-      (row.source === "validated" ? 10 : row.source === "deterministic" ? 6 : 0) +
+      (row.source === "deterministic" ? 12 : row.source === "validated" ? 8 : 0) +
       (parsedRow.value ? 4 : 0) +
       (parsedRow.referenceRange ? 3 : 0) +
       (parsedRow.status !== "unknown" ? 2 : 0) +
@@ -1677,9 +1689,8 @@ const finalizeExtractedRows = async (
   candidateRowTexts: string[],
   panelCounts: Record<string, number>
 ) => {
-  const prefersVisualTruth = reportContentHasVisualInput(reportContent);
   const extractedRows = await extractStructuredReportRows(reportContent, language, candidateRowTexts).catch(() => []);
-  let combinedRows = prefersVisualTruth ? [...extractedRows] : [...deterministicRows, ...extractedRows];
+  let combinedRows = [...deterministicRows, ...extractedRows];
   let completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
 
   if (completeness.level !== "complete") {
