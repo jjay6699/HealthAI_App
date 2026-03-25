@@ -170,6 +170,12 @@ interface SourceRowBand {
   tokens?: SourceToken[];
 }
 
+interface TableColumnAnchors {
+  resultX: number;
+  unitX: number;
+  rangeX: number;
+}
+
 const concernStatusSet = new Set(["high", "low", "abnormal", "flagged"]);
 const EXPECTED_COMMON_MARKERS = [
   "ESR",
@@ -667,6 +673,54 @@ const extractCandidateRowTexts = (rowBands: SourceRowBand[]) =>
     .map((row) => row.text.replace(/\s+/g, " ").trim())
     .filter((text) => rowLooksLikeVisibleData(text));
 
+const isAsciiToken = (text: string) => /[A-Za-z0-9]/.test(text);
+
+const findTableColumnAnchors = (tokens?: SourceToken[]): TableColumnAnchors | null => {
+  if (!tokens || tokens.length === 0) return null;
+
+  const lowered = tokens.map((token) => ({
+    ...token,
+    normalized: normalizeForMatch(token.text)
+  }));
+
+  const resultToken = lowered.find((token) => token.normalized === "result");
+  const unitToken = lowered.find((token) => token.normalized === "unit");
+  const rangeToken = lowered.find((token) => token.normalized === "reference range" || token.normalized === "reference");
+
+  if (!resultToken || !unitToken || !rangeToken) {
+    return null;
+  }
+
+  return {
+    resultX: resultToken.x,
+    unitX: unitToken.x,
+    rangeX: rangeToken.x
+  };
+};
+
+const buildSyntheticLineFromRowBand = (row: SourceRowBand, anchors: TableColumnAnchors) => {
+  const tokens = (row.tokens || []).filter((token) => token.text.trim().length > 0);
+  if (tokens.length === 0) {
+    return row.text;
+  }
+
+  const markerTokens = tokens.filter((token) => token.x < anchors.resultX - 15 && isAsciiToken(token.text));
+  const valueTokens = tokens.filter((token) => token.x >= anchors.resultX - 15 && token.x < anchors.unitX - 15);
+  const unitTokens = tokens.filter((token) => token.x >= anchors.unitX - 15 && token.x < anchors.rangeX - 15);
+  const rangeTokens = tokens.filter((token) => token.x >= anchors.rangeX - 15);
+
+  const markerText = markerTokens.map((token) => token.text).join(" ").replace(/\s+/g, " ").trim();
+  if (!markerText) {
+    return row.text;
+  }
+
+  const valueText = valueTokens.map((token) => token.text).join(" ").replace(/\s+/g, " ").trim();
+  const unitText = unitTokens.map((token) => token.text).join(" ").replace(/\s+/g, " ").trim();
+  const rangeText = rangeTokens.map((token) => token.text).join(" ").replace(/\s+/g, " ").trim();
+
+  return [markerText, valueText, unitText, rangeText].filter(Boolean).join(" ").trim();
+};
+
 const getCanonicalMarkerId = (marker: string) => {
   const canonicalMarker = canonicalizeMarkerName(marker);
   return normalizeForMatch(canonicalMarker).replace(/\s+/g, "_");
@@ -1010,10 +1064,17 @@ const parseStructuredRowBands = (
   const candidateRowTexts: string[] = [];
   const panelCounts: Record<string, number> = {};
   let currentPanel: string | undefined;
+  let currentAnchors: TableColumnAnchors | null = null;
 
   for (const band of rowBands) {
     const line = band.text.trim();
     if (!line) continue;
+
+    const detectedAnchors = findTableColumnAnchors(band.tokens);
+    if (detectedAnchors) {
+      currentAnchors = detectedAnchors;
+      continue;
+    }
 
     if (PANEL_PATTERNS.some((pattern) => pattern.test(line))) {
       currentPanel = line;
@@ -1032,7 +1093,8 @@ const parseStructuredRowBands = (
       }
     }
 
-    const parsed = parseStructuredLineRow(line, currentPanel);
+    const rowText = currentAnchors ? buildSyntheticLineFromRowBand(band, currentAnchors) : line;
+    const parsed = parseStructuredLineRow(rowText, currentPanel);
     if (parsed) {
       rows.push(parsed);
     }
