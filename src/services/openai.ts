@@ -40,7 +40,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v24";
+const ANALYSIS_CACHE_VERSION = "v25";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -455,11 +455,30 @@ const collectTextFragments = (input: unknown): string[] => {
   return [];
 };
 
+const collectNormalizedReportLines = (reportContent: unknown) =>
+  collectTextFragments(reportContent)
+    .flatMap((fragment) => fragment.split(/\r?\n/))
+    .map((line) => normalizeForMatch(line))
+    .filter(Boolean);
+
 const reportExplicitlyMentionsMarker = (reportContent: unknown, marker: string) => {
   const normalizedReportText = normalizeForMatch(collectTextFragments(reportContent).join(" "));
   if (!normalizedReportText) return false;
 
   return getMarkerAliases(marker).some((alias) => normalizedReportText.includes(alias));
+};
+
+const rowHasExplicitTextEvidence = (reportContent: unknown, row: ExtractedReportRow) => {
+  const matchingLines = collectNormalizedReportLines(reportContent).filter((line) =>
+    getMarkerAliases(row.marker).some((alias) => line.includes(alias))
+  );
+
+  if (matchingLines.length === 0) return false;
+  if (row.status === "comment") return true;
+  if (!row.value) return true;
+
+  const normalizedValue = normalizeForMatch(row.value);
+  return matchingLines.some((line) => line.includes(normalizedValue));
 };
 
 const getCanonicalMarkerId = (marker: string) => {
@@ -857,29 +876,13 @@ const mergeAnalysisWithParsedRows = (
     return analysis;
   }
 
-  const parsedMarkers = parsedRows.map((row) => row.marker);
   const deterministic = buildDeterministicFindings(parsedRows);
-  const filteredConcerns = (analysis.concerns || []).filter(
-    (item) => !parsedMarkers.some((marker) => textMentionsMarker(item, marker))
-  );
-  const filteredStrengths = (analysis.strengths || []).filter(
-    (item) => !parsedMarkers.some((marker) => textMentionsMarker(item, marker))
-  );
-  const filteredInsights = (analysis.detailedInsights || []).filter(
-    (item) =>
-      !parsedMarkers.some(
-        (marker) =>
-          textMentionsMarker(item.category, marker) ||
-          textMentionsMarker(item.findings, marker) ||
-          textMentionsMarker(item.impact, marker)
-      )
-  );
 
   return {
     ...analysis,
-    concerns: [...deterministic.concerns, ...filteredConcerns],
-    strengths: [...deterministic.strengths, ...filteredStrengths].slice(0, 8),
-    detailedInsights: [...deterministic.detailedInsights, ...filteredInsights],
+    concerns: deterministic.concerns,
+    strengths: deterministic.strengths.slice(0, 8),
+    detailedInsights: deterministic.detailedInsights,
     parsedRows,
     parsingDebug: {
       rawRowCount: rows.length,
@@ -1032,6 +1035,8 @@ Important rules:
 - If a report comment indicates an abnormal pattern, include it as status "comment".
 - Keep each row short and structured.
 - If something is partially unreadable, still include the row and mention that in note.
+- Never attach a value, unit, or reference range from a neighboring row to a different marker.
+- If the marker label is visible but the value is ambiguous, leave the value blank instead of guessing.
 - Do not summarize. Extract rows only.
 
 Return JSON with this exact shape:
@@ -1062,7 +1067,12 @@ Return JSON with this exact shape:
   if (!content) return [];
 
   const parsed = JSON.parse(content) as { rows?: ExtractedReportRow[] };
-  return (parsed.rows || []).filter((row) => typeof row?.marker === "string" && row.marker.trim().length > 0);
+  return (parsed.rows || []).filter(
+    (row) =>
+      typeof row?.marker === "string" &&
+      row.marker.trim().length > 0 &&
+      rowHasExplicitTextEvidence(reportContent, row)
+  );
 };
 
 const extractExpectedMarkers = async (
@@ -1090,6 +1100,8 @@ Rules:
 - Return only rows for requested markers that are actually visible in the report.
 - Keep the printed value, unit, and reference range if visible.
 - If the marker is not present, do not invent it.
+- Never borrow a value, unit, or reference range from an adjacent marker row.
+- If the marker name is visible but the value is ambiguous, return the marker without a value instead of guessing.
 - Preserve markers like "Non HDL", "A/G ratio", "ALT (SGPT)", and "AST (SGOT)" exactly when possible.
 
 Return JSON with this exact shape:
@@ -1120,7 +1132,12 @@ Return JSON with this exact shape:
   if (!content) return [];
 
   const parsed = JSON.parse(content) as { rows?: ExtractedReportRow[] };
-  return (parsed.rows || []).filter((row) => typeof row?.marker === "string" && row.marker.trim().length > 0);
+  return (parsed.rows || []).filter(
+    (row) =>
+      typeof row?.marker === "string" &&
+      row.marker.trim().length > 0 &&
+      rowHasExplicitTextEvidence(reportContent, row)
+  );
 };
 
 const backfillExpectedMarkers = async (
@@ -1554,20 +1571,9 @@ ${getLanguageInstruction(language)}`
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
     const deterministicRows = parseStructuredPdfRows(structuredPages);
-    const [verifiedMarkers, extractedRows] = await Promise.all([
-      verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []),
-      extractStructuredReportRows(verificationReportContent, language).catch(() => [])
-    ]);
-    const completedRows = await backfillExpectedMarkers(
-      verificationReportContent,
-      language,
-      [...deterministicRows, ...extractedRows]
-    );
+    const completedRows = deterministicRows;
     const normalized = normalizeRecommendations(
-      mergeAnalysisWithParsedRows(
-        mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers),
-        completedRows
-      )
+      mergeAnalysisWithParsedRows(analysis, completedRows)
     );
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
@@ -1733,20 +1739,9 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const [verifiedMarkers, extractedRows] = await Promise.all([
-      verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []),
-      extractStructuredReportRows(verificationReportContent, language).catch(() => [])
-    ]);
-    const completedRows = await backfillExpectedMarkers(
-      verificationReportContent,
-      language,
-      [...imageOcr.rows, ...extractedRows]
-    );
+    const completedRows = imageOcr.rows;
     const normalized = normalizeRecommendations(
-      mergeAnalysisWithParsedRows(
-        mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers),
-        completedRows
-      )
+      mergeAnalysisWithParsedRows(analysis, completedRows)
     );
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
@@ -1892,20 +1887,9 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const [verifiedMarkers, extractedRows] = await Promise.all([
-      verifyAbnormalMarkersCoverage(verificationReportContent, language).catch(() => []),
-      extractStructuredReportRows(verificationReportContent, language).catch(() => [])
-    ]);
-    const completedRows = await backfillExpectedMarkers(
-      verificationReportContent,
-      language,
-      [...imageOcr.rows, ...extractedRows]
-    );
+    const completedRows = imageOcr.rows;
     const normalized = normalizeRecommendations(
-      mergeAnalysisWithParsedRows(
-        mergeVerifiedAbnormalMarkers(analysis, verifiedMarkers),
-        completedRows
-      )
+      mergeAnalysisWithParsedRows(analysis, completedRows)
     );
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
@@ -2084,9 +2068,7 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const extractedRows = await extractStructuredReportRows(bundleContent, language).catch(() => []);
-    const completedRows = await backfillExpectedMarkers(bundleContent, language, [...deterministicRows, ...extractedRows]);
-    const normalized = normalizeRecommendations(mergeAnalysisWithParsedRows(analysis, completedRows));
+    const normalized = normalizeRecommendations(mergeAnalysisWithParsedRows(analysis, deterministicRows));
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
     return localized;
