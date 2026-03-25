@@ -604,6 +604,10 @@ const shouldKeepExtractedRow = (
   row: ExtractedReportRow,
   candidateRowTexts: string[] = []
 ) => {
+  if (candidateRowTexts.length > 0) {
+    return rowMatchesCandidateText(row, candidateRowTexts);
+  }
+
   if (rowHasExplicitTextEvidence(reportContent, row)) {
     return true;
   }
@@ -625,7 +629,7 @@ const shouldKeepExtractedRow = (
     return false;
   }
 
-  return rowMatchesCandidateText(row, candidateRowTexts);
+  return true;
 };
 
 const normalizeSourceRowBands = (
