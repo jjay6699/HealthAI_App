@@ -2,6 +2,7 @@ import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
 import { SUPPLEMENT_DESCRIPTIONS } from "../data/supplementDescriptions";
 import { pdfToImages, extractStructuredTextPagesFromPdf, extractTextFromPdf } from "../utils/pdfProcessor";
 import { extractStructuredTextFromImage } from "../utils/imageOcr";
+import { preprocessBloodworkImage } from "../utils/imagePreprocess";
 import { persistentStorage } from "./persistentStorage";
 import type { Language } from "../i18n";
 
@@ -2169,8 +2170,12 @@ export async function analyzeBloodworkFile(
   const imageFormat = normalizeImageMimeType(fileType);
 
   try {
+    const processedImage = await preprocessBloodworkImage(base64Image, imageFormat).catch(() => ({
+      base64: base64Image,
+      mimeType: imageFormat
+    }));
     const imageOcr = await extractImageOcrBundle([
-      { base64: base64Image, fileType: imageFormat, label: "Uploaded image" }
+      { base64: processedImage.base64, fileType: processedImage.mimeType, label: "Uploaded image" }
     ]);
     const verificationReportContent = [
       {
@@ -2182,7 +2187,7 @@ ${imageOcr.blocks.join("\n\n") || "OCR text unavailable."}`
       {
         type: "image_url" as const,
         image_url: {
-          url: `data:${imageFormat};base64,${base64Image}`,
+          url: `data:${processedImage.mimeType};base64,${processedImage.base64}`,
           detail: "high" as const
         }
       }
@@ -2280,7 +2285,7 @@ ${getLanguageInstruction(language)}`
             {
               type: "image_url",
               image_url: {
-                url: `data:${imageFormat};base64,${base64Image}`,
+                url: `data:${processedImage.mimeType};base64,${processedImage.base64}`,
                 detail: "high"
               }
             }
@@ -2341,17 +2346,26 @@ export async function analyzeBloodworkImages(
     (s) => `${s.id}: ${s.name} - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
   ).join("\n");
 
-  const imageParts = images.map((img) => {
-    const imageFormat = normalizeImageMimeType(img.fileType);
+  const processedImages = await Promise.all(
+    images.map(async (img) => {
+      const imageFormat = normalizeImageMimeType(img.fileType);
+      return preprocessBloodworkImage(img.base64, imageFormat).catch(() => ({
+        base64: img.base64,
+        mimeType: imageFormat
+      }));
+    })
+  );
+
+  const imageParts = processedImages.map((img) => {
     return {
       type: "image_url" as const,
-      image_url: { url: `data:${imageFormat};base64,${img.base64}`, detail: "high" }
+      image_url: { url: `data:${img.mimeType};base64,${img.base64}`, detail: "high" }
     };
   });
   const imageOcr = await extractImageOcrBundle(
-    images.map((img, index) => ({
+    processedImages.map((img, index) => ({
       base64: img.base64,
-      fileType: img.fileType,
+      fileType: img.mimeType,
       label: `Uploaded image ${index + 1}`
     }))
   );
