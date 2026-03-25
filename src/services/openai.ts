@@ -40,7 +40,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v29";
+const ANALYSIS_CACHE_VERSION = "v30";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -124,10 +124,14 @@ export interface BloodworkAnalysis {
     impact: string;
   }[];
   parsedRows?: ParsedReportRow[];
+  extractionCompleteness?: "complete" | "partial" | "low-confidence";
+  missingVisibleRowsCount?: number;
   parsingDebug?: {
     rawRowCount: number;
     finalRowCount: number;
     derivedMarkerIds?: string[];
+    candidateRowCount?: number;
+    panelCounts?: Record<string, number>;
   };
 }
 
@@ -149,6 +153,19 @@ interface ExtractedReportRow {
   status?: "high" | "low" | "normal" | "abnormal" | "flagged" | "comment" | "unknown";
   note?: string;
   whyItMatters?: string;
+}
+
+interface SourceToken {
+  text: string;
+  x: number;
+  y: number;
+}
+
+interface SourceRowBand {
+  pageNumber?: number;
+  y?: number;
+  text: string;
+  tokens?: SourceToken[];
 }
 
 const concernStatusSet = new Set(["high", "low", "abnormal", "flagged"]);
@@ -234,14 +251,31 @@ const MARKER_DEFINITIONS: Array<{ marker: string; patterns: RegExp[] }> = [
 
 const PANEL_PATTERNS = [
   /lipid studies/i,
+  /lipid profile/i,
   /liver function test/i,
+  /liver function tests/i,
   /hematology/i,
+  /haematology/i,
   /complete blood picture/i,
   /complete blood count/i,
+  /kidney function tests?/i,
+  /renal function tests?/i,
   /renal function/i,
   /thyroid/i,
-  /urinalysis/i
+  /urinalysis/i,
+  /differential count/i,
+  /diabetes screen/i,
+  /hepatitis screen/i
 ];
+
+const TABLE_HEADER_PATTERN =
+  /^(test name|result|unit|reference range|investigation|observed value|biological ref range|method|page|patient|branch id|pathlab no|specimen|species|sex|age|regd|coll|prnt|ref no)\b/i;
+
+const COMMENT_ROW_PATTERN =
+  /^(note|comments?|blood picture|wbcs|platelet-count|pbf|rbcs?\b.*|platelets?\b.*adequate|no early wbcs? seen)\s*:?\s*(.*)$/i;
+
+const REFERENCE_ONLY_PATTERN =
+  /^(pre[-\s]?diabetes|diabetes|normal\b|fasting\b|non[-\s]?fasting\b|low risk\b|average risk\b|high risk\b|individualised hba1c targets|diagnosis value|recommended|please note)\b/i;
 
 const supplementById = new Map(AVAILABLE_SUPPLEMENTS.map((s) => [s.id, s]));
 const supplementByName = new Map(
@@ -426,6 +460,23 @@ const getMarkerAliases = (marker: string) => {
     aliases.add("non hdl");
     aliases.add("non hdl cholesterol");
   }
+  if (/hba1c|hb a1c|glycated hemoglobin/.test(normalized)) {
+    aliases.add("hba1c");
+    aliases.add("hba1c hplc");
+    aliases.add("hb a1c");
+  }
+  if (/glucose/.test(normalized)) {
+    aliases.add("glucose");
+    aliases.add("fasting glucose");
+    aliases.add("blood glucose");
+  }
+  if (/esr|erythrocyte sedimentation rate/.test(normalized)) {
+    aliases.add("esr");
+  }
+  if (/platelet/.test(normalized)) {
+    aliases.add("platelet count");
+    aliases.add("platelets count");
+  }
   if (/alt|sgpt/.test(normalized)) {
     aliases.add("alt");
     aliases.add("sgpt");
@@ -500,6 +551,41 @@ const rowHasExplicitTextEvidence = (reportContent: unknown, row: ExtractedReport
     return hasValue || hasRange;
   });
 };
+
+const normalizeSourceRowBands = (
+  pages: Array<{ pageNumber?: number; rows?: Array<{ y: number; text: string; tokens?: SourceToken[] }> }>
+): SourceRowBand[] =>
+  pages.flatMap((page) =>
+    (page.rows || [])
+      .map((row) => ({
+        pageNumber: page.pageNumber,
+        y: row.y,
+        text: row.text,
+        tokens: row.tokens
+      }))
+      .filter((row) => Boolean(row.text?.trim()))
+  );
+
+const rowLooksLikeVisibleData = (text: string) => {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (!normalized) return false;
+  if (TABLE_HEADER_PATTERN.test(normalized)) return false;
+  if (PANEL_PATTERNS.some((pattern) => pattern.test(normalized))) return false;
+  if (/^(final report|pathlab fb health screen|scan qr|visit us at|speed accuracy|this is a computer generated report)/i.test(normalized)) {
+    return false;
+  }
+  if (COMMENT_ROW_PATTERN.test(normalized)) return true;
+  if (REFERENCE_ONLY_PATTERN.test(normalized) && !/\d/.test(normalized)) return false;
+
+  const hasMarkerLikeText = /^[a-z][a-z0-9\s()\/.+-]{1,40}/i.test(normalized);
+  const hasNumericSignal = /\d/.test(normalized);
+  return hasMarkerLikeText && hasNumericSignal;
+};
+
+const extractCandidateRowTexts = (rowBands: SourceRowBand[]) =>
+  rowBands
+    .map((row) => row.text.replace(/\s+/g, " ").trim())
+    .filter((text) => rowLooksLikeVisibleData(text));
 
 const getCanonicalMarkerId = (marker: string) => {
   const canonicalMarker = canonicalizeMarkerName(marker);
@@ -771,7 +857,7 @@ const parseStructuredLineRow = (line: string, panel?: string): ExtractedReportRo
   const trimmed = line.replace(/\s+/g, " ").trim();
   if (!trimmed) return null;
 
-  const commentMatch = trimmed.match(/^(note|comments?|blood picture|wbcs|platelet-count)\s*:?\s*(.*)$/i);
+  const commentMatch = trimmed.match(COMMENT_ROW_PATTERN);
   if (commentMatch) {
     return {
       panel,
@@ -826,21 +912,40 @@ const parseStructuredLineRow = (line: string, panel?: string): ExtractedReportRo
   };
 };
 
-const parseStructuredTextLines = (lines: string[]): ExtractedReportRow[] => {
+const parseStructuredTextLines = (lines: string[]): ExtractedReportRow[] =>
+  parseStructuredRowBands(lines.map((line) => ({ text: line }))).rows;
+
+const parseStructuredRowBands = (
+  rowBands: SourceRowBand[]
+): {
+  rows: ExtractedReportRow[];
+  candidateRowTexts: string[];
+  panelCounts: Record<string, number>;
+} => {
   const rows: ExtractedReportRow[] = [];
+  const candidateRowTexts: string[] = [];
+  const panelCounts: Record<string, number> = {};
   let currentPanel: string | undefined;
 
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
+  for (const band of rowBands) {
+    const line = band.text.trim();
     if (!line) continue;
 
     if (PANEL_PATTERNS.some((pattern) => pattern.test(line))) {
       currentPanel = line;
+      panelCounts[currentPanel] = panelCounts[currentPanel] || 0;
       continue;
     }
 
-    if (/^(test name|result|unit|reference range|investigation|observed value|biological ref range|method)\b/i.test(line)) {
+    if (TABLE_HEADER_PATTERN.test(line)) {
       continue;
+    }
+
+    if (rowLooksLikeVisibleData(line)) {
+      candidateRowTexts.push(line);
+      if (currentPanel) {
+        panelCounts[currentPanel] = (panelCounts[currentPanel] || 0) + 1;
+      }
     }
 
     const parsed = parseStructuredLineRow(line, currentPanel);
@@ -849,30 +954,36 @@ const parseStructuredTextLines = (lines: string[]): ExtractedReportRow[] => {
     }
   }
 
-  return rows;
+  return { rows, candidateRowTexts, panelCounts };
 };
 
-const parseStructuredPdfRows = (pages: { text: string }[]): ExtractedReportRow[] => {
-  const rows: ExtractedReportRow[] = [];
-
-  for (const page of pages) {
-    const lines = page.text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    rows.push(...parseStructuredTextLines(lines));
+const parseStructuredPdfRows = (
+  pages: Array<{ pageNumber?: number; text: string; rows?: Array<{ y: number; text: string; tokens?: SourceToken[] }> }>
+) => {
+  const rowBands = normalizeSourceRowBands(pages);
+  if (rowBands.length > 0) {
+    return parseStructuredRowBands(rowBands);
   }
 
-  return rows;
+  const fallbackBands = pages.flatMap((page) =>
+    page.text
+      .split(/\r?\n/)
+      .map((line) => ({ pageNumber: page.pageNumber, text: line.trim() }))
+      .filter((row) => Boolean(row.text))
+  );
+  return parseStructuredRowBands(fallbackBands);
 };
 
 const extractImageOcrBundle = async (
   images: { base64: string; fileType: string; label: string }[]
 ) => {
   const blocks: string[] = [];
+  const rowBands: SourceRowBand[] = [];
+  const candidateRowTexts: string[] = [];
+  const panelCounts: Record<string, number> = {};
   const rows: ExtractedReportRow[] = [];
 
-  for (const image of images) {
+  for (const [index, image] of images.entries()) {
     try {
       const ocr = await extractStructuredTextFromImage(
         image.base64,
@@ -881,22 +992,78 @@ const extractImageOcrBundle = async (
       if (ocr.text) {
         blocks.push(`Document: ${image.label}\nType: Image health report\nOCR text:\n${ocr.text}`);
       }
-      rows.push(...parseStructuredTextLines(ocr.lines));
+      const pageBands =
+        ocr.rows.length > 0
+          ? ocr.rows.map((row) => ({
+              pageNumber: index + 1,
+              y: row.y,
+              text: row.text,
+              tokens: row.tokens
+            }))
+          : ocr.lines.map((line) => ({ pageNumber: index + 1, text: line }));
+      rowBands.push(...pageBands);
     } catch (error) {
       console.warn("Image OCR failed:", image.label, error);
     }
   }
 
-  return { blocks, rows };
+  const parsed = parseStructuredRowBands(rowBands);
+  rows.push(...parsed.rows);
+  parsed.candidateRowTexts.forEach((text) => candidateRowTexts.push(text));
+  Object.entries(parsed.panelCounts).forEach(([panel, count]) => {
+    panelCounts[panel] = (panelCounts[panel] || 0) + count;
+  });
+
+  return { blocks, rows, rowBands, candidateRowTexts, panelCounts };
+};
+
+const computeExtractionCompleteness = (
+  rows: ExtractedReportRow[],
+  candidateRowTexts: string[],
+  panelCounts: Record<string, number>
+): { level: BloodworkAnalysis["extractionCompleteness"]; missingVisibleRowsCount: number } => {
+  const finalRowCount = finalizeParsedRows(rows).length;
+  const candidateCount = candidateRowTexts.length;
+  const missingVisibleRowsCount = Math.max(0, candidateCount - finalRowCount);
+  const hasThinPanel = Object.values(panelCounts).some((count) => count >= 4 && count - finalRowCount >= 3);
+
+  if (candidateCount === 0) {
+    return { level: "low-confidence", missingVisibleRowsCount: 0 };
+  }
+
+  const coverage = finalRowCount / candidateCount;
+  if (!hasThinPanel && coverage >= 0.85) {
+    return { level: "complete", missingVisibleRowsCount };
+  }
+  if (coverage >= 0.55) {
+    return { level: "partial", missingVisibleRowsCount };
+  }
+  return { level: "low-confidence", missingVisibleRowsCount };
 };
 
 const mergeAnalysisWithParsedRows = (
   analysis: BloodworkAnalysis,
-  rows: ExtractedReportRow[]
+  rows: ExtractedReportRow[],
+  diagnostics?: { candidateRowTexts?: string[]; panelCounts?: Record<string, number> }
 ): BloodworkAnalysis => {
   const parsedRows = finalizeParsedRows(rows);
+  const completeness = computeExtractionCompleteness(
+    rows,
+    diagnostics?.candidateRowTexts || [],
+    diagnostics?.panelCounts || {}
+  );
   if (parsedRows.length === 0) {
-    return analysis;
+    return {
+      ...analysis,
+      extractionCompleteness: completeness.level,
+      missingVisibleRowsCount: completeness.missingVisibleRowsCount,
+      parsingDebug: {
+        rawRowCount: rows.length,
+        finalRowCount: 0,
+        candidateRowCount: diagnostics?.candidateRowTexts?.length || 0,
+        panelCounts: diagnostics?.panelCounts || {}
+      }
+    };
   }
 
   const deterministic = buildDeterministicFindings(parsedRows);
@@ -907,9 +1074,13 @@ const mergeAnalysisWithParsedRows = (
     strengths: deterministic.strengths.slice(0, 8),
     detailedInsights: deterministic.detailedInsights,
     parsedRows,
+    extractionCompleteness: completeness.level,
+    missingVisibleRowsCount: completeness.missingVisibleRowsCount,
     parsingDebug: {
       rawRowCount: rows.length,
       finalRowCount: parsedRows.length,
+      candidateRowCount: diagnostics?.candidateRowTexts?.length || 0,
+      panelCounts: diagnostics?.panelCounts || {},
       derivedMarkerIds: parsedRows
         .filter((row) => row.note?.includes("Derived from"))
         .map((row) => row.markerId)
@@ -1029,7 +1200,8 @@ Rules:
 
 const extractStructuredReportRows = async (
   reportContent: unknown,
-  language: Language
+  language: Language,
+  candidateRowTexts: string[] = []
 ): Promise<ExtractedReportRow[]> => {
   const response = await createChatCompletion({
     model: ANALYSIS_MODEL,
@@ -1045,6 +1217,9 @@ const extractStructuredReportRows = async (
           {
             type: "text",
             text: `Read every visible line in the uploaded report.
+
+Candidate table rows detected from OCR/PDF layout (use these to avoid skipping rows, but verify against the report images/text):
+${candidateRowTexts.length > 0 ? candidateRowTexts.map((row, index) => `${index + 1}. ${row}`).join("\n") : "No candidate rows available."}
 
 You must extract:
 - every biomarker/test row with a value if visible
@@ -1161,6 +1336,113 @@ Return JSON with this exact shape:
       row.marker.trim().length > 0 &&
       rowHasExplicitTextEvidence(reportContent, row)
   );
+};
+
+const extractStructuredReportRowsRetry = async (
+  reportContent: unknown,
+  language: Language,
+  candidateRowTexts: string[],
+  parsedRows: ExtractedReportRow[]
+): Promise<ExtractedReportRow[]> => {
+  const extractedMarkerKeys = new Set(parsedRows.map((row) => normalizeForMatch(canonicalizeMarkerName(row.marker))));
+  const likelyMissingRows = candidateRowTexts.filter((rowText) => {
+    const normalized = normalizeForMatch(rowText);
+    return ![...extractedMarkerKeys].some((key) => normalized.includes(key));
+  });
+
+  if (likelyMissingRows.length === 0) {
+    return [];
+  }
+
+  const response = await createChatCompletion({
+    model: ANALYSIS_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          `You are a clinical table recovery engine. Your only job is to recover visible bloodwork rows that were likely missed in the first extraction pass. ${getLanguageInstruction(language)} Return valid JSON only.`
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `These candidate rows were visible in the report but were likely missed by the first extraction pass:
+${likelyMissingRows.map((row, index) => `${index + 1}. ${row}`).join("\n")}
+
+Rules:
+- Recover only rows that are visibly present in the report.
+- Keep output in report order where possible.
+- It is acceptable to return a row with a marker and value but no reference range if the range is not visible.
+- Do not invent missing markers that are not visibly present.
+- Never assign a value from one row to a different marker.
+
+Return JSON with this exact shape:
+{
+  "rows": [
+    {
+      "panel": "panel name if known",
+      "marker": "marker/test label",
+      "value": "observed value if any",
+      "unit": "unit if any",
+      "referenceRange": "printed range if any",
+      "status": "high|low|normal|abnormal|flagged|comment|unknown",
+      "note": "short extraction note if needed",
+      "whyItMatters": "one short plain-language explanation of why this matters"
+    }
+  ]
+}`
+          },
+          ...(Array.isArray(reportContent) ? reportContent : [reportContent])
+        ]
+      }
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) return [];
+
+  const parsed = JSON.parse(content) as { rows?: ExtractedReportRow[] };
+  return (parsed.rows || []).filter(
+    (row) =>
+      typeof row?.marker === "string" &&
+      row.marker.trim().length > 0 &&
+      rowHasExplicitTextEvidence(reportContent, row)
+  );
+};
+
+const finalizeExtractedRows = async (
+  reportContent: unknown,
+  language: Language,
+  deterministicRows: ExtractedReportRow[],
+  candidateRowTexts: string[],
+  panelCounts: Record<string, number>
+) => {
+  const extractedRows = await extractStructuredReportRows(reportContent, language, candidateRowTexts).catch(() => []);
+  let combinedRows = [...deterministicRows, ...extractedRows];
+  let completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
+
+  if (completeness.level !== "complete") {
+    const retryRows = await extractStructuredReportRowsRetry(
+      reportContent,
+      language,
+      candidateRowTexts,
+      combinedRows
+    ).catch(() => []);
+    if (retryRows.length > 0) {
+      combinedRows = [...combinedRows, ...retryRows];
+      completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
+    }
+  }
+
+  return {
+    combinedRows,
+    candidateRowTexts,
+    panelCounts,
+    completeness
+  };
 };
 
 const backfillExpectedMarkers = async (
@@ -1593,11 +1875,19 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const deterministicRows = parseStructuredPdfRows(structuredPages);
-    const extractedRows = await extractStructuredReportRows(verificationReportContent, language).catch(() => []);
-    const completedRows = [...deterministicRows, ...extractedRows];
+    const deterministic = parseStructuredPdfRows(structuredPages);
+    const finalizedRows = await finalizeExtractedRows(
+      verificationReportContent,
+      language,
+      deterministic.rows,
+      deterministic.candidateRowTexts,
+      deterministic.panelCounts
+    );
     const normalized = normalizeRecommendations(
-      mergeAnalysisWithParsedRows(analysis, completedRows)
+      mergeAnalysisWithParsedRows(analysis, finalizedRows.combinedRows, {
+        candidateRowTexts: finalizedRows.candidateRowTexts,
+        panelCounts: finalizedRows.panelCounts
+      })
     );
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
@@ -1763,10 +2053,18 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const extractedRows = await extractStructuredReportRows(verificationReportContent, language).catch(() => []);
-    const completedRows = [...imageOcr.rows, ...extractedRows];
+    const finalizedRows = await finalizeExtractedRows(
+      verificationReportContent,
+      language,
+      imageOcr.rows,
+      imageOcr.candidateRowTexts,
+      imageOcr.panelCounts
+    );
     const normalized = normalizeRecommendations(
-      mergeAnalysisWithParsedRows(analysis, completedRows)
+      mergeAnalysisWithParsedRows(analysis, finalizedRows.combinedRows, {
+        candidateRowTexts: finalizedRows.candidateRowTexts,
+        panelCounts: finalizedRows.panelCounts
+      })
     );
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
@@ -1912,10 +2210,18 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const extractedRows = await extractStructuredReportRows(verificationReportContent, language).catch(() => []);
-    const completedRows = [...imageOcr.rows, ...extractedRows];
+    const finalizedRows = await finalizeExtractedRows(
+      verificationReportContent,
+      language,
+      imageOcr.rows,
+      imageOcr.candidateRowTexts,
+      imageOcr.panelCounts
+    );
     const normalized = normalizeRecommendations(
-      mergeAnalysisWithParsedRows(analysis, completedRows)
+      mergeAnalysisWithParsedRows(analysis, finalizedRows.combinedRows, {
+        candidateRowTexts: finalizedRows.candidateRowTexts,
+        panelCounts: finalizedRows.panelCounts
+      })
     );
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
@@ -1952,6 +2258,8 @@ export async function analyzeHealthDocumentBundle(files: File[]): Promise<Bloodw
     | { type: "image_url"; image_url: { url: string; detail: "high" } }
   > = [];
   const deterministicRows: ExtractedReportRow[] = [];
+  const candidateRowTexts: string[] = [];
+  const panelCounts: Record<string, number> = {};
 
   for (const file of files) {
     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
@@ -1963,7 +2271,12 @@ export async function analyzeHealthDocumentBundle(files: File[]): Promise<Bloodw
         extractStructuredTextPagesFromPdf(file).catch(() => [])
       ]);
 
-      deterministicRows.push(...parseStructuredPdfRows(structuredPages));
+      const parsedPdf = parseStructuredPdfRows(structuredPages);
+      deterministicRows.push(...parsedPdf.rows);
+      candidateRowTexts.push(...parsedPdf.candidateRowTexts);
+      Object.entries(parsedPdf.panelCounts).forEach(([panel, count]) => {
+        panelCounts[panel] = (panelCounts[panel] || 0) + count;
+      });
       bundleContent.push({
         type: "text",
         text: `Document: ${file.name}\nType: PDF health report\nOCR text:\n${extractedText || "No OCR text available"}`
@@ -1990,6 +2303,10 @@ export async function analyzeHealthDocumentBundle(files: File[]): Promise<Bloodw
       { base64, fileType: file.type, label: file.name }
     ]);
     deterministicRows.push(...imageOcr.rows);
+    candidateRowTexts.push(...imageOcr.candidateRowTexts);
+    Object.entries(imageOcr.panelCounts).forEach(([panel, count]) => {
+      panelCounts[panel] = (panelCounts[panel] || 0) + count;
+    });
     if (imageOcr.blocks.length > 0) {
       bundleContent.push({
         type: "text",
@@ -2094,9 +2411,18 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const extractedRows = await extractStructuredReportRows(bundleContent, language).catch(() => []);
+    const finalizedRows = await finalizeExtractedRows(
+      bundleContent,
+      language,
+      deterministicRows,
+      candidateRowTexts,
+      panelCounts
+    );
     const normalized = normalizeRecommendations(
-      mergeAnalysisWithParsedRows(analysis, [...deterministicRows, ...extractedRows])
+      mergeAnalysisWithParsedRows(analysis, finalizedRows.combinedRows, {
+        candidateRowTexts: finalizedRows.candidateRowTexts,
+        panelCounts: finalizedRows.panelCounts
+      })
     );
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);

@@ -3,6 +3,15 @@ import { createWorker, PSM } from "tesseract.js";
 export interface StructuredImageText {
   text: string;
   lines: string[];
+  rows: Array<{
+    y: number;
+    text: string;
+    tokens: Array<{
+      text: string;
+      x: number;
+      y: number;
+    }>;
+  }>;
 }
 
 interface OcrWord {
@@ -34,9 +43,9 @@ const normalizeLine = (line: string) =>
     .replace(/[|]/g, " ")
     .trim();
 
-const buildLinesFromWords = (words: OcrWord[]) => {
+const buildRowsFromWords = (words: OcrWord[]) => {
   if (words.length === 0) {
-    return [] as string[];
+    return [] as StructuredImageText["rows"];
   }
 
   const sortedWords = [...words].sort((a, b) => {
@@ -57,15 +66,15 @@ const buildLinesFromWords = (words: OcrWord[]) => {
 
   return rows
     .sort((a, b) => a.y - b.y)
-    .map((row) =>
-      normalizeLine(
-        row.parts
-          .sort((a, b) => a.x - b.x)
-          .map((part) => part.text)
-          .join(" ")
-      )
-    )
-    .filter(Boolean);
+    .map((row) => {
+      const tokens = row.parts.sort((a, b) => a.x - b.x);
+      return {
+        y: row.y,
+        text: normalizeLine(tokens.map((part) => part.text).join(" ")),
+        tokens
+      };
+    })
+    .filter((row) => Boolean(row.text));
 };
 
 export async function extractStructuredTextFromImage(
@@ -84,7 +93,8 @@ export async function extractStructuredTextFromImage(
       }))
       .filter((word: OcrWord) => word.text) || [];
 
-  const positionedLines = buildLinesFromWords(rawWords);
+  const rows = buildRowsFromWords(rawWords);
+  const positionedLines = rows.map((row) => row.text);
   const paragraphLines =
     pageData.blocks?.flatMap((block: any) =>
       block.paragraphs.flatMap((paragraph: any) =>
@@ -104,6 +114,7 @@ export async function extractStructuredTextFromImage(
 
   return {
     text: lines.join("\n"),
-    lines
+    lines,
+    rows
   };
 }

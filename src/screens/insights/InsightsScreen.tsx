@@ -107,7 +107,7 @@ const ensureVisibleParsedRows = (analysis: BloodworkAnalysis | null) => {
     ...row,
     status: inferRowStatus(row)
   }));
-  return rows.filter((row) => row.status !== "unknown");
+  return rows.filter((row) => row.marker.trim().length > 0);
 };
 
 const InsightsScreen = () => {
@@ -247,6 +247,14 @@ const InsightsScreen = () => {
     : isMalay
     ? "Status ini ditentukan daripada nilai dan julat rujukan yang dicetak pada laporan."
     : "These statuses are determined from the printed values and reference ranges on the report.";
+  const extractionNotice =
+    analysis?.extractionCompleteness && analysis.extractionCompleteness !== "complete"
+      ? isChinese
+        ? "此报告的部分行可能未被完整提取。建议使用更清晰的图像或 PDF 重新上传。"
+        : isMalay
+        ? "Sebahagian baris laporan ini mungkin belum diekstrak sepenuhnya. Cuba muat naik semula dengan imej atau PDF yang lebih jelas."
+        : "Some report rows may still be missing. Re-uploading a clearer image or PDF may improve extraction."
+      : null;
   const visibleParsedRows = ensureVisibleParsedRows(analysis);
   const toStatusLabel = (status: string) => {
     if (status === "high") return isChinese ? "åé«˜" : isMalay ? "Tinggi" : "High";
@@ -279,6 +287,7 @@ const InsightsScreen = () => {
         <Card style={styles.parsedCard}>
           <SectionHeader title={parsedSectionTitle} />
           <p style={styles.parsedBody}>{parsedSectionBody}</p>
+          {extractionNotice ? <p style={styles.noticeBody}>{extractionNotice}</p> : null}
           <div style={styles.parsedList}>
             {visibleParsedRows.map((row, index) => (
               <div key={`${row.marker}-${row.value || index}`} style={styles.parsedRow}>

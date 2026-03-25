@@ -8,6 +8,15 @@ import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 export interface PdfTextPage {
   pageNumber: number;
   text: string;
+  rows?: Array<{
+    y: number;
+    text: string;
+    tokens: Array<{
+      text: string;
+      x: number;
+      y: number;
+    }>;
+  }>;
 }
 
 /**
@@ -126,7 +135,22 @@ export async function extractStructuredTextPagesFromPdf(file: File): Promise<Pdf
 
     pages.push({
       pageNumber: pageNum,
-      text: pageText
+      text: pageText,
+      rows: lines
+        .sort((a, b) => b.y - a.y)
+        .map((line) => {
+          const tokens = line.parts.sort((a, b) => a.x - b.x);
+          return {
+            y: line.y,
+            text: tokens
+              .map((part) => part.text)
+              .join(" ")
+              .replace(/\s+/g, " ")
+              .trim(),
+            tokens
+          };
+        })
+        .filter((row) => Boolean(row.text))
     });
   }
 
