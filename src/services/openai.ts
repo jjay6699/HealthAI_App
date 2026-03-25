@@ -536,6 +536,28 @@ const reportContentHasVisualInput = (input: unknown): boolean => {
   return false;
 };
 
+const getVisualOnlyReportContent = (reportContent: unknown) => {
+  if (!Array.isArray(reportContent)) {
+    return reportContent;
+  }
+
+  const imageItems = reportContent.filter(
+    (item) => item && typeof item === "object" && (item as { type?: string }).type === "image_url"
+  );
+
+  if (imageItems.length === 0) {
+    return reportContent;
+  }
+
+  return [
+    {
+      type: "text" as const,
+      text: "Read the uploaded report images directly. Treat the images as the source of truth."
+    },
+    ...imageItems
+  ];
+};
+
 const collectNormalizedReportLines = (reportContent: unknown) =>
   collectTextFragments(reportContent)
     .flatMap((fragment) => fragment.split(/\r?\n/))
@@ -1349,6 +1371,9 @@ const extractStructuredReportRows = async (
   language: Language,
   candidateRowTexts: string[] = []
 ): Promise<ExtractedReportRow[]> => {
+  const extractionContent = reportContentHasVisualInput(reportContent)
+    ? getVisualOnlyReportContent(reportContent)
+    : reportContent;
   const response = await createChatCompletion({
     model: ANALYSIS_MODEL,
     messages: [
@@ -1364,9 +1389,6 @@ const extractStructuredReportRows = async (
             type: "text",
             text: `Read every visible line in the uploaded report.
 
-Candidate table rows detected from OCR/PDF layout (use these to avoid skipping rows, but verify against the report images/text):
-${candidateRowTexts.length > 0 ? candidateRowTexts.map((row, index) => `${index + 1}. ${row}`).join("\n") : "No candidate rows available."}
-
 You must extract:
 - every biomarker/test row with a value if visible
 - the printed reference range if visible
@@ -1380,6 +1402,7 @@ Important rules:
 - Keep each row short and structured.
 - If something is partially unreadable, still include the row and mention that in note.
 - Never attach a value, unit, or reference range from a neighboring row to a different marker.
+- For image/PDF reports, read directly from the visible table rows in the uploaded image, not from inferred OCR fragments.
 - If the marker label is visible but the value is ambiguous, leave the value blank instead of guessing.
 - Do not summarize. Extract rows only.
 
@@ -1424,6 +1447,9 @@ const extractExpectedMarkers = async (
   language: Language,
   expectedMarkers: readonly string[]
 ): Promise<ExtractedReportRow[]> => {
+  const extractionContent = reportContentHasVisualInput(reportContent)
+    ? getVisualOnlyReportContent(reportContent)
+    : reportContent;
   const response = await createChatCompletion({
     model: ANALYSIS_MODEL,
     messages: [
@@ -1464,7 +1490,7 @@ Return JSON with this exact shape:
   ]
 }`
           },
-          ...(Array.isArray(reportContent) ? reportContent : [reportContent])
+          ...(Array.isArray(extractionContent) ? extractionContent : [extractionContent])
         ]
       }
     ],
@@ -1490,6 +1516,9 @@ const extractStructuredReportRowsRetry = async (
   candidateRowTexts: string[],
   parsedRows: ExtractedReportRow[]
 ): Promise<ExtractedReportRow[]> => {
+  const extractionContent = reportContentHasVisualInput(reportContent)
+    ? getVisualOnlyReportContent(reportContent)
+    : reportContent;
   const extractedMarkerKeys = new Set(parsedRows.map((row) => normalizeForMatch(canonicalizeMarkerName(row.marker))));
   const likelyMissingRows = candidateRowTexts.filter((rowText) => {
     const normalized = normalizeForMatch(rowText);
@@ -1522,6 +1551,7 @@ Rules:
 - It is acceptable to return a row with a marker and value but no reference range if the range is not visible.
 - Do not invent missing markers that are not visibly present.
 - Never assign a value from one row to a different marker.
+- For image/PDF reports, use the visible row in the image as the source of truth.
 
 Return JSON with this exact shape:
 {
@@ -1539,7 +1569,7 @@ Return JSON with this exact shape:
   ]
 }`
           },
-          ...(Array.isArray(reportContent) ? reportContent : [reportContent])
+          ...(Array.isArray(extractionContent) ? extractionContent : [extractionContent])
         ]
       }
     ],
@@ -1565,6 +1595,9 @@ const validateExtractedRowsAgainstReport = async (
   rows: ExtractedReportRow[],
   candidateRowTexts: string[]
 ): Promise<ExtractedReportRow[]> => {
+  const extractionContent = reportContentHasVisualInput(reportContent)
+    ? getVisualOnlyReportContent(reportContent)
+    : reportContent;
   const rowList = rows
     .filter((row) => row.marker?.trim())
     .map(
@@ -1593,13 +1626,11 @@ const validateExtractedRowsAgainstReport = async (
             text: `Validate these extracted rows against the actual report:
 ${rowList}
 
-Candidate table rows detected from OCR/PDF layout:
-${candidateRowTexts.map((row, index) => `${index + 1}. ${row}`).join("\n")}
-
 Rules:
 - Keep only rows that are visibly present in the report.
 - Correct any extracted value, unit, or range that does not match the report.
 - Never use a number from a different row or a diagnostic note block.
+- For image/PDF reports, validate directly against the visible table rows in the uploaded image.
 - If you cannot confidently verify a value for a marker, omit that corrected row rather than guessing.
 - Do not invent new markers that were not already in the extracted list.
 
@@ -1619,7 +1650,7 @@ Return JSON with this exact shape:
   ]
 }`
           },
-          ...(Array.isArray(reportContent) ? reportContent : [reportContent])
+          ...(Array.isArray(extractionContent) ? extractionContent : [extractionContent])
         ]
       }
     ],
