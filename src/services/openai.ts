@@ -40,7 +40,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v30";
+const ANALYSIS_CACHE_VERSION = "v31";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -512,6 +512,22 @@ const collectTextFragments = (input: unknown): string[] => {
   return [];
 };
 
+const reportContentHasVisualInput = (input: unknown): boolean => {
+  if (Array.isArray(input)) {
+    return input.some((item) => reportContentHasVisualInput(item));
+  }
+
+  if (input && typeof input === "object") {
+    const record = input as Record<string, unknown>;
+    if (record.type === "image_url") {
+      return true;
+    }
+    return Object.values(record).some((value) => reportContentHasVisualInput(value));
+  }
+
+  return false;
+};
+
 const collectNormalizedReportLines = (reportContent: unknown) =>
   collectTextFragments(reportContent)
     .flatMap((fragment) => fragment.split(/\r?\n/))
@@ -550,6 +566,27 @@ const rowHasExplicitTextEvidence = (reportContent: unknown, row: ExtractedReport
 
     return hasValue || hasRange;
   });
+};
+
+const shouldKeepExtractedRow = (reportContent: unknown, row: ExtractedReportRow) => {
+  if (rowHasExplicitTextEvidence(reportContent, row)) {
+    return true;
+  }
+
+  if (!reportContentHasVisualInput(reportContent)) {
+    return false;
+  }
+
+  const canonicalMarker = canonicalizeMarkerName(row.marker || "");
+  if (!canonicalMarker) {
+    return false;
+  }
+
+  if (row.status === "comment") {
+    return Boolean(row.note?.trim());
+  }
+
+  return Boolean(row.value?.trim() || row.referenceRange?.trim() || row.unit?.trim());
 };
 
 const normalizeSourceRowBands = (
@@ -1269,7 +1306,7 @@ Return JSON with this exact shape:
     (row) =>
       typeof row?.marker === "string" &&
       row.marker.trim().length > 0 &&
-      rowHasExplicitTextEvidence(reportContent, row)
+      shouldKeepExtractedRow(reportContent, row)
   );
 };
 
@@ -1334,7 +1371,7 @@ Return JSON with this exact shape:
     (row) =>
       typeof row?.marker === "string" &&
       row.marker.trim().length > 0 &&
-      rowHasExplicitTextEvidence(reportContent, row)
+      shouldKeepExtractedRow(reportContent, row)
   );
 };
 
@@ -1409,7 +1446,7 @@ Return JSON with this exact shape:
     (row) =>
       typeof row?.marker === "string" &&
       row.marker.trim().length > 0 &&
-      rowHasExplicitTextEvidence(reportContent, row)
+      shouldKeepExtractedRow(reportContent, row)
   );
 };
 
