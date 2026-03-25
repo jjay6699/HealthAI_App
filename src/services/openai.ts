@@ -111,6 +111,7 @@ export interface ParsedReportRow {
   status: "high" | "low" | "normal" | "abnormal" | "flagged" | "comment" | "unknown";
   note?: string;
   explanation?: string;
+  source?: "deterministic" | "ai";
 }
 
 export interface BloodworkAnalysis {
@@ -153,6 +154,7 @@ interface ExtractedReportRow {
   status?: "high" | "low" | "normal" | "abnormal" | "flagged" | "comment" | "unknown";
   note?: string;
   whyItMatters?: string;
+  source?: "deterministic" | "ai";
 }
 
 interface SourceToken {
@@ -568,7 +570,40 @@ const rowHasExplicitTextEvidence = (reportContent: unknown, row: ExtractedReport
   });
 };
 
-const shouldKeepExtractedRow = (reportContent: unknown, row: ExtractedReportRow) => {
+const rowMatchesCandidateText = (row: ExtractedReportRow, candidateRowTexts: string[]) => {
+  if (candidateRowTexts.length === 0) return true;
+
+  const aliases = getMarkerAliases(canonicalizeMarkerName(row.marker || ""));
+  const matchingCandidates = candidateRowTexts.filter((candidate) => {
+    const normalizedCandidate = normalizeForMatch(candidate);
+    return aliases.some((alias) => normalizedCandidate.includes(alias));
+  });
+
+  if (matchingCandidates.length === 0) {
+    return false;
+  }
+
+  const valueText = normalizeForMatch(row.value || "");
+  const rangeNumbers = (row.referenceRange || "").match(/\d+(?:\.\d+)?/g) || [];
+  const unitText = normalizeForMatch(row.unit || "");
+
+  return matchingCandidates.some((candidate) => {
+    const normalizedCandidate = normalizeForMatch(candidate);
+    const hasValue = !valueText || normalizedCandidate.includes(valueText);
+    const hasRange =
+      !row.referenceRange ||
+      rangeNumbers.length === 0 ||
+      rangeNumbers.some((num) => normalizedCandidate.includes(num));
+    const hasUnit = !unitText || normalizedCandidate.includes(unitText);
+    return hasValue && (hasRange || hasUnit);
+  });
+};
+
+const shouldKeepExtractedRow = (
+  reportContent: unknown,
+  row: ExtractedReportRow,
+  candidateRowTexts: string[] = []
+) => {
   if (rowHasExplicitTextEvidence(reportContent, row)) {
     return true;
   }
@@ -586,7 +621,11 @@ const shouldKeepExtractedRow = (reportContent: unknown, row: ExtractedReportRow)
     return Boolean(row.note?.trim());
   }
 
-  return Boolean(row.value?.trim() || row.referenceRange?.trim() || row.unit?.trim());
+  if (!Boolean(row.value?.trim() || row.referenceRange?.trim() || row.unit?.trim())) {
+    return false;
+  }
+
+  return rowMatchesCandidateText(row, candidateRowTexts);
 };
 
 const normalizeSourceRowBands = (
@@ -813,7 +852,8 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
       referenceRange: normalizedRange,
       status,
       note: normalizedNote,
-      explanation: row.whyItMatters?.trim() || undefined
+      explanation: row.whyItMatters?.trim() || undefined,
+      source: row.source
     };
 
     const key = [
@@ -828,11 +868,13 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
     }
 
     const existingScore =
+      (existing.source === "deterministic" ? 6 : 0) +
       (existing.value ? 4 : 0) +
       (existing.referenceRange ? 3 : 0) +
       (existing.status !== "unknown" ? 2 : 0) +
       (existing.note ? 1 : 0);
     const parsedScore =
+      (row.source === "deterministic" ? 6 : 0) +
       (parsedRow.value ? 4 : 0) +
       (parsedRow.referenceRange ? 3 : 0) +
       (parsedRow.status !== "unknown" ? 2 : 0) +
@@ -945,7 +987,8 @@ const parseStructuredLineRow = (line: string, panel?: string): ExtractedReportRo
     referenceRange,
     status: valueMatch?.[1]?.toUpperCase() === "H" ? "high" : valueMatch?.[1]?.toUpperCase() === "L" ? "low" : "unknown",
     note,
-    whyItMatters: undefined
+    whyItMatters: undefined,
+    source: "deterministic"
   };
 };
 
@@ -1306,8 +1349,8 @@ Return JSON with this exact shape:
     (row) =>
       typeof row?.marker === "string" &&
       row.marker.trim().length > 0 &&
-      shouldKeepExtractedRow(reportContent, row)
-  );
+      shouldKeepExtractedRow(reportContent, row, candidateRowTexts)
+  ).map((row) => ({ ...row, source: "ai" as const }));
 };
 
 const extractExpectedMarkers = async (
@@ -1372,7 +1415,7 @@ Return JSON with this exact shape:
       typeof row?.marker === "string" &&
       row.marker.trim().length > 0 &&
       shouldKeepExtractedRow(reportContent, row)
-  );
+  ).map((row) => ({ ...row, source: "ai" as const }));
 };
 
 const extractStructuredReportRowsRetry = async (
@@ -1446,8 +1489,8 @@ Return JSON with this exact shape:
     (row) =>
       typeof row?.marker === "string" &&
       row.marker.trim().length > 0 &&
-      shouldKeepExtractedRow(reportContent, row)
-  );
+      shouldKeepExtractedRow(reportContent, row, candidateRowTexts)
+  ).map((row) => ({ ...row, source: "ai" as const }));
 };
 
 const finalizeExtractedRows = async (
