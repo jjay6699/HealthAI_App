@@ -84,14 +84,14 @@ export async function extractStructuredTextFromImage(
       }))
       .filter((word: OcrWord) => word.text) || [];
 
-  const rawLines =
-    buildLinesFromWords(rawWords).length > 0
-      ? buildLinesFromWords(rawWords)
-      : pageData.blocks?.flatMap((block: any) =>
-          block.paragraphs.flatMap((paragraph: any) =>
-            paragraph.lines.map((line: any) => normalizeLine(line.text))
-          )
-        ).filter(Boolean) || [];
+  const positionedLines = buildLinesFromWords(rawWords);
+  const paragraphLines =
+    pageData.blocks?.flatMap((block: any) =>
+      block.paragraphs.flatMap((paragraph: any) =>
+        paragraph.lines.map((line: any) => normalizeLine(line.text))
+      )
+    ).filter(Boolean) || [];
+  const rawLines = [...positionedLines, ...paragraphLines];
 
   const lines: string[] = [];
   const seen = new Set<string>();
