@@ -40,7 +40,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v23";
+const ANALYSIS_CACHE_VERSION = "v24";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -435,6 +435,31 @@ const getMarkerAliases = (marker: string) => {
   }
 
   return [...aliases];
+};
+
+const collectTextFragments = (input: unknown): string[] => {
+  if (typeof input === "string") {
+    return [input];
+  }
+
+  if (Array.isArray(input)) {
+    return input.flatMap((item) => collectTextFragments(item));
+  }
+
+  if (input && typeof input === "object") {
+    return Object.values(input as Record<string, unknown>).flatMap((value) =>
+      collectTextFragments(value)
+    );
+  }
+
+  return [];
+};
+
+const reportExplicitlyMentionsMarker = (reportContent: unknown, marker: string) => {
+  const normalizedReportText = normalizeForMatch(collectTextFragments(reportContent).join(" "));
+  if (!normalizedReportText) return false;
+
+  return getMarkerAliases(marker).some((alias) => normalizedReportText.includes(alias));
 };
 
 const getCanonicalMarkerId = (marker: string) => {
@@ -1115,7 +1140,11 @@ const backfillExpectedMarkers = async (
   }
 
   const recoveredRows = await extractExpectedMarkers(reportContent, language, missing).catch(() => []);
-  return [...extractedRows, ...recoveredRows];
+  const evidencedRows = recoveredRows.filter((row) =>
+    reportExplicitlyMentionsMarker(reportContent, row.marker)
+  );
+
+  return [...extractedRows, ...evidencedRows];
 };
 
 /**
