@@ -40,7 +40,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v26";
+const ANALYSIS_CACHE_VERSION = "v27";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -1571,7 +1571,8 @@ ${getLanguageInstruction(language)}`
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
     const deterministicRows = parseStructuredPdfRows(structuredPages);
-    const completedRows = deterministicRows;
+    const extractedRows = await extractStructuredReportRows(verificationReportContent, language).catch(() => []);
+    const completedRows = [...deterministicRows, ...extractedRows];
     const normalized = normalizeRecommendations(
       mergeAnalysisWithParsedRows(analysis, completedRows)
     );
@@ -1739,7 +1740,8 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const completedRows = imageOcr.rows;
+    const extractedRows = await extractStructuredReportRows(verificationReportContent, language).catch(() => []);
+    const completedRows = [...imageOcr.rows, ...extractedRows];
     const normalized = normalizeRecommendations(
       mergeAnalysisWithParsedRows(analysis, completedRows)
     );
@@ -1887,7 +1889,8 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const completedRows = imageOcr.rows;
+    const extractedRows = await extractStructuredReportRows(verificationReportContent, language).catch(() => []);
+    const completedRows = [...imageOcr.rows, ...extractedRows];
     const normalized = normalizeRecommendations(
       mergeAnalysisWithParsedRows(analysis, completedRows)
     );
@@ -2068,7 +2071,10 @@ ${getLanguageInstruction(language)}`
     }
 
     const analysis: BloodworkAnalysis = JSON.parse(content);
-    const normalized = normalizeRecommendations(mergeAnalysisWithParsedRows(analysis, deterministicRows));
+    const extractedRows = await extractStructuredReportRows(bundleContent, language).catch(() => []);
+    const normalized = normalizeRecommendations(
+      mergeAnalysisWithParsedRows(analysis, [...deterministicRows, ...extractedRows])
+    );
     const localized = await localizeBloodworkAnalysis(normalized, language);
     setCachedAnalysis(cacheKey, localized);
     return localized;
