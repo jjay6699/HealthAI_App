@@ -1646,8 +1646,9 @@ const finalizeExtractedRows = async (
   candidateRowTexts: string[],
   panelCounts: Record<string, number>
 ) => {
+  const prefersVisualTruth = reportContentHasVisualInput(reportContent);
   const extractedRows = await extractStructuredReportRows(reportContent, language, candidateRowTexts).catch(() => []);
-  let combinedRows = [...deterministicRows, ...extractedRows];
+  let combinedRows = prefersVisualTruth ? [...extractedRows] : [...deterministicRows, ...extractedRows];
   let completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
 
   if (completeness.level !== "complete") {
@@ -1672,6 +1673,20 @@ const finalizeExtractedRows = async (
   if (validatedRows.length > 0) {
     combinedRows = [...combinedRows, ...validatedRows];
     completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
+  }
+
+  if (prefersVisualTruth) {
+    const existingMarkerIds = new Set(
+      finalizeParsedRows(combinedRows).map((row) => row.markerId)
+    );
+    const deterministicFallbackRows = deterministicRows.filter((row) => {
+      const markerId = getCanonicalMarkerId(row.marker || "");
+      return markerId && !existingMarkerIds.has(markerId);
+    });
+    if (deterministicFallbackRows.length > 0) {
+      combinedRows = [...combinedRows, ...deterministicFallbackRows];
+      completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
+    }
   }
 
   return {
