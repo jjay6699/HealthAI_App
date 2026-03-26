@@ -1128,7 +1128,29 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
     }
   }
 
-  return [...deduped.values()];
+  const panelRank = (panel?: string) => {
+    const value = normalizeForMatch(panel || "");
+    if (/hematology|haematology/.test(value)) return 0;
+    if (/differential count/.test(value)) return 1;
+    if (/diabetes screen/.test(value)) return 2;
+    if (/kidney function|renal function/.test(value)) return 3;
+    if (/liver function/.test(value)) return 4;
+    if (/lipid profile|lipid studies/.test(value)) return 5;
+    return 10;
+  };
+
+  return [...deduped.values()].sort((a, b) => {
+    const byPanel = panelRank(a.panel) - panelRank(b.panel);
+    if (byPanel !== 0) return byPanel;
+
+    const aMarkerIndex = EXPECTED_COMMON_MARKERS.findIndex((marker) => marker === a.marker);
+    const bMarkerIndex = EXPECTED_COMMON_MARKERS.findIndex((marker) => marker === b.marker);
+    const aOrder = aMarkerIndex >= 0 ? aMarkerIndex : 999;
+    const bOrder = bMarkerIndex >= 0 ? bMarkerIndex : 999;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+
+    return a.marker.localeCompare(b.marker);
+  });
 };
 
 const buildDeterministicFindings = (rows: ParsedReportRow[]) => {
@@ -1283,7 +1305,13 @@ const deriveRowsFromCandidateTexts = (candidateRowTexts: string[]): ExtractedRep
   return candidateRowTexts
     .map((text) => parseStructuredLineRow(text))
     .filter((row): row is ExtractedReportRow => Boolean(row))
-    .map((row) => ({ ...row, source: "deterministic" as const }));
+    .map((row) => ({
+      ...row,
+      source: "deterministic" as const,
+      note: row.note
+        ? `${row.note} Derived from candidate row text.`
+        : "Derived from candidate row text."
+    }));
 };
 
 const mergeWithCandidateDerivedRows = (
