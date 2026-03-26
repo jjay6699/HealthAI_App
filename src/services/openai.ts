@@ -2645,6 +2645,17 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
       throw new Error("No pages found in PDF");
     }
 
+    // For multi-page PDFs, process page-by-page through the stabilized image pipeline
+    // to avoid sparse field extraction and cross-page confusion.
+    if (images.length > 1) {
+      return analyzeBloodworkImages(
+        images.map((pageImage) => ({
+          base64: pageImage,
+          fileType: "image/jpeg"
+        }))
+      );
+    }
+
   // Analyze all pages for full coverage
   const allPages = images;
 
