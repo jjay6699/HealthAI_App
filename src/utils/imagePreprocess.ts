@@ -182,7 +182,7 @@ export async function cropImageBands(
   const crops: Array<{ base64: string; mimeType: string }> = [];
   for (const band of safeBands) {
     const cropHeight = band.bottom - band.top;
-    const scale = Math.min(2.6, Math.max(1.2, 280 / cropHeight));
+    const scale = Math.min(3.4, Math.max(1.4, 340 / cropHeight));
     const width = Math.max(1, Math.round(image.width * scale));
     const height = Math.max(1, Math.round(cropHeight * scale));
 
