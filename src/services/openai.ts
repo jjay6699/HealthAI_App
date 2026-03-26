@@ -41,7 +41,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v36";
+const ANALYSIS_CACHE_VERSION = "v37";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -514,6 +514,12 @@ const getMarkerAliases = (marker: string) => {
   if (/platelet/.test(normalized)) {
     aliases.add("platelet count");
     aliases.add("platelets count");
+  }
+  if (/neutrophil|polymorph/.test(normalized)) {
+    aliases.add("neutrophils");
+    aliases.add("neutrophil");
+    aliases.add("polymorphs");
+    aliases.add("polymorph");
   }
   if (/alt|sgpt/.test(normalized)) {
     aliases.add("alt");
@@ -1365,7 +1371,14 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
   }
 
   const reconciledRows = reconcileDifferentialRows([...deduped.values()], sourceRows);
-  return reconciledRows;
+
+  // If the report explicitly has Polymorphs, avoid adding a duplicate Neutrophils row.
+  const hasPolymorphs = reconciledRows.some((row) => row.marker === "Polymorphs");
+  if (!hasPolymorphs) {
+    return reconciledRows;
+  }
+
+  return reconciledRows.filter((row) => row.marker !== "Neutrophils");
 };
 
 const buildDeterministicFindings = (rows: ParsedReportRow[]) => {
@@ -2020,15 +2033,15 @@ const extractDifferentialCountRowsFromVisualReport = async (
       {
         role: "system",
         content:
-          `You are a differential blood count transcription engine. Your only job is to read the report image and extract exact values for Neutrophils, Lymphocytes, Monocytes, Eosinophils, and Basophils. ${getLanguageInstruction(language)} Return valid JSON only.`
+          `You are a differential blood count transcription engine. Your only job is to read the report image and extract exact values for the printed differential markers: Neutrophils (or Polymorphs if that is the printed label), Lymphocytes, Monocytes, Eosinophils, and Basophils. ${getLanguageInstruction(language)} Return valid JSON only.`
       },
       {
         role: "user",
         content: [
           {
             type: "text",
-            text: `Extract only these five markers from the DIFFERENTIAL COUNT section:
-- Neutrophils
+            text: `Extract only these differential markers from the DIFFERENTIAL COUNT section:
+- Neutrophils (or Polymorphs if printed)
 - Lymphocytes
 - Monocytes
 - Eosinophils
@@ -2074,7 +2087,7 @@ Return JSON with this exact shape:
       (row) =>
         typeof row?.marker === "string" &&
         row.marker.trim().length > 0 &&
-        /neutrophil|lymphocyte|monocyte|eosinophil|basophil/i.test(row.marker) &&
+        /neutrophil|polymorph|lymphocyte|monocyte|eosinophil|basophil/i.test(row.marker) &&
         shouldKeepExtractedRow(reportContent, row)
     )
     .map((row) => ({ ...row, source: "ai" as const }));
