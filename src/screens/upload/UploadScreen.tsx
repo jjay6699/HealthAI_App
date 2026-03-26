@@ -282,6 +282,17 @@ const UploadScreen = () => {
       </Card>
 
       <Card style={styles.card}>
+        <SectionHeader title="Photo tips for best accuracy" />
+        <ul style={styles.captureTipsList}>
+          <li style={styles.captureTipItem}>Place the report on a flat surface (no curves or folds).</li>
+          <li style={styles.captureTipItem}>Use bright, even lighting and avoid glare.</li>
+          <li style={styles.captureTipItem}>Fill the frame with the table; take close‑ups if needed.</li>
+          <li style={styles.captureTipItem}>Hold the phone steady and keep the text in focus.</li>
+        </ul>
+        <p style={styles.captureTipNote}>Clear, flat, well‑lit photos reduce number reading errors.</p>
+      </Card>
+
+      <Card style={styles.card}>
         <SectionHeader title={t("upload.chooseSource")} />
         <button
           type="button"
@@ -621,6 +632,21 @@ const createStyles = (theme: AppTheme) => ({
   },
   timelineItem: {
     fontSize: 14,
+    color: theme.colors.textSecondary
+  },
+  captureTipsList: {
+    margin: 0,
+    paddingInlineStart: theme.spacing.lg,
+    display: "grid",
+    gap: theme.spacing.xs
+  },
+  captureTipItem: {
+    fontSize: 14,
+    color: theme.colors.textSecondary
+  },
+  captureTipNote: {
+    margin: 0,
+    fontSize: 12,
     color: theme.colors.textSecondary
   },
   pastRow: {
