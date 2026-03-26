@@ -29,6 +29,7 @@ const UploadScreen = () => {
   const [showDeviceConnect, setShowDeviceConnect] = useState(false);
   const [connectedIntegrations, setConnectedIntegrations] = useState<string[]>([]);
   const [activeIntegrationTab, setActiveIntegrationTab] = useState<IntegrationTab>("wearables");
+  const [queuedFiles, setQueuedFiles] = useState<File[]>([]);
   const wearableIntegrations = [
     { id: "apple-watch", name: "Apple Watch", description: t("upload.modal.integration.appleWatch") },
     { id: "garmin-watch", name: "Garmin Watch", description: t("upload.modal.integration.garminWatch") },
@@ -75,8 +76,7 @@ const UploadScreen = () => {
     return () => clearInterval(interval);
   }, [isAnalyzing, analysisSteps.length]);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
+  const analyzeFiles = async (files: File[]) => {
     if (files.length === 0) return;
 
     setIsAnalyzing(true);
@@ -178,6 +178,24 @@ const UploadScreen = () => {
       setError(err instanceof Error ? err.message : "Failed to analyze file. Please try again.");
       setIsAnalyzing(false);
     }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    setQueuedFiles((current) => [...current, ...files]);
+    setError(null);
+    event.target.value = "";
+  };
+
+  const handleAnalyzeQueuedFiles = async () => {
+    if (queuedFiles.length === 0 || isAnalyzing) return;
+    await analyzeFiles(queuedFiles);
+  };
+
+  const handleRemoveQueuedFile = (index: number) => {
+    setQueuedFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
   };
 
   const fileToBase64 = (file: File): Promise<string> => {
@@ -312,9 +330,34 @@ const UploadScreen = () => {
             style={{ display: "none" }}
             disabled={isAnalyzing}
           />
-          <span style={styles.optionTitle}>{t("upload.file.title")}</span>
-          <span style={styles.optionDescription}>{t("upload.file.description")}</span>
+          <span style={styles.optionTitle}>{queuedFiles.length > 0 ? "Add more files" : t("upload.file.title")}</span>
+          <span style={styles.optionDescription}>
+            {queuedFiles.length > 0 ? "You can keep adding files in order before analyzing." : t("upload.file.description")}
+          </span>
         </label>
+
+        {queuedFiles.length > 0 && (
+          <div style={styles.queueContainer}>
+            <p style={styles.queueTitle}>Selected files ({queuedFiles.length})</p>
+            <div style={styles.queueList}>
+              {queuedFiles.map((file, index) => (
+                <div key={`${file.name}-${file.size}-${index}`} style={styles.queueItem}>
+                  <span style={styles.queueItemText}>{`${index + 1}. ${file.name}`}</span>
+                  <button type="button" style={styles.queueRemoveButton} onClick={() => handleRemoveQueuedFile(index)}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+            <Button
+              title={`Analyze ${queuedFiles.length} file${queuedFiles.length > 1 ? "s" : ""}`}
+              onClick={handleAnalyzeQueuedFiles}
+              fullWidth
+              disabled={isAnalyzing || queuedFiles.length === 0}
+            />
+          </div>
+        )}
+
         <button type="button" style={{ ...styles.optionButton, ...styles.disabled }} disabled>
           <span style={{ ...styles.optionTitle, ...styles.disabledText }}>{t("upload.doctors.title")}</span>
           <span style={{ ...styles.optionDescription, ...styles.disabledText }}>{t("upload.doctors.description")}</span>
@@ -648,6 +691,51 @@ const createStyles = (theme: AppTheme) => ({
     margin: 0,
     fontSize: 12,
     color: theme.colors.textSecondary
+  },
+  queueContainer: {
+    display: "grid",
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.lg,
+    border: `1px solid ${theme.colors.divider}`,
+    background: theme.colors.background
+  },
+  queueTitle: {
+    margin: 0,
+    fontSize: 13,
+    fontWeight: 700,
+    color: theme.colors.text
+  },
+  queueList: {
+    display: "grid",
+    gap: theme.spacing.xs
+  },
+  queueItem: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm,
+    padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+    borderRadius: theme.radii.md,
+    border: `1px solid ${theme.colors.divider}`,
+    background: theme.colors.surface
+  },
+  queueItemText: {
+    fontSize: 13,
+    color: theme.colors.text,
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap" as const
+  },
+  queueRemoveButton: {
+    border: "none",
+    background: "transparent",
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer",
+    padding: 0
   },
   pastRow: {
     display: "flex",
