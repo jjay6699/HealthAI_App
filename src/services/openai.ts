@@ -41,7 +41,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v35";
+const ANALYSIS_CACHE_VERSION = "v36";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -256,7 +256,17 @@ const MARKER_DEFINITIONS: Array<{ marker: string; patterns: RegExp[] }> = [
   { marker: "Absolute Monocyte Count", patterns: [/^absolute monocyte count\b/i] },
   { marker: "Absolute Eosinophil Count (AEC)", patterns: [/^absolute eosinophil count\s*\(aec\)\b/i, /^absolute eosinophil count\b/i] },
   { marker: "Absolute Basophil Count", patterns: [/^absolute basophil count\b/i, /^absolute basophils count\b/i, /^absolute basophils\b/i] },
-  { marker: "Platelets Count", patterns: [/^platelets count\b/i, /^platelet count\b/i, /^platelet\b/i] }
+  { marker: "Platelets Count", patterns: [/^platelets count\b/i, /^platelet count\b/i, /^platelet\b/i] },
+  { marker: "URINE MICROALBUMIN", patterns: [/^urine microalbumin\b/i] },
+  { marker: "URINE CREATININE", patterns: [/^urine creatinine\b/i] },
+  {
+    marker: "MICROALB:CREAT RATIO",
+    patterns: [
+      /^microalb\s*[:\/]\s*creat\s*ratio\b/i,
+      /^microalbumin\s*[:\/]\s*creat\s*ratio\b/i,
+      /^microalbumin\s*[:\/]\s*creatinine\s*ratio\b/i
+    ]
+  }
 ];
 
 const PANEL_PATTERNS = [
@@ -499,6 +509,18 @@ const getMarkerAliases = (marker: string) => {
   }
   if (/alp/.test(normalized)) {
     aliases.add("alp");
+  }
+  if (/urine microalbumin|microalbumin urine/.test(normalized)) {
+    aliases.add("urine microalbumin");
+    aliases.add("microalbumin");
+  }
+  if (/urine creatinine|creatinine urine/.test(normalized)) {
+    aliases.add("urine creatinine");
+  }
+  if (/microalb creat ratio|microalbumin creat ratio|microalbumin creatinine ratio/.test(normalized)) {
+    aliases.add("microalb creat ratio");
+    aliases.add("microalbumin creat ratio");
+    aliases.add("microalbumin creatinine ratio");
   }
 
   return [...aliases];
