@@ -1371,14 +1371,30 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
   }
 
   const reconciledRows = reconcileDifferentialRows([...deduped.values()], sourceRows);
+  return reconciledRows;
+};
 
-  // If the report explicitly has Polymorphs, avoid adding a duplicate Neutrophils row.
-  const hasPolymorphs = reconciledRows.some((row) => row.marker === "Polymorphs");
-  if (!hasPolymorphs) {
-    return reconciledRows;
+const enforceDifferentialLabelStrictness = (
+  rows: ExtractedReportRow[],
+  candidateRowTexts: string[]
+): ExtractedReportRow[] => {
+  const normalizedCandidates = candidateRowTexts.map((text) => normalizeForMatch(text));
+  const hasPolymorphLabel = normalizedCandidates.some((line) => /\bpolymorphs?\b/.test(line));
+  const hasNeutrophilLabel = normalizedCandidates.some((line) => /\bneutrophils?\b/.test(line));
+
+  // Keep labels exactly as printed in report candidates.
+  // If report shows only Polymorphs, do not add Neutrophils.
+  if (hasPolymorphLabel && !hasNeutrophilLabel) {
+    return rows.filter((row) => canonicalizeMarkerName(row.marker || "") !== "Neutrophils");
   }
 
-  return reconciledRows.filter((row) => row.marker !== "Neutrophils");
+  // If report shows only Neutrophils, do not add Polymorphs.
+  if (hasNeutrophilLabel && !hasPolymorphLabel) {
+    return rows.filter((row) => canonicalizeMarkerName(row.marker || "") !== "Polymorphs");
+  }
+
+  // If both are explicitly present, keep both.
+  return rows;
 };
 
 const buildDeterministicFindings = (rows: ParsedReportRow[]) => {
@@ -2357,6 +2373,8 @@ const finalizeExtractedRows = async (
       completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
     }
 
+    combinedRows = enforceDifferentialLabelStrictness(combinedRows, candidateRowTexts);
+
     return {
       combinedRows,
       candidateRowTexts,
@@ -2392,6 +2410,8 @@ const finalizeExtractedRows = async (
     combinedRows = [...combinedRows, ...validatedRows];
     completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
   }
+
+  combinedRows = enforceDifferentialLabelStrictness(combinedRows, candidateRowTexts);
 
   return {
     combinedRows,
