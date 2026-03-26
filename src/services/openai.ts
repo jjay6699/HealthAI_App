@@ -41,7 +41,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v34";
+const ANALYSIS_CACHE_VERSION = "v35";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -595,6 +595,41 @@ const getPrimaryVisualReportContent = (reportContent: unknown, maxImages = 8) =>
   ];
 };
 
+const getFirstPagePrimaryVisualReportContent = (reportContent: unknown, imagesPerPage = 3) => {
+  if (!Array.isArray(reportContent)) {
+    return reportContent;
+  }
+
+  const boundaryIndex = reportContent.findIndex(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      (item as { type?: string; text?: string }).type === "text" &&
+      (item as { type?: string; text?: string }).text === VISUAL_PRIMARY_BOUNDARY_TEXT
+  );
+
+  const sourceItems = boundaryIndex >= 0 ? reportContent.slice(0, boundaryIndex) : reportContent;
+  const nonImageItems = sourceItems.filter(
+    (item) => !(item && typeof item === "object" && (item as { type?: string }).type === "image_url")
+  );
+  const imageItems = sourceItems.filter(
+    (item) => item && typeof item === "object" && (item as { type?: string }).type === "image_url"
+  );
+
+  if (imageItems.length <= imagesPerPage) {
+    return sourceItems;
+  }
+
+  return [
+    ...nonImageItems,
+    {
+      type: "text" as const,
+      text: "Use only first-page images for Differential Count disambiguation."
+    },
+    ...imageItems.slice(0, imagesPerPage)
+  ];
+};
+
 const collectNormalizedReportLines = (reportContent: unknown) =>
   collectTextFragments(reportContent)
     .flatMap((fragment) => fragment.split(/\r?\n/))
@@ -1043,6 +1078,175 @@ const getStatusConsistencyScore = (value?: string, referenceRange?: string, stat
   return -1;
 };
 
+const DIFFERENTIAL_MARKERS = [
+  "Neutrophils",
+  "Lymphocytes",
+  "Monocytes",
+  "Eosinophils",
+  "Basophils"
+] as const;
+
+const DIFFERENTIAL_MARKER_SET = new Set(DIFFERENTIAL_MARKERS);
+
+const getRowSourceScore = (source?: ParsedReportRow["source"]) =>
+  source === "deterministic" ? 3 : source === "validated" ? 2 : source === "ai" ? 1 : 0;
+
+const toParsedRow = (row: ExtractedReportRow): ParsedReportRow | null => {
+  if (row.status === "comment") return null;
+
+  const marker = canonicalizeMarkerName(row.marker || "");
+  if (!marker) return null;
+
+  return {
+    markerId: getCanonicalMarkerId(marker),
+    panel: row.panel?.trim() || undefined,
+    marker,
+    value: row.value?.trim() || undefined,
+    unit: row.unit?.trim() || undefined,
+    referenceRange: row.referenceRange?.trim() || undefined,
+    status: inferRowStatus(row) || "unknown",
+    note: row.note?.trim() || undefined,
+    explanation: row.whyItMatters?.trim() || undefined,
+    source: row.source
+  };
+};
+
+const reconcileDifferentialRows = (
+  rows: ParsedReportRow[],
+  sourceRows: ExtractedReportRow[]
+): ParsedReportRow[] => {
+  const currentByMarker = new Map(rows.map((row) => [row.marker, row]));
+  const missingMarkers = DIFFERENTIAL_MARKERS.filter((marker) => !currentByMarker.has(marker));
+  if (missingMarkers.length > 0) {
+    return rows;
+  }
+
+  const candidatesByMarker = new Map<typeof DIFFERENTIAL_MARKERS[number], ParsedReportRow[]>();
+  for (const marker of DIFFERENTIAL_MARKERS) {
+    candidatesByMarker.set(marker, []);
+  }
+
+  const addCandidate = (candidate: ParsedReportRow) => {
+    if (!DIFFERENTIAL_MARKER_SET.has(candidate.marker as typeof DIFFERENTIAL_MARKERS[number])) return;
+    const marker = candidate.marker as typeof DIFFERENTIAL_MARKERS[number];
+    const numericValue = parseNumericValue(candidate.value);
+    if (numericValue === null || numericValue < 0 || numericValue > 100) return;
+    const list = candidatesByMarker.get(marker);
+    if (!list) return;
+
+    const duplicate = list.find((existing) => {
+      const existingValue = parseNumericValue(existing.value);
+      return existingValue !== null && Math.abs(existingValue - numericValue) < 0.0001;
+    });
+
+    if (!duplicate) {
+      list.push(candidate);
+      return;
+    }
+
+    const existingScore =
+      getRowSourceScore(duplicate.source) +
+      (duplicate.referenceRange ? 2 : 0) +
+      (duplicate.unit ? 1 : 0) +
+      getStatusConsistencyScore(duplicate.value, duplicate.referenceRange, duplicate.status);
+    const incomingScore =
+      getRowSourceScore(candidate.source) +
+      (candidate.referenceRange ? 2 : 0) +
+      (candidate.unit ? 1 : 0) +
+      getStatusConsistencyScore(candidate.value, candidate.referenceRange, candidate.status);
+
+    if (incomingScore > existingScore) {
+      const index = list.indexOf(duplicate);
+      list[index] = candidate;
+    }
+  };
+
+  for (const sourceRow of sourceRows) {
+    const parsed = toParsedRow(sourceRow);
+    if (parsed) addCandidate(parsed);
+  }
+
+  for (const marker of DIFFERENTIAL_MARKERS) {
+    const current = currentByMarker.get(marker);
+    if (current) addCandidate(current);
+  }
+
+  const markersWithSparseCandidates = DIFFERENTIAL_MARKERS.filter((marker) => {
+    const candidates = candidatesByMarker.get(marker) || [];
+    return candidates.length <= 1;
+  });
+
+  if (markersWithSparseCandidates.length > 0) {
+    return rows;
+  }
+
+  const candidateMatrix = DIFFERENTIAL_MARKERS.map((marker) =>
+    (candidatesByMarker.get(marker) || [])
+      .sort((a, b) => {
+        const aScore =
+          getRowSourceScore(a.source) +
+          (a.referenceRange ? 2 : 0) +
+          (a.unit ? 1 : 0) +
+          getStatusConsistencyScore(a.value, a.referenceRange, a.status);
+        const bScore =
+          getRowSourceScore(b.source) +
+          (b.referenceRange ? 2 : 0) +
+          (b.unit ? 1 : 0) +
+          getStatusConsistencyScore(b.value, b.referenceRange, b.status);
+        return bScore - aScore;
+      })
+      .slice(0, 4)
+  );
+
+  let bestCombo: ParsedReportRow[] = [];
+  let hasBestCombo = false;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  const dfs = (index: number, acc: ParsedReportRow[]) => {
+    if (index >= candidateMatrix.length) {
+      const values = acc.map((row) => parseNumericValue(row.value)).filter((value): value is number => value !== null);
+      if (values.length !== DIFFERENTIAL_MARKERS.length) return;
+      const sum = values.reduce((total, value) => total + value, 0);
+
+      const consistency = acc.reduce(
+        (total, row) => total + getStatusConsistencyScore(row.value, row.referenceRange, row.status),
+        0
+      );
+      const quality = acc.reduce(
+        (total, row) =>
+          total +
+          getRowSourceScore(row.source) +
+          (row.referenceRange ? 2 : 0) +
+          (row.unit ? 1 : 0),
+        0
+      );
+
+      const score = quality + consistency * 2 - Math.abs(sum - 100) * 6;
+      if (score > bestScore) {
+        bestScore = score;
+        hasBestCombo = true;
+        bestCombo = [...acc];
+      }
+      return;
+    }
+
+    for (const candidate of candidateMatrix[index]) {
+      acc.push(candidate);
+      dfs(index + 1, acc);
+      acc.pop();
+    }
+  };
+
+  dfs(0, []);
+
+  if (!hasBestCombo || bestCombo.length === 0) {
+    return rows;
+  }
+
+  const bestByMarker = new Map(bestCombo.map((row) => [row.marker, row]));
+  return rows.map((row) => bestByMarker.get(row.marker) || row);
+};
+
 const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
   const deduped = new Map<string, ParsedReportRow>();
   const sourceRows = [...rows];
@@ -1052,33 +1256,12 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
       continue;
     }
 
-    const marker = canonicalizeMarkerName(row.marker || "");
-    if (!marker) continue;
-    const markerId = getCanonicalMarkerId(marker);
-
-    const normalizedPanel = row.panel?.trim() || undefined;
-    const normalizedValue = row.value?.trim() || undefined;
-    const normalizedUnit = row.unit?.trim() || undefined;
-    const normalizedRange = row.referenceRange?.trim() || undefined;
-    const normalizedNote = row.note?.trim() || undefined;
-    const status = inferRowStatus(row) || "unknown";
-
-    const parsedRow: ParsedReportRow = {
-      markerId,
-      panel: normalizedPanel,
-      marker,
-      value: normalizedValue,
-      unit: normalizedUnit,
-      referenceRange: normalizedRange,
-      status,
-      note: normalizedNote,
-      explanation: row.whyItMatters?.trim() || undefined,
-      source: row.source
-    };
+    const parsedRow = toParsedRow(row);
+    if (!parsedRow) continue;
 
     const key = [
-      markerId,
-      status === "comment" ? normalizedNote || "" : ""
+      parsedRow.markerId,
+      parsedRow.status === "comment" ? parsedRow.note || "" : ""
     ].join("|");
 
     const existing = deduped.get(key);
@@ -1181,7 +1364,9 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
     return index >= 0 ? index : 999;
   };
 
-  return [...deduped.values()].sort((a, b) => {
+  const reconciledRows = reconcileDifferentialRows([...deduped.values()], sourceRows);
+
+  return reconciledRows.sort((a, b) => {
     const byMarkerOrder = markerOrderIndex(a.marker) - markerOrderIndex(b.marker);
     if (byMarkerOrder !== 0) return byMarkerOrder;
 
@@ -2160,7 +2345,7 @@ const finalizeExtractedRows = async (
     }
 
     const differentialRows = await extractDifferentialCountRowsFromVisualReport(
-      primaryVisualContent,
+      getFirstPagePrimaryVisualReportContent(primaryVisualContent, 3),
       language
     ).catch(() => []);
     if (differentialRows.length > 0) {
