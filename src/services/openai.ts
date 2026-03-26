@@ -41,7 +41,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v37";
+const ANALYSIS_CACHE_VERSION = "v38";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -1097,16 +1097,6 @@ const buildRowConcern = (row: ExtractedReportRow) => {
 };
 
 const buildParsedRowExplanation = (row: ParsedReportRow) => {
-  const existingExplanation = row.explanation?.trim();
-  const looksGeneric =
-    !!existingExplanation &&
-    /may need follow-?up|overall health picture|area worth monitoring more closely|outside the expected pattern|within the printed lab range/i.test(
-      existingExplanation
-    );
-
-  // Keep model explanation only when it is specific and non-generic.
-  if (existingExplanation && !looksGeneric) return existingExplanation;
-
   const valueText = row.value ? `${row.value}${row.unit ? ` ${row.unit}` : ""}` : "this value";
   const rangeText = row.referenceRange ? ` (lab range: ${row.referenceRange})` : "";
 
