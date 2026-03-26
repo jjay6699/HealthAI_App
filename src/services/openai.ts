@@ -727,7 +727,7 @@ const buildRowCropImageParts = async (
   const parts: Array<{ type: "image_url"; image_url: { url: string; detail: "high" } }> = [];
 
   for (const page of pages) {
-    const bands = buildRowCropBands(page.rowBands).slice(0, 6);
+    const bands = buildRowCropBands(page.rowBands).slice(0, 10);
     if (bands.length === 0) {
       continue;
     }
