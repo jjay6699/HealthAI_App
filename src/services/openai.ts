@@ -1128,26 +1128,65 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
     }
   }
 
-  const panelRank = (panel?: string) => {
-    const value = normalizeForMatch(panel || "");
-    if (/hematology|haematology/.test(value)) return 0;
-    if (/differential count/.test(value)) return 1;
-    if (/diabetes screen/.test(value)) return 2;
-    if (/kidney function|renal function/.test(value)) return 3;
-    if (/liver function/.test(value)) return 4;
-    if (/lipid profile|lipid studies/.test(value)) return 5;
-    return 10;
+  const markerDisplayOrder = [
+    "ESR",
+    "RBC Count",
+    "Hemoglobin",
+    "PCV (HCT)",
+    "MCV",
+    "MCH",
+    "MCHC",
+    "RDW (CV)",
+    "Platelets Count",
+    "Total WBC Count",
+    "Neutrophils",
+    "Lymphocytes",
+    "Monocytes",
+    "Eosinophils",
+    "Basophils",
+    "Glucose",
+    "HbA1c",
+    "Urea",
+    "Creatinine",
+    "eGFR",
+    "Calcium",
+    "Inorganic Phosphate",
+    "Uric Acid",
+    "Sodium",
+    "Potassium",
+    "Chloride",
+    "MICROALB:CREAT RATIO",
+    "URINE CREATININE",
+    "URINE MICROALBUMIN",
+    "Total Cholesterol",
+    "Triglycerides",
+    "HDL Cholesterol",
+    "LDL Cholesterol",
+    "Non HDL",
+    "hs C-Reactive Protein",
+    "Total Bilirubin",
+    "Total Protein",
+    "Albumin",
+    "Globulin",
+    "A/G ratio",
+    "ALP",
+    "ALT (SGPT)",
+    "AST (SGOT)",
+    "GGT"
+  ].map((marker) => normalizeForMatch(marker));
+
+  const markerOrderIndex = (marker: string) => {
+    const normalized = normalizeForMatch(marker);
+    const index = markerDisplayOrder.findIndex((item) => item === normalized);
+    return index >= 0 ? index : 999;
   };
 
   return [...deduped.values()].sort((a, b) => {
-    const byPanel = panelRank(a.panel) - panelRank(b.panel);
-    if (byPanel !== 0) return byPanel;
+    const byMarkerOrder = markerOrderIndex(a.marker) - markerOrderIndex(b.marker);
+    if (byMarkerOrder !== 0) return byMarkerOrder;
 
-    const aMarkerIndex = EXPECTED_COMMON_MARKERS.findIndex((marker) => marker === a.marker);
-    const bMarkerIndex = EXPECTED_COMMON_MARKERS.findIndex((marker) => marker === b.marker);
-    const aOrder = aMarkerIndex >= 0 ? aMarkerIndex : 999;
-    const bOrder = bMarkerIndex >= 0 ? bMarkerIndex : 999;
-    if (aOrder !== bOrder) return aOrder - bOrder;
+    const byPanel = (a.panel || "").localeCompare(b.panel || "");
+    if (byPanel !== 0) return byPanel;
 
     return a.marker.localeCompare(b.marker);
   });
