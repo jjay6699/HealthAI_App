@@ -2616,7 +2616,34 @@ export async function analyzeBloodworkFile(
         rowBands: imageOcr.rowBands
       }
     ]);
-    const rowCropParts = [...rowCropPartsOriginal, ...rowCropPartsProcessed];
+    const splitBands = [
+      { top: 0, bottom: 0.42 },
+      { top: 0.3, bottom: 0.76 },
+      { top: 0.62, bottom: 1 }
+    ];
+    const yValues = imageOcr.rowBands
+      .map((row) => row.y)
+      .filter((y): y is number => typeof y === "number" && Number.isFinite(y));
+    const minY = yValues.length > 0 ? Math.max(0, Math.min(...yValues) - 40) : 0;
+    const maxY = yValues.length > 0 ? Math.max(...yValues) + 80 : 1800;
+    const span = Math.max(320, maxY - minY);
+
+    const splitCrops = await cropImageBands(
+      base64Image,
+      imageFormat,
+      splitBands.map((band) => ({
+        top: minY + band.top * span,
+        bottom: minY + band.bottom * span
+      }))
+    ).catch(() => []);
+    const splitImageParts = splitCrops.map((crop) => ({
+      type: "image_url" as const,
+      image_url: {
+        url: `data:${crop.mimeType};base64,${crop.base64}`,
+        detail: "high" as const
+      }
+    }));
+    const rowCropParts = [...splitImageParts, ...rowCropPartsOriginal, ...rowCropPartsProcessed];
     const verificationReportContent = [
       {
         type: "text" as const,
