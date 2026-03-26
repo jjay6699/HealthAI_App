@@ -1330,7 +1330,10 @@ const parseStructuredRowBands = (
       }
     }
 
-    const syntheticLine = currentAnchors ? buildSyntheticLineFromRowBand(band, currentAnchors) : null;
+    const shouldUseSyntheticLine = Boolean(currentAnchors) && !/differential count/i.test(currentPanel || "");
+    const syntheticLine = shouldUseSyntheticLine && currentAnchors
+      ? buildSyntheticLineFromRowBand(band, currentAnchors)
+      : null;
     const parsed = chooseBestDeterministicRow(line, syntheticLine, currentPanel);
     if (parsed) {
       rows.push(parsed);
