@@ -1254,6 +1254,25 @@ const parseStructuredRowBands = (
   return { rows, candidateRowTexts, panelCounts };
 };
 
+const deriveRowsFromCandidateTexts = (candidateRowTexts: string[]): ExtractedReportRow[] => {
+  return candidateRowTexts
+    .map((text) => parseStructuredLineRow(text))
+    .filter((row): row is ExtractedReportRow => Boolean(row))
+    .map((row) => ({ ...row, source: "deterministic" as const }));
+};
+
+const mergeWithCandidateDerivedRows = (
+  rows: ExtractedReportRow[],
+  candidateRowTexts: string[]
+): ExtractedReportRow[] => {
+  const derivedRows = deriveRowsFromCandidateTexts(candidateRowTexts);
+  if (derivedRows.length === 0) {
+    return rows;
+  }
+
+  return [...rows, ...derivedRows];
+};
+
 const parseStructuredPdfRows = (
   pages: Array<{ pageNumber?: number; text: string; rows?: Array<{ y: number; text: string; tokens?: SourceToken[] }> }>
 ) => {
@@ -1343,10 +1362,12 @@ const mergeAnalysisWithParsedRows = (
   rows: ExtractedReportRow[],
   diagnostics?: { candidateRowTexts?: string[]; panelCounts?: Record<string, number> }
 ): BloodworkAnalysis => {
-  const parsedRows = finalizeParsedRows(rows);
+  const candidateRowTexts = diagnostics?.candidateRowTexts || [];
+  const mergedRows = mergeWithCandidateDerivedRows(rows, candidateRowTexts);
+  const parsedRows = finalizeParsedRows(mergedRows);
   const completeness = computeExtractionCompleteness(
-    rows,
-    diagnostics?.candidateRowTexts || [],
+    mergedRows,
+    candidateRowTexts,
     diagnostics?.panelCounts || {}
   );
   if (parsedRows.length === 0) {
@@ -1355,7 +1376,7 @@ const mergeAnalysisWithParsedRows = (
       extractionCompleteness: completeness.level,
       missingVisibleRowsCount: completeness.missingVisibleRowsCount,
       parsingDebug: {
-        rawRowCount: rows.length,
+        rawRowCount: mergedRows.length,
         finalRowCount: 0,
         candidateRowCount: diagnostics?.candidateRowTexts?.length || 0,
         panelCounts: diagnostics?.panelCounts || {}
@@ -1374,7 +1395,7 @@ const mergeAnalysisWithParsedRows = (
     extractionCompleteness: completeness.level,
     missingVisibleRowsCount: completeness.missingVisibleRowsCount,
     parsingDebug: {
-      rawRowCount: rows.length,
+      rawRowCount: mergedRows.length,
       finalRowCount: parsedRows.length,
       candidateRowCount: diagnostics?.candidateRowTexts?.length || 0,
       panelCounts: diagnostics?.panelCounts || {},
@@ -2704,11 +2725,26 @@ export async function analyzeBloodworkImages(
       }));
     })
   );
+  const focusImages = await Promise.all(
+    images.map(async (img) => {
+      const imageFormat = normalizeImageMimeType(img.fileType);
+      return createBloodworkFocusCrop(img.base64, imageFormat).catch(() => null);
+    })
+  );
 
   const imageParts = images.flatMap((img, index) => {
     const originalMimeType = normalizeImageMimeType(img.fileType);
     const processed = processedImages[index];
+    const focus = focusImages[index];
     return [
+      ...(focus
+        ? [
+            {
+              type: "image_url" as const,
+              image_url: { url: `data:${focus.mimeType};base64,${focus.base64}`, detail: "high" as const }
+            }
+          ]
+        : []),
       {
         type: "image_url" as const,
         image_url: { url: `data:${originalMimeType};base64,${img.base64}`, detail: "high" as const }
@@ -2745,7 +2781,7 @@ export async function analyzeBloodworkImages(
   const verificationReportContent = [
     {
       type: "text" as const,
-      text: "Multi-image bloodwork report. For each page, the original image appears before its enhanced version; use original as source of truth, and use enhancements/crops only to improve readability."
+      text: "Multi-image bloodwork report. For each page, table-focused crop (if present) appears first, then original image, then enhanced version; use original/focused table digits as source of truth, and use enhancements/crops only to improve readability."
     },
     ...imageParts,
     ...rowCropParts
