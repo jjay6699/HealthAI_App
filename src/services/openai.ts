@@ -3106,193 +3106,74 @@ ${getLanguageInstruction(language)}`
 export async function analyzeBloodworkImages(
   images: { base64: string; fileType: string }[]
 ): Promise<BloodworkAnalysis> {
-  const language = getCurrentLanguage();
-  const supplementsList = AVAILABLE_SUPPLEMENTS.map(
-    (s) => `${s.id}: ${s.name} - Benefits: ${s.benefits.join(", ")} - Key Nutrients: ${s.keyNutrients.join(", ")}`
-  ).join("\n");
-
-  const processedImages = await Promise.all(
-    images.map(async (img) => {
-      const imageFormat = normalizeImageMimeType(img.fileType);
-      return preprocessBloodworkImage(img.base64, imageFormat).catch(() => ({
-        base64: img.base64,
-        mimeType: imageFormat
-      }));
-    })
-  );
-  const focusImages = await Promise.all(
-    images.map(async (img) => {
-      const imageFormat = normalizeImageMimeType(img.fileType);
-      return createBloodworkFocusCrop(img.base64, imageFormat).catch(() => null);
-    })
-  );
-
-  const imageParts = images.flatMap((img, index) => {
-    const originalMimeType = normalizeImageMimeType(img.fileType);
-    const processed = processedImages[index];
-    const focus = focusImages[index];
-    return [
-      ...(focus
-        ? [
-            {
-              type: "image_url" as const,
-              image_url: { url: `data:${focus.mimeType};base64,${focus.base64}`, detail: "high" as const }
-            }
-          ]
-        : []),
-      {
-        type: "image_url" as const,
-        image_url: { url: `data:${originalMimeType};base64,${img.base64}`, detail: "high" as const }
-      },
-      {
-        type: "image_url" as const,
-        image_url: { url: `data:${processed.mimeType};base64,${processed.base64}`, detail: "high" as const }
-      }
-    ];
-  });
-  const imageOcr = await extractImageOcrBundle(
-    processedImages.map((img, index) => ({
-      base64: img.base64,
-      fileType: img.mimeType,
-      label: `Uploaded image ${index + 1}`
-    }))
-  );
-  const rowCropPartsProcessed = await buildRowCropImageParts(
-    processedImages.map((img, index) => ({
-      base64: img.base64,
-      mimeType: img.mimeType,
-      rowBands: imageOcr.rowBands.filter((row) => (row.pageNumber || 1) === index + 1)
-    }))
-  );
-  const rowCropPartsOriginal = await buildRowCropImageParts(
-    images.map((img, index) => ({
-      base64: img.base64,
-      mimeType: normalizeImageMimeType(img.fileType),
-      rowBands: imageOcr.rowBands.filter((row) => (row.pageNumber || 1) === index + 1)
-    }))
-  );
-  const rowCropParts = [...rowCropPartsOriginal, ...rowCropPartsProcessed];
-
-  const verificationReportContent = [
-    {
-      type: "text" as const,
-      text: "Multi-image bloodwork report. For each page, table-focused crop (if present) appears first, then original image, then enhanced version; use original/focused table digits as source of truth, and use enhancements/crops only to improve readability."
-    },
-    ...imageParts,
-    {
-      type: "text" as const,
-      text: VISUAL_PRIMARY_BOUNDARY_TEXT
-    },
-    ...rowCropParts
-  ];
-
-  try {
-    const response = await createChatCompletion({
-      model: ANALYSIS_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized nutrition recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Analyze these bloodwork report images and extract all biomarker values with their units and reference ranges.
-
-AVAILABLE NUTRITION PRODUCTS:
-${supplementsList}
-
-Please provide:
-1. A brief summary of the overall health status
-2. Key concerns or areas that need attention (ONLY values outside reference ranges)
-3. Positive findings or strengths (ONLY values clearly within healthy ranges)
-4. Specific nutrition recommendations from our list that would address any deficiencies or support optimal health
-5. Detailed insights by health category. For each abnormal or noteworthy issue, explain in plain consumer-friendly language what was found and why it may matter in everyday terms.
-
-${BLOODWORK_EXTRACTION_RULES}
-
-Use layman-friendly language (avoid medical jargon, define any necessary terms).
-
-Only recommend items from AVAILABLE SUPPLEMENTS. Do NOT recommend branded blends (e.g., Just Slim, Just Mushroom) or anything not listed.
-Recommendations must be between 3 and 8 items. Increase the number of recommendations when there are multiple or severe deficiencies. Each supplementName must exactly match a name from AVAILABLE SUPPLEMENTS.
-Each recommendation MUST cite the specific abnormal biomarker(s) and their values/ranges that justify it. Do not recommend anything without a clear, abnormal biomarker-based reason. Do not include generic or default nutrition products.
-Base blend rule: include exactly one protein base (Pea Protein Original OR Pea Protein Cacao) and exactly one fiber base (Australian Instant Oats OR Organic Psyllium Husk) as part of the recommendations, unless contraindicated by the bloodwork or user sensitivities.
-
-IMPORTANT: For dosage recommendations, provide ACCURATE daily intake amounts based on scientific evidence and the severity of deficiency. Only use the guidance below for nutrition products you already decided to recommend; do NOT use it to choose nutrition products.
-Use grams only (e.g., "3 g per serving size"). Do NOT use tablespoons/teaspoons or capsules in the dosage string.
-Also include numeric field dosageGramsPerDay (number of grams per serving size).
-Ensure the total daily grams across all recommended nutrition products sums to 10 g per serving size (2 tbsp total blend).
-
-ADJUST dosages based on:
-- Severity of deficiency (higher for severe deficiencies)
-- Multiple deficiencies (may need higher amounts)
-- Age, weight, and health status
-- Specific biomarker levels
-
-Do NOT use generic "5g per serving size" for everything - be specific and evidence-based!
-
-Respond in JSON format with this structure:
-{
-  "summary": "Brief overall health summary",
-  "concerns": ["concern 1", "concern 2"],
-  "strengths": ["strength 1", "strength 2"],
-  "recommendations": [
-    {
-      "supplementId": "supplement-id",
-      "supplementName": "Nutrition Product Name",
-      "reason": "Why this nutrition product is recommended based on the bloodwork",
-      "priority": "high|medium|low",
-      "dosage": "Daily intake amount in grams (e.g., '5 g per serving size')",
-      "dosageGramsPerDay": 5
-    }
-  ],
-  "detailedInsights": [
-    {
-      "category": "Category name (e.g., Cardiovascular, Immune System)",
-      "findings": "What the bloodwork shows",
-      "impact": "What this means for health"
-    }
-  ]
-}
-
-${getLanguageInstruction(language)}`
-            },
-            ...imageParts
-          ]
-        }
-      ],
-      response_format: { type: "json_object" },
-      temperature: ANALYSIS_TEMPERATURE,
-      max_tokens: 2000
-    });
-
-    const content = response.choices[0].message.content;
-    if (!content) {
-      throw new Error("No response from OpenAI");
-    }
-
-    const analysis: BloodworkAnalysis = JSON.parse(content);
-    const finalizedRows = await finalizeExtractedRows(
-      verificationReportContent,
-      language,
-      imageOcr.rows,
-      imageOcr.candidateRowTexts,
-      imageOcr.panelCounts
-    );
-    const normalized = normalizeRecommendations(
-      mergeAnalysisWithParsedRows(analysis, finalizedRows.combinedRows, {
-        candidateRowTexts: finalizedRows.candidateRowTexts,
-        panelCounts: finalizedRows.panelCounts
-      })
-    );
-    const localized = await localizeBloodworkAnalysis(normalized, language);
-    return localized;
-  } catch (error) {
-    console.error("Error analyzing bloodwork images:", error);
-    throw new Error("Failed to analyze bloodwork images. Please ensure the images are clear and contain bloodwork data.");
+  if (images.length === 0) {
+    throw new Error("No images provided for analysis.");
   }
+
+  // Process each image independently to avoid cross-page value bleed (especially differential counts).
+  const perPageAnalyses: BloodworkAnalysis[] = [];
+  for (const image of images) {
+    const pageAnalysis = await analyzeBloodworkFile(image.base64, image.fileType);
+    perPageAnalyses.push(pageAnalysis);
+  }
+
+  const joinedSummary = perPageAnalyses
+    .map((analysis, index) => `Page ${index + 1}: ${analysis.summary}`)
+    .join(" ");
+
+  const concerns = perPageAnalyses.flatMap((analysis, index) =>
+    (analysis.concerns || []).map((line) => `Page ${index + 1}: ${line}`)
+  );
+  const strengths = perPageAnalyses.flatMap((analysis, index) =>
+    (analysis.strengths || []).map((line) => `Page ${index + 1}: ${line}`)
+  );
+
+  const detailedInsights = perPageAnalyses.flatMap((analysis, index) =>
+    (analysis.detailedInsights || []).map((insight) => ({
+      category: `Page ${index + 1}${insight.category ? ` - ${insight.category}` : ""}`,
+      findings: insight.findings,
+      impact: insight.impact
+    }))
+  );
+
+  const parsedRows = perPageAnalyses.flatMap((analysis, index) =>
+    (analysis.parsedRows || []).map((row) => ({
+      ...row,
+      panel: `Page ${index + 1}${row.panel ? ` - ${row.panel}` : ""}`
+    }))
+  );
+
+  const recommendationMap = new Map<string, SupplementRecommendation>();
+  for (const analysis of perPageAnalyses) {
+    for (const recommendation of analysis.recommendations || []) {
+      if (!recommendationMap.has(recommendation.supplementId)) {
+        recommendationMap.set(recommendation.supplementId, recommendation);
+      }
+    }
+  }
+
+  const extractionLevels = perPageAnalyses.map((analysis) => analysis.extractionCompleteness);
+  const extractionCompleteness = extractionLevels.includes("low-confidence")
+    ? "low-confidence"
+    : extractionLevels.includes("partial")
+    ? "partial"
+    : "complete";
+
+  const missingVisibleRowsCount = perPageAnalyses.reduce(
+    (total, analysis) => total + (analysis.missingVisibleRowsCount || 0),
+    0
+  );
+
+  return {
+    summary: joinedSummary || "Page-by-page analysis completed.",
+    concerns,
+    strengths,
+    recommendations: [...recommendationMap.values()].slice(0, 8),
+    detailedInsights,
+    parsedRows,
+    extractionCompleteness,
+    missingVisibleRowsCount
+  };
 }
 
 export async function analyzeHealthDocumentBundle(files: File[]): Promise<BloodworkAnalysis> {
