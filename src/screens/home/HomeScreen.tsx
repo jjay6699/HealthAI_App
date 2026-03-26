@@ -84,14 +84,32 @@ const HomeScreen = () => {
     });
   };
 
-  const latestInsights = (displayAnalysis?.detailedInsights || [])
+  const detailedInsights = (displayAnalysis?.detailedInsights || [])
+    .filter((insight) => (insight?.findings || "").trim().length > 0 || (insight?.impact || "").trim().length > 0)
     .slice(0, 2)
     .map((insight, index) => ({
-      id: `insight-${index}`,
-      title: insight.findings,
-      summary: insight.impact,
-      domain: insight.category
+      id: `insight-detailed-${index}`,
+      title: insight.findings || t("insights.summary"),
+      summary: insight.impact || displayAnalysis?.summary || "",
+      domain: insight.category || t("insights.detailed")
     }));
+
+  const fallbackInsights = [
+    ...(displayAnalysis?.concerns || []).slice(0, 1).map((concern, index) => ({
+      id: `insight-concern-${index}`,
+      title: concern,
+      summary: displayAnalysis?.summary || "",
+      domain: t("home.status.concerns")
+    })),
+    ...(displayAnalysis?.strengths || []).slice(0, 1).map((strength, index) => ({
+      id: `insight-strength-${index}`,
+      title: strength,
+      summary: displayAnalysis?.summary || "",
+      domain: t("insights.positive")
+    }))
+  ].slice(0, 2);
+
+  const latestInsights = detailedInsights.length > 0 ? detailedInsights : fallbackInsights;
 
   const concernCount = displayAnalysis?.concerns?.length || 0;
   const recommendationCount = displayAnalysis?.recommendations?.length || 0;
