@@ -41,7 +41,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v33";
+const ANALYSIS_CACHE_VERSION = "v34";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -1837,7 +1837,7 @@ const extractDifferentialCountRowsFromVisualReport = async (
   reportContent: unknown,
   language: Language
 ): Promise<ExtractedReportRow[]> => {
-  const extractionContent = getVisualOnlyReportContent(reportContent);
+  const extractionContent = getPrimaryVisualReportContent(reportContent, 8);
   const response = await createChatCompletion({
     model: ANALYSIS_MODEL,
     messages: [
@@ -1860,6 +1860,7 @@ const extractDifferentialCountRowsFromVisualReport = async (
 
 Rules:
 - Use only visible printed digits.
+- Use full-page original image digits as the source of truth; do not trust zoom crops if they conflict.
 - Do not borrow values from neighboring rows.
 - If uncertain, leave value blank rather than guessing.
 - Keep marker names exactly as printed where possible.
@@ -1900,7 +1901,7 @@ Return JSON with this exact shape:
         /neutrophil|lymphocyte|monocyte|eosinophil|basophil/i.test(row.marker) &&
         shouldKeepExtractedRow(reportContent, row)
     )
-    .map((row) => ({ ...row, source: "validated" as const }));
+    .map((row) => ({ ...row, source: "ai" as const }));
 };
 
 const extractExpectedMarkers = async (
@@ -2159,7 +2160,7 @@ const finalizeExtractedRows = async (
     }
 
     const differentialRows = await extractDifferentialCountRowsFromVisualReport(
-      reportContent,
+      primaryVisualContent,
       language
     ).catch(() => []);
     if (differentialRows.length > 0) {
