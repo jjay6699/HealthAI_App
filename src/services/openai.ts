@@ -246,7 +246,8 @@ const MARKER_DEFINITIONS: Array<{ marker: string; patterns: RegExp[] }> = [
   { marker: "MCHC", patterns: [/^mchc\b/i] },
   { marker: "RDW (CV)", patterns: [/^rdw\s*\(cv\)\b/i, /^rdw value\b/i, /^rdw\b/i] },
   { marker: "Total WBC Count", patterns: [/^total wbc count\b/i, /^wbc count\b/i, /^wbc\b/i, /^tlc\b/i, /^total leucocyte count\b/i, /^total leukocyte count\b/i] },
-  { marker: "Neutrophils", patterns: [/^neutrophils?\b/i, /^polymorphs\b/i] },
+  { marker: "Neutrophils", patterns: [/^neutrophils?\b/i] },
+  { marker: "Polymorphs", patterns: [/^polymorphs\b/i] },
   { marker: "Lymphocytes", patterns: [/^lymphocytes?\b/i] },
   { marker: "Monocytes", patterns: [/^monocytes?\b/i] },
   { marker: "Eosinophils", patterns: [/^eosinophils?\b/i] },
@@ -1346,70 +1347,8 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
     }
   }
 
-  const markerDisplayOrder = [
-    "ESR",
-    "RBC Count",
-    "Hemoglobin",
-    "PCV (HCT)",
-    "MCV",
-    "MCH",
-    "MCHC",
-    "RDW (CV)",
-    "Platelets Count",
-    "Total WBC Count",
-    "Neutrophils",
-    "Lymphocytes",
-    "Monocytes",
-    "Eosinophils",
-    "Basophils",
-    "Glucose",
-    "HbA1c",
-    "Urea",
-    "Creatinine",
-    "eGFR",
-    "Calcium",
-    "Inorganic Phosphate",
-    "Uric Acid",
-    "Sodium",
-    "Potassium",
-    "Chloride",
-    "MICROALB:CREAT RATIO",
-    "URINE CREATININE",
-    "URINE MICROALBUMIN",
-    "Total Cholesterol",
-    "Triglycerides",
-    "HDL Cholesterol",
-    "LDL Cholesterol",
-    "Non HDL",
-    "hs C-Reactive Protein",
-    "Total Bilirubin",
-    "Total Protein",
-    "Albumin",
-    "Globulin",
-    "A/G ratio",
-    "ALP",
-    "ALT (SGPT)",
-    "AST (SGOT)",
-    "GGT"
-  ].map((marker) => normalizeForMatch(marker));
-
-  const markerOrderIndex = (marker: string) => {
-    const normalized = normalizeForMatch(marker);
-    const index = markerDisplayOrder.findIndex((item) => item === normalized);
-    return index >= 0 ? index : 999;
-  };
-
   const reconciledRows = reconcileDifferentialRows([...deduped.values()], sourceRows);
-
-  return reconciledRows.sort((a, b) => {
-    const byMarkerOrder = markerOrderIndex(a.marker) - markerOrderIndex(b.marker);
-    if (byMarkerOrder !== 0) return byMarkerOrder;
-
-    const byPanel = (a.panel || "").localeCompare(b.panel || "");
-    if (byPanel !== 0) return byPanel;
-
-    return a.marker.localeCompare(b.marker);
-  });
+  return reconciledRows;
 };
 
 const buildDeterministicFindings = (rows: ParsedReportRow[]) => {
