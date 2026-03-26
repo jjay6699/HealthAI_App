@@ -559,6 +559,32 @@ const getVisualOnlyReportContent = (reportContent: unknown) => {
   ];
 };
 
+const getPrimaryVisualReportContent = (reportContent: unknown, maxImages = 2) => {
+  if (!Array.isArray(reportContent)) {
+    return reportContent;
+  }
+
+  const nonImageItems = reportContent.filter(
+    (item) => !(item && typeof item === "object" && (item as { type?: string }).type === "image_url")
+  );
+  const imageItems = reportContent.filter(
+    (item) => item && typeof item === "object" && (item as { type?: string }).type === "image_url"
+  );
+
+  if (imageItems.length === 0) {
+    return reportContent;
+  }
+
+  return [
+    ...nonImageItems,
+    {
+      type: "text" as const,
+      text: "Use these primary full-page images for canonical row extraction."
+    },
+    ...imageItems.slice(0, maxImages)
+  ];
+};
+
 const collectNormalizedReportLines = (reportContent: unknown) =>
   collectTextFragments(reportContent)
     .flatMap((fragment) => fragment.split(/\r?\n/))
@@ -1930,7 +1956,8 @@ const finalizeExtractedRows = async (
   panelCounts: Record<string, number>
 ) => {
   if (reportContentHasVisualInput(reportContent)) {
-    const visualRows = await extractVisibleBloodworkRowsFromVisualReport(reportContent, language).catch(() => []);
+    const primaryVisualContent = getPrimaryVisualReportContent(reportContent, 2);
+    const visualRows = await extractVisibleBloodworkRowsFromVisualReport(primaryVisualContent, language).catch(() => []);
     let combinedRows = [...deterministicRows, ...visualRows];
     let completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
 
