@@ -1099,22 +1099,25 @@ const buildRowConcern = (row: ExtractedReportRow) => {
 const buildParsedRowExplanation = (row: ParsedReportRow) => {
   if (row.explanation?.trim()) return row.explanation.trim();
 
+  const valueText = row.value ? `${row.value}${row.unit ? ` ${row.unit}` : ""}` : "this value";
+  const rangeText = row.referenceRange ? ` (lab range: ${row.referenceRange})` : "";
+
   if (row.status === "high") {
-    return "This marker is above the lab's stated range, so it may need follow-up in the context of your overall health picture.";
+    return `${row.marker} is above the lab range at ${valueText}${rangeText}. This can put extra strain on related body systems over time and may explain symptoms if you have any. Track this marker again and discuss trend changes with your clinician while improving sleep, stress, hydration, and food quality.`;
   }
   if (row.status === "low") {
-    return "This marker is below the lab's stated range, so it may reflect an area worth monitoring more closely.";
+    return `${row.marker} is below the lab range at ${valueText}${rangeText}. Low levels can mean your body has less reserve for normal function and recovery, especially if this stays low across multiple tests. Recheck this marker after targeted nutrition and review persistent symptoms with your clinician.`;
   }
   if (row.status === "flagged" || row.status === "abnormal") {
-    return "This result appears outside the expected pattern in the report and may need clinical interpretation alongside your symptoms and history.";
+    return `${row.marker} is flagged as outside expected pattern at ${valueText}${rangeText}. A flagged result does not always mean disease, but it is a signal to interpret together with your other markers, symptoms, and medical history. Prioritize follow-up testing if this remains abnormal on repeat reports.`;
   }
   if (row.status === "normal") {
-    return "This marker sits within the printed lab range on this report.";
+    return `${row.marker} is within the printed lab range at ${valueText}${rangeText}. This is a positive sign for this area right now, but trends across time are more meaningful than one reading. Keep your current healthy habits and monitor regularly.`;
   }
   if (row.status === "comment") {
-    return "This note was included in the report comments and may add clinical context to the lab values.";
+    return "This note was written by the lab/clinician and adds useful context to the numeric results. It should be interpreted together with the related markers, not in isolation.";
   }
-  return "This row was extracted from the report but could not be fully classified from the printed range alone.";
+  return `${row.marker} was extracted from the report, but the status could not be fully classified from printed values/ranges alone. This usually means the row is partially readable or needs context from neighboring results. A clearer report image or repeat test can improve interpretation accuracy.`;
 };
 
 const buildParsedRowConcern = (row: ParsedReportRow) =>
