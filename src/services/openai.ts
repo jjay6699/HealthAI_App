@@ -978,6 +978,20 @@ const buildParsedRowConcern = (row: ParsedReportRow) =>
 const buildParsedRowStrength = (row: ParsedReportRow) =>
   `${row.marker} is within normal range${row.value ? ` at ${row.value}${row.unit ? ` ${row.unit}` : ""}` : ""}${row.referenceRange ? ` (reference range: ${row.referenceRange})` : ""}.`.replace(/\.\s*\./g, ".").trim();
 
+const getStatusConsistencyScore = (value?: string, referenceRange?: string, status?: ParsedReportRow["status"]) => {
+  const numericValue = parseNumericValue(value);
+  const numericRange = parseReferenceRange(referenceRange);
+  if (numericValue === null || !numericRange || !status || status === "unknown" || status === "comment") {
+    return 0;
+  }
+
+  const inferredStatus = inferRowStatus({ marker: "", value, referenceRange, status });
+  if (inferredStatus === status) return 2;
+  if ((inferredStatus === "high" || inferredStatus === "low") && status === "normal") return -3;
+  if (inferredStatus === "normal" && (status === "high" || status === "low" || status === "abnormal" || status === "flagged")) return -2;
+  return -1;
+};
+
 const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
   const deduped = new Map<string, ParsedReportRow>();
   const sourceRows = [...rows];
@@ -1039,13 +1053,15 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
       (existing.value ? 4 : 0) +
       (existing.referenceRange ? 3 : 0) +
       (existing.status !== "unknown" ? 2 : 0) +
-      (existing.note ? 1 : 0);
+      (existing.note ? 1 : 0) +
+      getStatusConsistencyScore(existing.value, existing.referenceRange, existing.status);
     const parsedScore =
       (row.source === "deterministic" ? 12 : row.source === "validated" ? 8 : 0) +
       (parsedRow.value ? 4 : 0) +
       (parsedRow.referenceRange ? 3 : 0) +
       (parsedRow.status !== "unknown" ? 2 : 0) +
-      (parsedRow.note ? 1 : 0);
+      (parsedRow.note ? 1 : 0) +
+      getStatusConsistencyScore(parsedRow.value, parsedRow.referenceRange, parsedRow.status);
 
     if (parsedScore > existingScore) {
       deduped.set(key, parsedRow);
@@ -1911,7 +1927,7 @@ const finalizeExtractedRows = async (
 ) => {
   if (reportContentHasVisualInput(reportContent)) {
     const visualRows = await extractVisibleBloodworkRowsFromVisualReport(reportContent, language).catch(() => []);
-    let combinedRows = [...visualRows];
+    let combinedRows = [...deterministicRows, ...visualRows];
     let completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
 
     const verifiedRows = await verifyVisibleBloodworkRowsFromVisualReport(
@@ -1921,7 +1937,7 @@ const finalizeExtractedRows = async (
     ).catch(() => []);
 
     if (verifiedRows.length > 0) {
-      combinedRows = verifiedRows;
+      combinedRows = [...combinedRows, ...verifiedRows];
       completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
     }
 

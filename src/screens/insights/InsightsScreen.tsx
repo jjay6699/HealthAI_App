@@ -262,12 +262,14 @@ const InsightsScreen = () => {
     if (status === "normal") return isChinese ? "æ­£å¸¸" : isMalay ? "Normal" : "Normal";
     if (status === "flagged") return isChinese ? "å·²æ ‡è®°" : isMalay ? "Ditanda" : "Flagged";
     if (status === "comment") return isChinese ? "å¤‡æ³¨" : isMalay ? "Ulasan" : "Comment";
+    if (status === "unknown") return isChinese ? "å¾…ç¡®è®¤" : isMalay ? "Belum dipastikan" : "Uncertain";
     return isChinese ? "å¼‚å¸¸" : isMalay ? "Abnormal" : "Abnormal";
   };
   const parsedStatusStyle = (status: string) => {
     if (status === "high" || status === "abnormal" || status === "flagged") return styles.parsedStatusHigh;
     if (status === "low") return styles.parsedStatusLow;
     if (status === "normal") return styles.parsedStatusNormal;
+    if (status === "unknown") return styles.parsedStatusUnknown;
     return styles.parsedStatusComment;
   };
 
@@ -471,6 +473,10 @@ const createStyles = (theme: AppTheme) => ({
     color: theme.colors.success
   },
   parsedStatusComment: {
+    background: "#F3F4F6",
+    color: theme.colors.textSecondary
+  },
+  parsedStatusUnknown: {
     background: "#F3F4F6",
     color: theme.colors.textSecondary
   },

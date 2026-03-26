@@ -82,10 +82,6 @@ const UploadScreen = () => {
     setIsAnalyzing(true);
     setError(null);
 
-    // Ensure we don't display stale analysis while reprocessing a new upload.
-    persistentStorage.removeItem("bloodworkAnalysis");
-    persistentStorage.removeItem("bloodworkAnalysisMeta");
-
     try {
       console.log("Analyzing files:", files.map((file) => file.name).join(", "));
 
