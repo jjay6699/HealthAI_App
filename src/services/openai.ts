@@ -732,7 +732,7 @@ const buildRowCropBands = (rowBands: SourceRowBand[]) => {
     groups.push(relevantRows.slice(index, index + 2));
   }
 
-  return groups.map((group, index) => {
+  const baseBands = groups.map((group, index) => {
     const first = group[0];
     const last = group[group.length - 1];
     const previous = groups[index - 1]?.[groups[index - 1].length - 1];
@@ -745,6 +745,21 @@ const buildRowCropBands = (rowBands: SourceRowBand[]) => {
       bottom: Math.max(top + 24, bottom)
     };
   });
+
+  const differentialRows = relevantRows.filter((row) =>
+    /differential count|neutrophil|lymphocyte|monocyte|eosinophil|basophil/i.test(row.text)
+  );
+
+  if (differentialRows.length > 0) {
+    const first = differentialRows[0];
+    const last = differentialRows[differentialRows.length - 1];
+    baseBands.push({
+      top: Math.max(0, first.y - 28),
+      bottom: Math.max(first.y + 24, last.y + 36)
+    });
+  }
+
+  return baseBands.sort((a, b) => a.top - b.top);
 };
 
 const buildRowCropImageParts = async (
