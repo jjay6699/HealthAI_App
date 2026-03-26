@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
 import { useI18n } from "../../i18n";
 import { useAuth } from "../../services/auth";
+import { persistentStorage } from "../../services/persistentStorage";
 import { AppTheme, useTheme } from "../../theme";
 
 const demoCredentials = {
@@ -45,6 +46,17 @@ const LoginScreen = () => {
           throw new Error("Please enter a valid email and password.");
         }
         throw new Error("Unable to log in right now.");
+      }
+
+      if (email.trim().toLowerCase() === demoCredentials.email) {
+        persistentStorage.setJSON("userConsents", {
+          termsPrivacyAccepted: true,
+          healthDataProcessingAccepted: true,
+          researchParticipation: false,
+          marketingCommunication: false,
+          policyVersion: "2026-03",
+          acceptedAt: new Date().toISOString()
+        });
       }
 
       await refreshAuth();

@@ -292,7 +292,14 @@ const ProfileScreen = () => {
     [consentRefreshTick]
   );
 
-  const updateOptionalConsent = (key: "researchParticipation" | "marketingCommunication", granted: boolean) => {
+  const updateConsent = (
+    key:
+      | "termsPrivacyAccepted"
+      | "healthDataProcessingAccepted"
+      | "researchParticipation"
+      | "marketingCommunication",
+    granted: boolean
+  ) => {
     const current = persistentStorage.getJSON<{
       termsPrivacyAccepted?: boolean;
       healthDataProcessingAccepted?: boolean;
@@ -302,11 +309,15 @@ const ProfileScreen = () => {
       acceptedAt?: string;
     }>("userConsents", {});
 
+    const nextAcceptedAt = granted
+      ? new Date().toISOString()
+      : current.acceptedAt || new Date().toISOString();
+
     persistentStorage.setJSON("userConsents", {
       ...current,
       [key]: granted,
       policyVersion: current.policyVersion || "2026-03",
-      acceptedAt: current.acceptedAt || new Date().toISOString()
+      acceptedAt: nextAcceptedAt
     });
     setConsentRefreshTick((prev) => prev + 1);
   };
@@ -396,9 +407,18 @@ const ProfileScreen = () => {
     supplements: { label: t("profile.currentNutrition") },
     topPriorities: { label: t("profile.topPriorities") },
     dataProcessingConsent: { label: t("profile.dataConsent") },
-    dataProcessing: { label: t("profile.dataProcessing") },
-    dataStorage: { label: t("profile.healthDataStorage") },
-    research: { label: t("profile.researchParticipationStatus") },
+    dataProcessing: {
+      label: t("profile.dataProcessing"),
+      options: ["Allowed", "Limited", "Not allowed"]
+    },
+    dataStorage: {
+      label: t("profile.healthDataStorage"),
+      options: ["Opted in", "Limited retention", "Opted out"]
+    },
+    research: {
+      label: t("profile.researchParticipationStatus"),
+      options: ["Opted in", "Opted out"]
+    },
     appleHealth: { label: t("profile.appleHealthStatus") },
     googleFit: { label: t("profile.googleFitStatus") }
   };
@@ -1076,15 +1096,33 @@ const ProfileScreen = () => {
         <div style={styles.consentGrid}>
           <div style={styles.consentItem}>
             <span style={styles.consentLabel}>{t("profile.consent.termsPrivacy")}</span>
-            <span style={styles.consentValue}>
-              {consentState.termsPrivacyAccepted ? t("profile.consent.granted") : t("profile.consent.notGranted")}
-            </span>
+            <div style={styles.consentInlineActionRow}>
+              <span style={styles.consentValue}>
+                {consentState.termsPrivacyAccepted ? t("profile.consent.granted") : t("profile.consent.notGranted")}
+              </span>
+              <button
+                type="button"
+                style={styles.consentActionButton}
+                onClick={() => updateConsent("termsPrivacyAccepted", !consentState.termsPrivacyAccepted)}
+              >
+                {consentState.termsPrivacyAccepted ? t("profile.consent.disable") : t("profile.consent.enable")}
+              </button>
+            </div>
           </div>
           <div style={styles.consentItem}>
             <span style={styles.consentLabel}>{t("profile.consent.healthDataProcessing")}</span>
-            <span style={styles.consentValue}>
-              {consentState.healthDataProcessingAccepted ? t("profile.consent.granted") : t("profile.consent.notGranted")}
-            </span>
+            <div style={styles.consentInlineActionRow}>
+              <span style={styles.consentValue}>
+                {consentState.healthDataProcessingAccepted ? t("profile.consent.granted") : t("profile.consent.notGranted")}
+              </span>
+              <button
+                type="button"
+                style={styles.consentActionButton}
+                onClick={() => updateConsent("healthDataProcessingAccepted", !consentState.healthDataProcessingAccepted)}
+              >
+                {consentState.healthDataProcessingAccepted ? t("profile.consent.disable") : t("profile.consent.enable")}
+              </button>
+            </div>
           </div>
           <div style={styles.consentItem}>
             <span style={styles.consentLabel}>{t("profile.consent.researchOptional")}</span>
@@ -1095,7 +1133,7 @@ const ProfileScreen = () => {
               <button
                 type="button"
                 style={styles.consentActionButton}
-                onClick={() => updateOptionalConsent("researchParticipation", !consentState.researchParticipation)}
+                onClick={() => updateConsent("researchParticipation", !consentState.researchParticipation)}
               >
                 {consentState.researchParticipation ? t("profile.consent.disable") : t("profile.consent.enable")}
               </button>
@@ -1110,7 +1148,7 @@ const ProfileScreen = () => {
               <button
                 type="button"
                 style={styles.consentActionButton}
-                onClick={() => updateOptionalConsent("marketingCommunication", !consentState.marketingCommunication)}
+                onClick={() => updateConsent("marketingCommunication", !consentState.marketingCommunication)}
               >
                 {consentState.marketingCommunication ? t("profile.consent.disable") : t("profile.consent.enable")}
               </button>
