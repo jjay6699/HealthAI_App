@@ -2,7 +2,7 @@ import { AVAILABLE_SUPPLEMENTS } from "../data/supplements";
 import { SUPPLEMENT_DESCRIPTIONS } from "../data/supplementDescriptions";
 import { pdfToImages, extractStructuredTextPagesFromPdf, extractTextFromPdf } from "../utils/pdfProcessor";
 import { extractStructuredTextFromImage } from "../utils/imageOcr";
-import { cropImageBands, preprocessBloodworkImage } from "../utils/imagePreprocess";
+import { createBloodworkFocusCrop, cropImageBands, preprocessBloodworkImage } from "../utils/imagePreprocess";
 import { persistentStorage } from "./persistentStorage";
 import type { Language } from "../i18n";
 
@@ -2483,6 +2483,7 @@ export async function analyzeBloodworkFile(
       base64: base64Image,
       mimeType: imageFormat
     }));
+    const focusImage = await createBloodworkFocusCrop(base64Image, imageFormat).catch(() => null);
     const imageOcr = await extractImageOcrBundle([
       { base64: processedImage.base64, fileType: processedImage.mimeType, label: "Uploaded image" }
     ]);
@@ -2504,8 +2505,19 @@ export async function analyzeBloodworkFile(
     const verificationReportContent = [
       {
         type: "text" as const,
-        text: "Single bloodwork report image. First image is original capture, second is contrast-enhanced preprocessing, followed by zoomed row strips for exact value verification."
+        text: "Single bloodwork report image. If present, first image is table-focused crop, second is original capture, third is contrast-enhanced preprocessing, followed by zoomed row strips for exact value verification."
       },
+      ...(focusImage
+        ? [
+            {
+              type: "image_url" as const,
+              image_url: {
+                url: `data:${focusImage.mimeType};base64,${focusImage.base64}`,
+                detail: "high" as const
+              }
+            }
+          ]
+        : []),
       {
         type: "image_url" as const,
         image_url: {
@@ -2612,6 +2624,17 @@ Respond in JSON format with this structure:
 
 ${getLanguageInstruction(language)}`
             },
+            ...(focusImage
+              ? [
+                  {
+                    type: "image_url" as const,
+                    image_url: {
+                      url: `data:${focusImage.mimeType};base64,${focusImage.base64}`,
+                      detail: "high" as const
+                    }
+                  }
+                ]
+              : []),
             {
               type: "image_url",
               image_url: {

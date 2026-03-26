@@ -120,6 +120,51 @@ export interface VerticalCropBand {
   bottom: number;
 }
 
+export async function createBloodworkFocusCrop(
+  base64Image: string,
+  mimeType: string
+): Promise<{ base64: string; mimeType: string } | null> {
+  const dataUrl = `data:${mimeType};base64,${base64Image}`;
+  const image = await loadImageElement(dataUrl);
+
+  if (image.width < 420 || image.height < 420) {
+    return null;
+  }
+
+  const left = Math.floor(image.width * 0.08);
+  const right = Math.ceil(image.width * 0.92);
+  const top = Math.floor(image.height * 0.2);
+  const bottom = Math.ceil(image.height * 0.9);
+  const cropWidth = Math.max(1, right - left);
+  const cropHeight = Math.max(1, bottom - top);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = cropWidth;
+  canvas.height = cropHeight;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Canvas context not available for focus crop");
+  }
+
+  context.drawImage(
+    image,
+    left,
+    top,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    cropWidth,
+    cropHeight
+  );
+
+  const cropDataUrl = canvas.toDataURL("image/jpeg", 0.95);
+  return {
+    mimeType: "image/jpeg",
+    base64: cropDataUrl.split(",")[1]
+  };
+}
+
 export async function cropImageBands(
   base64Image: string,
   mimeType: string,
