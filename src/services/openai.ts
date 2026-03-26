@@ -207,6 +207,9 @@ const EXPECTED_COMMON_MARKERS = [
   "RDW (CV)",
   "RDW-SD",
   "Total WBC Count",
+  "Neutrophil-Lymphocyte Ratio (NLR)",
+  "Lymphocyte-Monocyte Ratio (LMR)",
+  "Platelet-Lymphocyte Ratio (PLR)",
   "Neutrophils",
   "Lymphocytes",
   "Monocytes",
@@ -248,6 +251,18 @@ const MARKER_DEFINITIONS: Array<{ marker: string; patterns: RegExp[] }> = [
   { marker: "RDW-SD", patterns: [/^rdw\s*[-–—]?\s*sd\b/i] },
   { marker: "RDW (CV)", patterns: [/^rdw\s*\(cv\)\b/i, /^rdw\s*[-–—]?\s*cv\b/i, /^rdw value\b/i, /^rdw\b/i] },
   { marker: "Total WBC Count", patterns: [/^total wbc count\b/i, /^wbc count\b/i, /^wbc\b/i, /^tlc\b/i, /^total leucocyte count\b/i, /^total leukocyte count\b/i] },
+  {
+    marker: "Neutrophil-Lymphocyte Ratio (NLR)",
+    patterns: [/^neutrophil\s*[-–—]\s*lymphocyte ratio\b/i, /^neutrophil\s*lymphocyte ratio\b/i, /^nlr\b/i]
+  },
+  {
+    marker: "Lymphocyte-Monocyte Ratio (LMR)",
+    patterns: [/^lymphocyte\s*[-–—]\s*monocyte ratio\b/i, /^lymphocyte\s*monocyte ratio\b/i, /^lmr\b/i]
+  },
+  {
+    marker: "Platelet-Lymphocyte Ratio (PLR)",
+    patterns: [/^platelet\s*[-–—]\s*lymphocyte ratio\b/i, /^platelet\s*lymphocyte ratio\b/i, /^plr\b/i]
+  },
   { marker: "Neutrophils", patterns: [/^neutrophils?\b/i] },
   { marker: "Polymorphs", patterns: [/^polymorphs\b/i] },
   { marker: "Lymphocytes", patterns: [/^lymphocytes?\b/i] },
