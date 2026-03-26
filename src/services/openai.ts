@@ -1738,6 +1738,76 @@ Return JSON with this exact shape:
     .map((row) => ({ ...row, source: "validated" as const }));
 };
 
+const extractDifferentialCountRowsFromVisualReport = async (
+  reportContent: unknown,
+  language: Language
+): Promise<ExtractedReportRow[]> => {
+  const extractionContent = getVisualOnlyReportContent(reportContent);
+  const response = await createChatCompletion({
+    model: ANALYSIS_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          `You are a differential blood count transcription engine. Your only job is to read the report image and extract exact values for Neutrophils, Lymphocytes, Monocytes, Eosinophils, and Basophils. ${getLanguageInstruction(language)} Return valid JSON only.`
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Extract only these five markers from the DIFFERENTIAL COUNT section:
+- Neutrophils
+- Lymphocytes
+- Monocytes
+- Eosinophils
+- Basophils
+
+Rules:
+- Use only visible printed digits.
+- Do not borrow values from neighboring rows.
+- If uncertain, leave value blank rather than guessing.
+- Keep marker names exactly as printed where possible.
+
+Return JSON with this exact shape:
+{
+  "rows": [
+    {
+      "panel": "Differential count",
+      "marker": "marker name",
+      "value": "exact printed value if visible",
+      "unit": "%",
+      "referenceRange": "printed range if visible",
+      "status": "high|low|normal|abnormal|flagged|unknown",
+      "note": "optional"
+    }
+  ]
+}`
+          },
+          ...(Array.isArray(extractionContent) ? extractionContent : [extractionContent])
+        ]
+      }
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0,
+    max_tokens: 1200
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) return [];
+
+  const parsed = JSON.parse(content) as { rows?: ExtractedReportRow[] };
+  return (parsed.rows || [])
+    .filter(
+      (row) =>
+        typeof row?.marker === "string" &&
+        row.marker.trim().length > 0 &&
+        /neutrophil|lymphocyte|monocyte|eosinophil|basophil/i.test(row.marker) &&
+        shouldKeepExtractedRow(reportContent, row)
+    )
+    .map((row) => ({ ...row, source: "validated" as const }));
+};
+
 const extractExpectedMarkers = async (
   reportContent: unknown,
   language: Language,
@@ -1990,6 +2060,15 @@ const finalizeExtractedRows = async (
 
     if (verifiedRows.length > 0) {
       combinedRows = [...combinedRows, ...verifiedRows];
+      completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
+    }
+
+    const differentialRows = await extractDifferentialCountRowsFromVisualReport(
+      reportContent,
+      language
+    ).catch(() => []);
+    if (differentialRows.length > 0) {
+      combinedRows = [...combinedRows, ...differentialRows];
       completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
     }
 
