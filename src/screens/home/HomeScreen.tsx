@@ -9,6 +9,7 @@ import { SHOW_LANGUAGE_SWITCHER } from "../../config/features";
 import { AppTheme, useTheme } from "../../theme";
 import { BloodworkAnalysis, translateBloodworkAnalysis } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
+import { useAuth } from "../../services/auth";
 import { Language, useI18n } from "../../i18n";
 
 type AnalysisMeta = {
@@ -22,13 +23,16 @@ const HomeScreen = () => {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const width = `min(440px, calc(100% - ${theme.spacing.xl * 2}px))`;
   const [analysis, setAnalysis] = useState<BloodworkAnalysis | null>(null);
   const [displayAnalysis, setDisplayAnalysis] = useState<BloodworkAnalysis | null>(null);
   const [meta, setMeta] = useState<AnalysisMeta | null>(null);
 
+  const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
+
   useEffect(() => {
-    const storedAnalysis = persistentStorage.getItem("bloodworkAnalysis");
+    const storedAnalysis = persistentStorage.getItem(scopedKey("bloodworkAnalysis"));
     if (storedAnalysis) {
       try {
         setAnalysis(JSON.parse(storedAnalysis));
@@ -37,7 +41,7 @@ const HomeScreen = () => {
       }
     }
 
-    const storedMeta = persistentStorage.getItem("bloodworkAnalysisMeta");
+    const storedMeta = persistentStorage.getItem(scopedKey("bloodworkAnalysisMeta"));
     if (storedMeta) {
       try {
         setMeta(JSON.parse(storedMeta));
@@ -45,7 +49,7 @@ const HomeScreen = () => {
         console.error("Failed to parse bloodwork metadata:", error);
       }
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     let cancelled = false;

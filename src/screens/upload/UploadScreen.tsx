@@ -13,6 +13,7 @@ import {
   analyzeHealthDocumentBundle
 } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
+import { useAuth } from "../../services/auth";
 import { useI18n } from "../../i18n";
 
 type IntegrationTab = "wearables" | "apps";
@@ -22,6 +23,7 @@ const UploadScreen = () => {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { t } = useI18n();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAIChat, setShowAIChat] = useState(false);
@@ -30,6 +32,7 @@ const UploadScreen = () => {
   const [connectedIntegrations, setConnectedIntegrations] = useState<string[]>([]);
   const [activeIntegrationTab, setActiveIntegrationTab] = useState<IntegrationTab>("wearables");
   const [queuedFiles, setQueuedFiles] = useState<File[]>([]);
+  const [pastUploads, setPastUploads] = useState<Array<{ id: string; uploadedAt?: string; fileName?: string; concerns?: string[]; detailedInsights?: Array<{ category?: string }> }>>([]);
   const [showHealthConsentDialog, setShowHealthConsentDialog] = useState(false);
   const [pendingAnalyzeFiles, setPendingAnalyzeFiles] = useState<File[] | null>(null);
   const [healthConsentChecked, setHealthConsentChecked] = useState(false);
@@ -59,6 +62,22 @@ const UploadScreen = () => {
     { icon: "🧬", text: "Analyzing values", color: "#10B981" },
     { icon: "💊", text: "Recommending nutrition products", color: "#F59E0B" }
   ];
+
+  const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
+
+  React.useEffect(() => {
+    const raw = persistentStorage.getItem(scopedKey("bloodworkHistory"));
+    if (!raw) {
+      setPastUploads([]);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      setPastUploads(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setPastUploads([]);
+    }
+  }, [user?.id]);
 
   const hasHealthDataConsent = () => {
     const consent = persistentStorage.getJSON<{
@@ -158,7 +177,7 @@ const UploadScreen = () => {
       }
 
       // Save (locally + to Railway-backed SQLite when available)
-      persistentStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
+      persistentStorage.setItem(scopedKey("bloodworkAnalysis"), JSON.stringify(analysis));
       const uploadedAt = new Date().toISOString();
       const fileName = files.map((file) => file.name).join(", ");
       const fileType =
@@ -172,7 +191,7 @@ const UploadScreen = () => {
       const fileSize = files.reduce((total, file) => total + file.size, 0);
 
       persistentStorage.setItem(
-        "bloodworkAnalysisMeta",
+        scopedKey("bloodworkAnalysisMeta"),
         JSON.stringify({
           uploadedAt,
           fileName,
@@ -181,7 +200,7 @@ const UploadScreen = () => {
         })
       );
 
-      const historyRaw = persistentStorage.getItem("bloodworkHistory");
+      const historyRaw = persistentStorage.getItem(scopedKey("bloodworkHistory"));
       let history: any[] = [];
       if (historyRaw) {
         try {
@@ -202,7 +221,9 @@ const UploadScreen = () => {
         recommendations: analysis.recommendations || [],
         detailedInsights: analysis.detailedInsights || []
       });
-      persistentStorage.setItem("bloodworkHistory", JSON.stringify(history.slice(0, 20)));
+      const nextHistory = history.slice(0, 20);
+      persistentStorage.setItem(scopedKey("bloodworkHistory"), JSON.stringify(nextHistory));
+      setPastUploads(nextHistory);
 
       // Navigate to insights
       navigate("/insights");
@@ -436,29 +457,33 @@ const UploadScreen = () => {
 
       <Card style={styles.card}>
         <SectionHeader title={t("upload.pastUploads")} />
-        <div style={styles.pastRow}>
-          <div>
-            <p style={styles.pastTitle}>July 2025 - Complete blood count</p>
-            <span style={styles.pastMeta}>18 markers - 95% parser confidence</span>
+        {pastUploads.length > 0 ? (
+          pastUploads.slice(0, 2).map((entry, index) => (
+            <React.Fragment key={entry.id || `${entry.fileName || "upload"}-${index}`}>
+              <div style={styles.pastRow}>
+                <div>
+                  <p style={styles.pastTitle}>
+                    {entry.uploadedAt
+                      ? `${new Date(entry.uploadedAt).toLocaleDateString()} - ${entry.fileName || "Bloodwork upload"}`
+                      : entry.fileName || "Bloodwork upload"}
+                  </p>
+                  <span style={styles.pastMeta}>
+                    {(entry.detailedInsights || []).length} markers • {(entry.concerns || []).length > 0 ? "Needs review" : "In range"}
+                  </span>
+                </div>
+                <Link to="/history" style={styles.link}>
+                  {t("upload.history.view")}
+                </Link>
+              </div>
+              {index < Math.min(1, pastUploads.length - 1) ? <hr style={styles.divider} /> : null}
+            </React.Fragment>
+          ))
+        ) : (
+          <div style={styles.emptyState}>
+            <h4 style={styles.emptyTitle}>{t("upload.emptyTitle")}</h4>
+            <p style={styles.emptyCopy}>{t("upload.emptyBody")}</p>
           </div>
-          <Link to="/history" style={styles.link}>
-            {t("upload.history.view")}
-          </Link>
-        </div>
-        <hr style={styles.divider} />
-        <div style={styles.pastRow}>
-          <div>
-            <p style={styles.pastTitle}>April 2025 - Metabolic panel</p>
-            <span style={styles.pastMeta}>12 markers - Manual review</span>
-          </div>
-          <Link to="/history" style={styles.link}>
-            {t("upload.history.view")}
-          </Link>
-        </div>
-        <div style={styles.emptyState}>
-          <h4 style={styles.emptyTitle}>{t("upload.emptyTitle")}</h4>
-          <p style={styles.emptyCopy}>{t("upload.emptyBody")}</p>
-        </div>
+        )}
       </Card>
 
       {showAIChat && <AIChat onClose={() => setShowAIChat(false)} />}
@@ -980,4 +1005,3 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default UploadScreen;
-

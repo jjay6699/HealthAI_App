@@ -122,7 +122,7 @@ const ProfileScreen = () => {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
-  const { setUser } = useAuth();
+  const { user, setUser } = useAuth();
   const defaultProfile: ProfileState = {
     avatarImage: null,
     name: "",
@@ -517,6 +517,7 @@ const ProfileScreen = () => {
     } catch {
       // Clear local state even if the network request fails.
     } finally {
+      const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
       persistentStorage.removeItem("userProfile");
       persistentStorage.removeItem("paymentMethods");
       persistentStorage.removeItem("shippingAddresses");
@@ -524,6 +525,9 @@ const ProfileScreen = () => {
       persistentStorage.removeItem("bloodworkAnalysis");
       persistentStorage.removeItem("bloodworkAnalysisMeta");
       persistentStorage.removeItem("bloodworkHistory");
+      persistentStorage.removeItem(scopedKey("bloodworkAnalysis"));
+      persistentStorage.removeItem(scopedKey("bloodworkAnalysisMeta"));
+      persistentStorage.removeItem(scopedKey("bloodworkHistory"));
       persistentStorage.removeItem("bloodPressureHistory");
       persistentStorage.removeItem("fastingGlucoseHistory");
       persistentStorage.removeItem("weightHistory");

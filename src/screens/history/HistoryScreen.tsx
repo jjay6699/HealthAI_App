@@ -5,6 +5,7 @@ import { useI18n } from "../../i18n";
 import { translateBloodworkAnalysis, type BloodworkAnalysis } from "../../services/openai";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
+import { useAuth } from "../../services/auth";
 
 type HistoryRecommendation = {
   supplementName?: string;
@@ -35,12 +36,15 @@ const HistoryScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { language, t } = useI18n();
+  const { user } = useAuth();
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [displayHistory, setDisplayHistory] = useState<HistoryEntry[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
+
   useEffect(() => {
-    const storedHistory = persistentStorage.getItem("bloodworkHistory");
+    const storedHistory = persistentStorage.getItem(scopedKey("bloodworkHistory"));
     if (!storedHistory) return;
     try {
       const parsed = JSON.parse(storedHistory);
@@ -50,7 +54,7 @@ const HistoryScreen = () => {
     } catch (error) {
       console.error("Failed to parse history:", error);
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     let cancelled = false;

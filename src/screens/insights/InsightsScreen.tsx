@@ -7,6 +7,7 @@ import Button from "../../components/Button";
 import { AppTheme, useTheme } from "../../theme";
 import { BloodworkAnalysis, translateBloodworkAnalysis } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
+import { useAuth } from "../../services/auth";
 import { useI18n } from "../../i18n";
 
 const domainScores = [
@@ -114,6 +115,7 @@ const InsightsScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { language, t } = useI18n();
+  const { user } = useAuth();
   const isChinese = language === "zh";
   const isMalay = language === "bm";
   const [analysis, setAnalysis] = useState<BloodworkAnalysis | null>(null);
@@ -122,10 +124,12 @@ const InsightsScreen = () => {
   const [hasHydratedAnalysis, setHasHydratedAnalysis] = useState(false);
   const [isAnalysisLoading, setIsAnalysisLoading] = useState(true);
 
+  const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
+
   useEffect(() => {
     // Load analysis from localStorage
-    const storedAnalysis = persistentStorage.getItem("bloodworkAnalysis");
-    const storedMeta = persistentStorage.getItem("bloodworkAnalysisMeta");
+    const storedAnalysis = persistentStorage.getItem(scopedKey("bloodworkAnalysis"));
+    const storedMeta = persistentStorage.getItem(scopedKey("bloodworkAnalysisMeta"));
     if (storedAnalysis) {
       try {
         setAnalysis(JSON.parse(storedAnalysis));
@@ -141,7 +145,7 @@ const InsightsScreen = () => {
       }
     }
     setHasHydratedAnalysis(true);
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!hasHydratedAnalysis) return;
