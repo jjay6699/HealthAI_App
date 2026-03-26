@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
 import { useI18n } from "../../i18n";
 import { useAuth } from "../../services/auth";
+import { persistentStorage } from "../../services/persistentStorage";
 import { AppTheme, useTheme } from "../../theme";
 
 const RegisterScreen = () => {
@@ -13,6 +14,7 @@ const RegisterScreen = () => {
   const { refreshAuth } = useAuth();
   const [form, setForm] = useState({ name: "", email: "", password: "", country: "" });
   const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreeHealthProcessing, setAgreeHealthProcessing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -22,14 +24,24 @@ const RegisterScreen = () => {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!agreeTerms) return;
+    if (!agreeTerms || !agreeHealthProcessing) return;
     setLoading(true);
     setError("");
     try {
+      const consentVersion = "2026-03";
+      const consentAcceptedAt = new Date().toISOString();
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(form)
+        body: JSON.stringify({
+          ...form,
+          consents: {
+            termsPrivacyAccepted: agreeTerms,
+            healthDataProcessingAccepted: agreeHealthProcessing,
+            consentVersion,
+            acceptedAt: consentAcceptedAt
+          }
+        })
       });
 
       if (!response.ok) {
@@ -43,6 +55,9 @@ const RegisterScreen = () => {
         if (payload?.error === "invalid_registration_payload") {
           throw new Error("Please complete all fields and use a stronger password.");
         }
+        if (payload?.error === "consent_required") {
+          throw new Error("Please accept Terms, Privacy Policy, and Health Data Processing Consent.");
+        }
         throw new Error("Unable to create account right now.");
       }
 
@@ -52,6 +67,14 @@ const RegisterScreen = () => {
         country: form.country
       };
       localStorage.setItem("userProfile", JSON.stringify(profileDraft));
+      persistentStorage.setJSON("userConsents", {
+        termsPrivacyAccepted: true,
+        healthDataProcessingAccepted: true,
+        researchParticipation: false,
+        marketingCommunication: false,
+        policyVersion: consentVersion,
+        acceptedAt: consentAcceptedAt
+      });
       await refreshAuth();
       setLoading(false);
       navigate("/intake");
@@ -122,10 +145,28 @@ const RegisterScreen = () => {
             onChange={(event) => setAgreeTerms(event.target.checked)}
             style={styles.checkbox}
           />
-          <span style={styles.checkboxLabel}>{t("auth.register.agree")}</span>
+          <span style={styles.checkboxLabel}>
+            {t("auth.register.agree")} <a href="/terms" style={styles.inlineLink}>Terms</a> & <a href="/privacy" style={styles.inlineLink}>Privacy Policy</a>
+          </span>
         </label>
 
-        <Button title={t("auth.register.next")} type="submit" fullWidth disabled={!agreeTerms} loading={loading} />
+        <label style={styles.checkboxRow}>
+          <input
+            type="checkbox"
+            checked={agreeHealthProcessing}
+            onChange={(event) => setAgreeHealthProcessing(event.target.checked)}
+            style={styles.checkbox}
+          />
+          <span style={styles.checkboxLabel}>{t("auth.register.healthConsent")}</span>
+        </label>
+
+        <Button
+          title={t("auth.register.next")}
+          type="submit"
+          fullWidth
+          disabled={!agreeTerms || !agreeHealthProcessing}
+          loading={loading}
+        />
       </form>
 
       <div style={styles.footerRow}>
@@ -200,6 +241,10 @@ const createStyles = (theme: AppTheme) => ({
   checkboxLabel: {
     fontSize: 14,
     color: theme.colors.text
+  },
+  inlineLink: {
+    color: theme.colors.primary,
+    fontWeight: 600
   },
   footerRow: {
     display: "flex",

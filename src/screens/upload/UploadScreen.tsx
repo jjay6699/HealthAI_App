@@ -30,6 +30,9 @@ const UploadScreen = () => {
   const [connectedIntegrations, setConnectedIntegrations] = useState<string[]>([]);
   const [activeIntegrationTab, setActiveIntegrationTab] = useState<IntegrationTab>("wearables");
   const [queuedFiles, setQueuedFiles] = useState<File[]>([]);
+  const [showHealthConsentDialog, setShowHealthConsentDialog] = useState(false);
+  const [pendingAnalyzeFiles, setPendingAnalyzeFiles] = useState<File[] | null>(null);
+  const [healthConsentChecked, setHealthConsentChecked] = useState(false);
   const wearableIntegrations = [
     { id: "apple-watch", name: "Apple Watch", description: t("upload.modal.integration.appleWatch") },
     { id: "garmin-watch", name: "Garmin Watch", description: t("upload.modal.integration.garminWatch") },
@@ -56,6 +59,36 @@ const UploadScreen = () => {
     { icon: "🧬", text: "Analyzing values", color: "#10B981" },
     { icon: "💊", text: "Recommending nutrition products", color: "#F59E0B" }
   ];
+
+  const hasHealthDataConsent = () => {
+    const consent = persistentStorage.getJSON<{
+      healthDataProcessingAccepted?: boolean;
+      termsPrivacyAccepted?: boolean;
+      researchParticipation?: boolean;
+      marketingCommunication?: boolean;
+      policyVersion?: string;
+      acceptedAt?: string;
+    }>("userConsents", {});
+    return consent.healthDataProcessingAccepted === true;
+  };
+
+  const persistHealthDataConsent = () => {
+    const current = persistentStorage.getJSON<{
+      healthDataProcessingAccepted?: boolean;
+      termsPrivacyAccepted?: boolean;
+      researchParticipation?: boolean;
+      marketingCommunication?: boolean;
+      policyVersion?: string;
+      acceptedAt?: string;
+    }>("userConsents", {});
+
+    persistentStorage.setJSON("userConsents", {
+      ...current,
+      healthDataProcessingAccepted: true,
+      policyVersion: "2026-03",
+      acceptedAt: new Date().toISOString()
+    });
+  };
 
   // Animate through steps
   React.useEffect(() => {
@@ -191,7 +224,30 @@ const UploadScreen = () => {
 
   const handleAnalyzeQueuedFiles = async () => {
     if (queuedFiles.length === 0 || isAnalyzing) return;
+    if (!hasHealthDataConsent()) {
+      setPendingAnalyzeFiles(queuedFiles);
+      setHealthConsentChecked(false);
+      setShowHealthConsentDialog(true);
+      return;
+    }
     await analyzeFiles(queuedFiles);
+  };
+
+  const handleConfirmHealthConsent = async () => {
+    if (!healthConsentChecked) {
+      setError(t("upload.consent.requiredError"));
+      return;
+    }
+
+    persistHealthDataConsent();
+    setShowHealthConsentDialog(false);
+    setError(null);
+
+    const filesToAnalyze = pendingAnalyzeFiles ?? queuedFiles;
+    setPendingAnalyzeFiles(null);
+    if (filesToAnalyze.length > 0) {
+      await analyzeFiles(filesToAnalyze);
+    }
   };
 
   const handleRemoveQueuedFile = (index: number) => {
@@ -406,6 +462,30 @@ const UploadScreen = () => {
       </Card>
 
       {showAIChat && <AIChat onClose={() => setShowAIChat(false)} />}
+      {showHealthConsentDialog ? (
+        <Dialog
+          title={t("upload.consent.title")}
+          description={t("upload.consent.description")}
+          onClose={() => {
+            setShowHealthConsentDialog(false);
+            setPendingAnalyzeFiles(null);
+            setHealthConsentChecked(false);
+          }}
+          onConfirm={handleConfirmHealthConsent}
+          confirmLabel={t("upload.consent.confirm")}
+          cancelLabel={t("upload.consent.cancel")}
+        >
+          <label style={styles.consentCheckboxRow}>
+            <input
+              type="checkbox"
+              checked={healthConsentChecked}
+              onChange={(event) => setHealthConsentChecked(event.target.checked)}
+              style={styles.consentCheckbox}
+            />
+            <span style={styles.consentCheckboxLabel}>{t("upload.consent.checkbox")}</span>
+          </label>
+        </Dialog>
+      ) : null}
       {showDeviceConnect ? (
         <Dialog
           title={t("upload.modal.title")}
@@ -745,6 +825,25 @@ const createStyles = (theme: AppTheme) => ({
     whiteSpace: "nowrap" as const,
     padding: 0
   },
+  consentCheckboxRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: theme.spacing.sm,
+    cursor: "pointer"
+  },
+  consentCheckbox: {
+    marginTop: 2,
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    border: `1px solid ${theme.colors.divider}`,
+    flexShrink: 0
+  },
+  consentCheckboxLabel: {
+    fontSize: 14,
+    color: theme.colors.text,
+    lineHeight: "20px"
+  },
   pastRow: {
     display: "flex",
     justifyContent: "space-between",
@@ -881,5 +980,4 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default UploadScreen;
-
 

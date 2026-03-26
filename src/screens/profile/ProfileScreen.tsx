@@ -272,11 +272,44 @@ const ProfileScreen = () => {
   const [isAiSummaryLoading, setIsAiSummaryLoading] = useState(false);
   const [aiSummaryError, setAiSummaryError] = useState("");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [consentRefreshTick, setConsentRefreshTick] = useState(0);
   const languageOptions: { value: Language; label: string }[] = [
     { value: "en", label: t("common.language.en") },
     { value: "zh", label: t("common.language.zh") },
     { value: "bm", label: t("common.language.bm") }
   ];
+
+  const consentState = useMemo(
+    () =>
+      persistentStorage.getJSON<{
+        termsPrivacyAccepted?: boolean;
+        healthDataProcessingAccepted?: boolean;
+        researchParticipation?: boolean;
+        marketingCommunication?: boolean;
+        policyVersion?: string;
+        acceptedAt?: string;
+      }>("userConsents", {}),
+    [consentRefreshTick]
+  );
+
+  const updateOptionalConsent = (key: "researchParticipation" | "marketingCommunication", granted: boolean) => {
+    const current = persistentStorage.getJSON<{
+      termsPrivacyAccepted?: boolean;
+      healthDataProcessingAccepted?: boolean;
+      researchParticipation?: boolean;
+      marketingCommunication?: boolean;
+      policyVersion?: string;
+      acceptedAt?: string;
+    }>("userConsents", {});
+
+    persistentStorage.setJSON("userConsents", {
+      ...current,
+      [key]: granted,
+      policyVersion: current.policyVersion || "2026-03",
+      acceptedAt: current.acceptedAt || new Date().toISOString()
+    });
+    setConsentRefreshTick((prev) => prev + 1);
+  };
 
   // Temporary state for measurement editor
   const [tempHeight, setTempHeight] = useState(profile.height);
@@ -1036,6 +1069,62 @@ const ProfileScreen = () => {
         <ProfileRow label={t("profile.dataProcessing")} value={formatValue(profile.dataProcessing)} action={t("profile.action.manage")} onEdit={() => openEdit("dataProcessing") } />
         <ProfileRow label={t("profile.healthDataStorage")} value={formatValue(profile.dataStorage)} action={t("profile.action.manage")} onEdit={() => openEdit("dataStorage") } />
         <ProfileRow label={t("profile.researchParticipation")} value={formatValue(profile.research)} action={t("profile.action.manage")} onEdit={() => openEdit("research") } />
+      </Card>
+
+      <Card style={styles.card}>
+        <SectionHeader title={t("profile.consent.title")} />
+        <div style={styles.consentGrid}>
+          <div style={styles.consentItem}>
+            <span style={styles.consentLabel}>{t("profile.consent.termsPrivacy")}</span>
+            <span style={styles.consentValue}>
+              {consentState.termsPrivacyAccepted ? t("profile.consent.granted") : t("profile.consent.notGranted")}
+            </span>
+          </div>
+          <div style={styles.consentItem}>
+            <span style={styles.consentLabel}>{t("profile.consent.healthDataProcessing")}</span>
+            <span style={styles.consentValue}>
+              {consentState.healthDataProcessingAccepted ? t("profile.consent.granted") : t("profile.consent.notGranted")}
+            </span>
+          </div>
+          <div style={styles.consentItem}>
+            <span style={styles.consentLabel}>{t("profile.consent.researchOptional")}</span>
+            <div style={styles.consentInlineActionRow}>
+              <span style={styles.consentValue}>
+                {consentState.researchParticipation ? t("profile.consent.granted") : t("profile.consent.notGranted")}
+              </span>
+              <button
+                type="button"
+                style={styles.consentActionButton}
+                onClick={() => updateOptionalConsent("researchParticipation", !consentState.researchParticipation)}
+              >
+                {consentState.researchParticipation ? t("profile.consent.disable") : t("profile.consent.enable")}
+              </button>
+            </div>
+          </div>
+          <div style={styles.consentItem}>
+            <span style={styles.consentLabel}>{t("profile.consent.marketingOptional")}</span>
+            <div style={styles.consentInlineActionRow}>
+              <span style={styles.consentValue}>
+                {consentState.marketingCommunication ? t("profile.consent.granted") : t("profile.consent.notGranted")}
+              </span>
+              <button
+                type="button"
+                style={styles.consentActionButton}
+                onClick={() => updateOptionalConsent("marketingCommunication", !consentState.marketingCommunication)}
+              >
+                {consentState.marketingCommunication ? t("profile.consent.disable") : t("profile.consent.enable")}
+              </button>
+            </div>
+          </div>
+          <div style={styles.consentMetaRow}>
+            <span style={styles.consentMetaText}>
+              {t("profile.consent.version")}: {consentState.policyVersion || "2026-03"}
+            </span>
+            <span style={styles.consentMetaText}>
+              {t("profile.consent.acceptedAt")}: {consentState.acceptedAt ? new Date(consentState.acceptedAt).toLocaleString() : t("profile.notSet")}
+            </span>
+          </div>
+        </div>
       </Card>
 
       <Card style={styles.card}>
@@ -1982,6 +2071,57 @@ const createStyles = (theme: AppTheme) => ({
   trackerHistoryRow: {
     display: "flex",
     justifyContent: "space-between",
+    fontSize: 12,
+    color: theme.colors.textSecondary
+  },
+  consentGrid: {
+    display: "grid",
+    gap: theme.spacing.sm
+  },
+  consentItem: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 4,
+    padding: `${theme.spacing.md}px ${theme.spacing.lg}px`,
+    borderRadius: theme.radii.lg,
+    border: `1px solid ${theme.colors.divider}`,
+    background: theme.colors.surface
+  },
+  consentLabel: {
+    fontSize: 12,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.6,
+    fontWeight: 700,
+    color: theme.colors.textSecondary
+  },
+  consentValue: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: theme.colors.text
+  },
+  consentInlineActionRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: theme.spacing.sm
+  },
+  consentActionButton: {
+    border: `1px solid ${theme.colors.primary}`,
+    borderRadius: theme.radii.pill,
+    background: theme.colors.surface,
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: 700,
+    padding: `${theme.spacing.xs}px ${theme.spacing.md}px`,
+    cursor: "pointer",
+    fontFamily: "inherit"
+  },
+  consentMetaRow: {
+    display: "grid",
+    gap: 2,
+    padding: `${theme.spacing.xs}px ${theme.spacing.xs}px 0`
+  },
+  consentMetaText: {
     fontSize: 12,
     color: theme.colors.textSecondary
   }

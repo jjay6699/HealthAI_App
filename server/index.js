@@ -96,6 +96,22 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_orders_userId ON orders(userId);
   CREATE INDEX IF NOT EXISTS idx_orders_createdAt ON orders(createdAt DESC);
+
+  CREATE TABLE IF NOT EXISTS user_consents (
+    id TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    consentType TEXT NOT NULL,
+    granted INTEGER NOT NULL,
+    policyVersion TEXT,
+    acceptedAt TEXT,
+    sourceIp TEXT,
+    userAgent TEXT,
+    createdAt INTEGER NOT NULL,
+    FOREIGN KEY(userId) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_user_consents_userId ON user_consents(userId);
+  CREATE INDEX IF NOT EXISTS idx_user_consents_userId_type ON user_consents(userId, consentType);
 `);
 
 const stmtGetAll = db.prepare(
@@ -131,6 +147,9 @@ const stmtUpdateUserLogin = db.prepare(
 );
 const stmtUpdatePasswordUserLogin = db.prepare(
   "UPDATE users SET name = ?, country = ?, lastLoginAt = ? WHERE id = ?"
+);
+const stmtInsertUserConsent = db.prepare(
+  "INSERT INTO user_consents (id, userId, consentType, granted, policyVersion, acceptedAt, sourceIp, userAgent, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
 );
 
 const stmtInsertSession = db.prepare(
@@ -520,9 +539,19 @@ app.post(
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
     const country = typeof req.body?.country === "string" ? req.body.country.trim() : "";
+    const termsPrivacyAccepted = req.body?.consents?.termsPrivacyAccepted === true;
+    const healthDataProcessingAccepted = req.body?.consents?.healthDataProcessingAccepted === true;
+    const consentVersion =
+      typeof req.body?.consents?.consentVersion === "string" ? req.body.consents.consentVersion.trim() : "";
+    const consentAcceptedAt =
+      typeof req.body?.consents?.acceptedAt === "string" ? req.body.consents.acceptedAt.trim() : "";
 
     if (!name || !isValidEmail(email) || !isStrongEnoughPassword(password)) {
       return res.status(400).json({ error: "invalid_registration_payload" });
+    }
+
+    if (!termsPrivacyAccepted || !healthDataProcessingAccepted) {
+      return res.status(400).json({ error: "consent_required" });
     }
 
     const existing = stmtGetPasswordUserByEmail.get(email);
@@ -543,6 +572,34 @@ app.post(
       passwordHash,
       country || null,
       now,
+      now
+    );
+
+    const requestIp = getRequestIp(req);
+    const userAgent = typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : "";
+    const acceptedAt = consentAcceptedAt || new Date(now).toISOString();
+    const policyVersion = consentVersion || "2026-03";
+
+    stmtInsertUserConsent.run(
+      crypto.randomUUID(),
+      userId,
+      "terms_privacy",
+      1,
+      policyVersion,
+      acceptedAt,
+      requestIp,
+      userAgent,
+      now
+    );
+    stmtInsertUserConsent.run(
+      crypto.randomUUID(),
+      userId,
+      "health_data_processing",
+      1,
+      policyVersion,
+      acceptedAt,
+      requestIp,
+      userAgent,
       now
     );
 
