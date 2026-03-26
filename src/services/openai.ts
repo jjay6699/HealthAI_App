@@ -1030,6 +1030,19 @@ const inferRowStatus = (row: ExtractedReportRow): ExtractedReportRow["status"] =
     }
   }
 
+  // If a numeric value is present but no printable reference range is available,
+  // treat as normal by default unless the source explicitly flagged it otherwise.
+  if (
+    numericValue !== null &&
+    !numericRange &&
+    row.status !== "high" &&
+    row.status !== "low" &&
+    row.status !== "abnormal" &&
+    row.status !== "flagged"
+  ) {
+    return "normal";
+  }
+
   return row.status;
 };
 
