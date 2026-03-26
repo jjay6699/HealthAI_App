@@ -1097,7 +1097,15 @@ const buildRowConcern = (row: ExtractedReportRow) => {
 };
 
 const buildParsedRowExplanation = (row: ParsedReportRow) => {
-  if (row.explanation?.trim()) return row.explanation.trim();
+  const existingExplanation = row.explanation?.trim();
+  const looksGeneric =
+    !!existingExplanation &&
+    /may need follow-?up|overall health picture|area worth monitoring more closely|outside the expected pattern|within the printed lab range/i.test(
+      existingExplanation
+    );
+
+  // Keep model explanation only when it is specific and non-generic.
+  if (existingExplanation && !looksGeneric) return existingExplanation;
 
   const valueText = row.value ? `${row.value}${row.unit ? ` ${row.unit}` : ""}` : "this value";
   const rangeText = row.referenceRange ? ` (lab range: ${row.referenceRange})` : "";
