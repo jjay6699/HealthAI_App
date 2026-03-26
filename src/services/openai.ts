@@ -46,6 +46,7 @@ const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
 const ANALYSIS_MODEL = "gpt-4o";
+const VISUAL_PRIMARY_BOUNDARY_TEXT = "__PRIMARY_VISUAL_IMAGES_END__";
 
 const normalizeImageMimeType = (fileType: string) => {
   if (fileType.includes("jpeg") || fileType.includes("jpg")) {
@@ -559,15 +560,24 @@ const getVisualOnlyReportContent = (reportContent: unknown) => {
   ];
 };
 
-const getPrimaryVisualReportContent = (reportContent: unknown, maxImages = 2) => {
+const getPrimaryVisualReportContent = (reportContent: unknown, maxImages = 8) => {
   if (!Array.isArray(reportContent)) {
     return reportContent;
   }
 
-  const nonImageItems = reportContent.filter(
+  const boundaryIndex = reportContent.findIndex(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      (item as { type?: string; text?: string }).type === "text" &&
+      (item as { type?: string; text?: string }).text === VISUAL_PRIMARY_BOUNDARY_TEXT
+  );
+
+  const sourceItems = boundaryIndex >= 0 ? reportContent.slice(0, boundaryIndex) : reportContent;
+  const nonImageItems = sourceItems.filter(
     (item) => !(item && typeof item === "object" && (item as { type?: string }).type === "image_url")
   );
-  const imageItems = reportContent.filter(
+  const imageItems = sourceItems.filter(
     (item) => item && typeof item === "object" && (item as { type?: string }).type === "image_url"
   );
 
@@ -2062,7 +2072,7 @@ const finalizeExtractedRows = async (
   panelCounts: Record<string, number>
 ) => {
   if (reportContentHasVisualInput(reportContent)) {
-    const primaryVisualContent = getPrimaryVisualReportContent(reportContent, 2);
+    const primaryVisualContent = getPrimaryVisualReportContent(reportContent, 24);
     const visualRows = await extractVisibleBloodworkRowsFromVisualReport(primaryVisualContent, language).catch(() => []);
     let combinedRows = [...deterministicRows, ...visualRows];
     let completeness = computeExtractionCompleteness(combinedRows, candidateRowTexts, panelCounts);
@@ -2432,6 +2442,10 @@ export async function analyzeBloodworkPdf(file: File): Promise<BloodworkAnalysis
           detail: "high" as const
         }
       })),
+      {
+        type: "text" as const,
+        text: VISUAL_PRIMARY_BOUNDARY_TEXT
+      },
       ...rowCropParts
     ];
 
@@ -2674,6 +2688,10 @@ export async function analyzeBloodworkFile(
           detail: "high" as const
         }
       },
+      {
+        type: "text" as const,
+        text: VISUAL_PRIMARY_BOUNDARY_TEXT
+      },
       ...rowCropParts
     ];
 
@@ -2905,6 +2923,10 @@ export async function analyzeBloodworkImages(
       text: "Multi-image bloodwork report. For each page, table-focused crop (if present) appears first, then original image, then enhanced version; use original/focused table digits as source of truth, and use enhancements/crops only to improve readability."
     },
     ...imageParts,
+    {
+      type: "text" as const,
+      text: VISUAL_PRIMARY_BOUNDARY_TEXT
+    },
     ...rowCropParts
   ];
 
