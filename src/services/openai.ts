@@ -1569,6 +1569,8 @@ Return every visible bloodwork table row in the order it appears on the report.
 
 Rules:
 - Use only what is visibly printed in the report image.
+- The first full-page image is the original source of truth; enhanced images/crops are only for readability support.
+- If original and enhanced views conflict, prefer the original full-page digit.
 - Transcribe exact printed values, units, and reference ranges.
 - Do not summarize.
 - Do not infer hidden or partially missing digits.
@@ -1647,6 +1649,8 @@ ${rowList}
 
 Rules:
 - Re-check every row directly against the visible report image.
+- The first full-page image is the original source of truth; enhanced images/crops are only for readability support.
+- If original and enhanced views conflict, prefer the original full-page digit.
 - Correct any wrong value, unit, or reference range.
 - Keep only rows that are visibly present.
 - Never move a number from one row to another.
@@ -2455,17 +2459,32 @@ export async function analyzeBloodworkFile(
     const imageOcr = await extractImageOcrBundle([
       { base64: processedImage.base64, fileType: processedImage.mimeType, label: "Uploaded image" }
     ]);
-    const rowCropParts = await buildRowCropImageParts([
+    const rowCropPartsProcessed = await buildRowCropImageParts([
       {
         base64: processedImage.base64,
         mimeType: processedImage.mimeType,
         rowBands: imageOcr.rowBands
       }
     ]);
+    const rowCropPartsOriginal = await buildRowCropImageParts([
+      {
+        base64: base64Image,
+        mimeType: imageFormat,
+        rowBands: imageOcr.rowBands
+      }
+    ]);
+    const rowCropParts = [...rowCropPartsOriginal, ...rowCropPartsProcessed];
     const verificationReportContent = [
       {
         type: "text" as const,
-        text: "Single bloodwork report image with additional zoomed row strips for exact value verification."
+        text: "Single bloodwork report image. First image is original capture, second is contrast-enhanced preprocessing, followed by zoomed row strips for exact value verification."
+      },
+      {
+        type: "image_url" as const,
+        image_url: {
+          url: `data:${imageFormat};base64,${base64Image}`,
+          detail: "high" as const
+        }
       },
       {
         type: "image_url" as const,
@@ -2569,6 +2588,13 @@ ${getLanguageInstruction(language)}`
             {
               type: "image_url",
               image_url: {
+                url: `data:${imageFormat};base64,${base64Image}`,
+                detail: "high"
+              }
+            },
+            {
+              type: "image_url",
+              image_url: {
                 url: `data:${processedImage.mimeType};base64,${processedImage.base64}`,
                 detail: "high"
               }
@@ -2629,10 +2655,20 @@ export async function analyzeBloodworkImages(
     })
   );
 
-  const imageParts = processedImages.map((img) => ({
-    type: "image_url" as const,
-    image_url: { url: `data:${img.mimeType};base64,${img.base64}`, detail: "high" }
-  }));
+  const imageParts = images.flatMap((img, index) => {
+    const originalMimeType = normalizeImageMimeType(img.fileType);
+    const processed = processedImages[index];
+    return [
+      {
+        type: "image_url" as const,
+        image_url: { url: `data:${originalMimeType};base64,${img.base64}`, detail: "high" as const }
+      },
+      {
+        type: "image_url" as const,
+        image_url: { url: `data:${processed.mimeType};base64,${processed.base64}`, detail: "high" as const }
+      }
+    ];
+  });
   const imageOcr = await extractImageOcrBundle(
     processedImages.map((img, index) => ({
       base64: img.base64,
@@ -2640,18 +2676,26 @@ export async function analyzeBloodworkImages(
       label: `Uploaded image ${index + 1}`
     }))
   );
-  const rowCropParts = await buildRowCropImageParts(
+  const rowCropPartsProcessed = await buildRowCropImageParts(
     processedImages.map((img, index) => ({
       base64: img.base64,
       mimeType: img.mimeType,
       rowBands: imageOcr.rowBands.filter((row) => (row.pageNumber || 1) === index + 1)
     }))
   );
+  const rowCropPartsOriginal = await buildRowCropImageParts(
+    images.map((img, index) => ({
+      base64: img.base64,
+      mimeType: normalizeImageMimeType(img.fileType),
+      rowBands: imageOcr.rowBands.filter((row) => (row.pageNumber || 1) === index + 1)
+    }))
+  );
+  const rowCropParts = [...rowCropPartsOriginal, ...rowCropPartsProcessed];
 
   const verificationReportContent = [
     {
       type: "text" as const,
-      text: "Multi-image bloodwork report with additional zoomed row strips for exact value verification."
+      text: "Multi-image bloodwork report. For each page, the original image appears before its enhanced version; use original as source of truth, and use enhancements/crops only to improve readability."
     },
     ...imageParts,
     ...rowCropParts
