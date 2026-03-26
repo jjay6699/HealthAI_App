@@ -728,8 +728,8 @@ const buildRowCropBands = (rowBands: SourceRowBand[]) => {
   }
 
   const groups: Array<Array<SourceRowBand & { y: number }>> = [];
-  for (let index = 0; index < relevantRows.length; index += 4) {
-    groups.push(relevantRows.slice(index, index + 4));
+  for (let index = 0; index < relevantRows.length; index += 2) {
+    groups.push(relevantRows.slice(index, index + 2));
   }
 
   return groups.map((group, index) => {
