@@ -3159,10 +3159,12 @@ export async function analyzeBloodworkImages(
   );
 
   const parsedRows = perPageAnalyses.flatMap((analysis, index) =>
-    (analysis.parsedRows || []).map((row) => ({
-      ...row,
-      panel: `Page ${index + 1}${row.panel ? ` - ${row.panel}` : ""}`
-    }))
+    (analysis.parsedRows || [])
+      .filter((row) => Boolean(row.value || row.referenceRange || row.unit))
+      .map((row) => ({
+        ...row,
+        panel: `Page ${index + 1}${row.panel ? ` - ${row.panel}` : ""}`
+      }))
   );
 
   const recommendationMap = new Map<string, SupplementRecommendation>();
