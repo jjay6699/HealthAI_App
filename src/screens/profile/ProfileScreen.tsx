@@ -8,6 +8,7 @@ import { SHOW_LANGUAGE_SWITCHER } from "../../config/features";
 import { AppTheme, useTheme } from "../../theme";
 import { generateProfileSummary, translateDailyProfileSummary } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
+import { useAuth } from "../../services/auth";
 import { Language, useI18n } from "../../i18n";
 
 type ProfileState = {
@@ -121,6 +122,7 @@ const ProfileScreen = () => {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
+  const { setUser } = useAuth();
   const defaultProfile: ProfileState = {
     avatarImage: null,
     name: "",
@@ -528,6 +530,7 @@ const ProfileScreen = () => {
       persistentStorage.removeItem("orderDetails");
       persistentStorage.removeItem("deliveryAddress");
       persistentStorage.removeItem("lastOrder");
+      setUser(null);
       setIsLoggingOut(false);
       navigate("/");
     }
