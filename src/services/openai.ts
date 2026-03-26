@@ -3121,14 +3121,53 @@ export async function analyzeBloodworkImages(
     }))
   );
 
-  const parsedRows = perPageAnalyses.flatMap((analysis, index) =>
+  const isMeaningfulText = (value?: string) => {
+    const normalized = (value || "").trim();
+    if (!normalized) return false;
+    if (/^(?:-|--|---|n\/?a|na|nil|none|\.|\.\.\.|\?+)$/i.test(normalized)) return false;
+    return true;
+  };
+
+  const flattenedParsedRows = perPageAnalyses.flatMap((analysis, index) =>
     (analysis.parsedRows || [])
-      .filter((row) => Boolean(row.value || row.referenceRange || row.unit))
+      .filter(
+        (row) =>
+          isMeaningfulText(row.value) ||
+          isMeaningfulText(row.referenceRange) ||
+          isMeaningfulText(row.unit)
+      )
       .map((row) => ({
         ...row,
         panel: `Page ${index + 1}${row.panel ? ` - ${row.panel}` : ""}`
       }))
   );
+
+  const parsedRowsByKey = new Map<string, ParsedReportRow>();
+  for (const row of flattenedParsedRows) {
+    const key = `${row.panel || ""}|${row.markerId}`;
+    const existing = parsedRowsByKey.get(key);
+    if (!existing) {
+      parsedRowsByKey.set(key, row);
+      continue;
+    }
+
+    const rowScore =
+      (isMeaningfulText(row.value) ? 4 : 0) +
+      (isMeaningfulText(row.referenceRange) ? 3 : 0) +
+      (isMeaningfulText(row.unit) ? 2 : 0) +
+      (row.status !== "unknown" ? 1 : 0);
+    const existingScore =
+      (isMeaningfulText(existing.value) ? 4 : 0) +
+      (isMeaningfulText(existing.referenceRange) ? 3 : 0) +
+      (isMeaningfulText(existing.unit) ? 2 : 0) +
+      (existing.status !== "unknown" ? 1 : 0);
+
+    if (rowScore > existingScore) {
+      parsedRowsByKey.set(key, row);
+    }
+  }
+
+  const parsedRows = [...parsedRowsByKey.values()];
 
   const recommendationMap = new Map<string, SupplementRecommendation>();
   for (const analysis of perPageAnalyses) {
