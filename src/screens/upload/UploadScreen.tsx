@@ -696,9 +696,12 @@ const createStyles = (theme: AppTheme) => ({
     display: "grid",
     gap: theme.spacing.sm,
     padding: theme.spacing.md,
+    width: "100%",
+    maxWidth: "100%",
     borderRadius: theme.radii.lg,
     border: `1px solid ${theme.colors.divider}`,
-    background: theme.colors.background
+    background: theme.colors.background,
+    overflow: "hidden"
   },
   queueTitle: {
     margin: 0,
@@ -708,19 +711,22 @@ const createStyles = (theme: AppTheme) => ({
   },
   queueList: {
     display: "grid",
-    gap: theme.spacing.xs
+    gap: theme.spacing.xs,
+    minWidth: 0
   },
   queueItem: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: theme.spacing.sm,
+    minWidth: 0,
     padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
     borderRadius: theme.radii.md,
     border: `1px solid ${theme.colors.divider}`,
     background: theme.colors.surface
   },
   queueItemText: {
+    flex: 1,
     fontSize: 13,
     color: theme.colors.text,
     minWidth: 0,
@@ -735,6 +741,8 @@ const createStyles = (theme: AppTheme) => ({
     fontSize: 12,
     fontWeight: 700,
     cursor: "pointer",
+    flexShrink: 0,
+    whiteSpace: "nowrap" as const,
     padding: 0
   },
   pastRow: {
@@ -873,6 +881,5 @@ const createStyles = (theme: AppTheme) => ({
 });
 
 export default UploadScreen;
-
 
 
