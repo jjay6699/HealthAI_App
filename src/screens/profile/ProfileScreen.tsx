@@ -529,7 +529,7 @@ const ProfileScreen = () => {
       persistentStorage.removeItem("deliveryAddress");
       persistentStorage.removeItem("lastOrder");
       setIsLoggingOut(false);
-      navigate("/login");
+      navigate("/");
     }
   };
 

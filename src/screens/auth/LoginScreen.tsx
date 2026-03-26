@@ -73,10 +73,6 @@ const LoginScreen = () => {
     setPassword(demoCredentials.password);
   };
 
-  const handleGoogleLogin = () => {
-    window.location.href = "/api/auth/google/start";
-  };
-
   return (
     <div style={styles.wrapper}>
       <h1 style={styles.heading}>{t("auth.login.heading")}</h1>
@@ -127,18 +123,6 @@ const LoginScreen = () => {
 
         <Button title={t("auth.login.submit")} type="submit" fullWidth loading={isLoading} style={{ marginTop: theme.spacing.sm }} />
       </form>
-
-      <div style={styles.dividerRow}>
-        <span style={styles.divider} />
-        <span style={styles.dividerLabel}>{t("auth.login.orContinue")}</span>
-        <span style={styles.divider} />
-      </div>
-
-      <div style={styles.socialRow}>
-        <button type="button" style={styles.socialButton} onClick={handleGoogleLogin}>
-          Google
-        </button>
-      </div>
 
       <div style={styles.footerRow}>
         <span style={styles.footerText}>{t("auth.login.newHere")}</span>
@@ -225,38 +209,6 @@ const createStyles = (theme: AppTheme) => ({
     fontSize: 14,
     fontWeight: 600,
     cursor: "pointer"
-  },
-  dividerRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: theme.spacing.md,
-    marginTop: theme.spacing.xl
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: theme.colors.divider
-  },
-  dividerLabel: {
-    textTransform: "uppercase" as const,
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    letterSpacing: 1
-  },
-  socialRow: {
-    display: "grid",
-    gridTemplateColumns: "1fr",
-    gap: theme.spacing.md
-  },
-  socialButton: {
-    borderRadius: theme.radii.md,
-    border: "1px solid #E5E7EB",
-    background: "#FFFFFF",
-    padding: `${theme.spacing.lg}px`,
-    fontSize: 16,
-    fontWeight: 600,
-    cursor: "pointer",
-    outline: "none"
   },
   footerRow: {
     marginTop: theme.spacing.xl,
