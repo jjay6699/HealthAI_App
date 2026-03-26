@@ -2454,7 +2454,7 @@ export async function analyzeBloodworkFile(
       {
         type: "image_url" as const,
         image_url: {
-          url: `data:${imageFormat};base64,${base64Image}`,
+          url: `data:${processedImage.mimeType};base64,${processedImage.base64}`,
           detail: "high" as const
         }
       },
@@ -2553,7 +2553,7 @@ ${getLanguageInstruction(language)}`
             {
               type: "image_url",
               image_url: {
-                url: `data:${imageFormat};base64,${base64Image}`,
+                url: `data:${processedImage.mimeType};base64,${processedImage.base64}`,
                 detail: "high"
               }
             }
@@ -2613,13 +2613,10 @@ export async function analyzeBloodworkImages(
     })
   );
 
-  const imageParts = images.map((img) => {
-    const imageFormat = normalizeImageMimeType(img.fileType);
-    return {
-      type: "image_url" as const,
-      image_url: { url: `data:${imageFormat};base64,${img.base64}`, detail: "high" }
-    };
-  });
+  const imageParts = processedImages.map((img) => ({
+    type: "image_url" as const,
+    image_url: { url: `data:${img.mimeType};base64,${img.base64}`, detail: "high" }
+  }));
   const imageOcr = await extractImageOcrBundle(
     processedImages.map((img, index) => ({
       base64: img.base64,
