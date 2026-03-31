@@ -274,13 +274,17 @@ app.use(express.json({ limit: "25mb" }));
 
 const SESSION_COOKIE = "ng_session";
 const OAUTH_STATE_COOKIE = "ng_oauth_state";
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "RichAIAdmin!2026";
 const isProd = process.env.NODE_ENV === "production";
+const ADMIN_USERNAME = typeof process.env.ADMIN_USERNAME === "string" ? process.env.ADMIN_USERNAME.trim() : "";
+const ADMIN_PASSWORD = typeof process.env.ADMIN_PASSWORD === "string" ? process.env.ADMIN_PASSWORD : "";
 const sessionSecret = process.env.SESSION_SECRET;
 
 if (isProd && !sessionSecret) {
   throw new Error("SESSION_SECRET is required in production.");
+}
+
+if (isProd && (!ADMIN_USERNAME || !ADMIN_PASSWORD)) {
+  throw new Error("ADMIN_USERNAME and ADMIN_PASSWORD are required in production.");
 }
 
 app.use(sessionSecret ? cookieParser(sessionSecret) : cookieParser());
@@ -349,12 +353,24 @@ const getBasicAuthCredentials = (req) => {
   }
 };
 
+const safeCompare = (left, right) => {
+  if (typeof left !== "string" || typeof right !== "string") return false;
+
+  const leftBuffer = Buffer.from(left, "utf8");
+  const rightBuffer = Buffer.from(right, "utf8");
+  if (leftBuffer.length !== rightBuffer.length) return false;
+
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+};
+
 const requireAdminAuth = (req, res, next) => {
   const credentials = getBasicAuthCredentials(req);
   if (
+    ADMIN_USERNAME &&
+    ADMIN_PASSWORD &&
     credentials &&
-    credentials.username === ADMIN_USERNAME &&
-    credentials.password === ADMIN_PASSWORD
+    safeCompare(credentials.username, ADMIN_USERNAME) &&
+    safeCompare(credentials.password, ADMIN_PASSWORD)
   ) {
     return next();
   }
