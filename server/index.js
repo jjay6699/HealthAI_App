@@ -45,6 +45,10 @@ if (!hasUserColumn("country")) {
   db.exec("ALTER TABLE users ADD COLUMN country TEXT");
 }
 
+if (!hasUserColumn("referralCode")) {
+  db.exec("ALTER TABLE users ADD COLUMN referralCode TEXT");
+}
+
 // Auth tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -54,6 +58,7 @@ db.exec(`
     pictureUrl TEXT,
     provider TEXT NOT NULL,
     providerSub TEXT NOT NULL,
+    referralCode TEXT,
     createdAt INTEGER NOT NULL,
     lastLoginAt INTEGER NOT NULL,
     UNIQUE(provider, providerSub),
@@ -70,6 +75,9 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_sessions_userId ON sessions(userId);
   CREATE INDEX IF NOT EXISTS idx_sessions_expiresAt ON sessions(expiresAt);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referralCode_unique
+    ON users(referralCode)
+    WHERE referralCode IS NOT NULL;
 
   CREATE TABLE IF NOT EXISTS orders (
     id TEXT PRIMARY KEY,
@@ -128,13 +136,16 @@ const stmtDeleteOne = db.prepare(
 );
 
 const stmtGetUserByProviderSub = db.prepare(
-  "SELECT id, email, name, pictureUrl, provider, providerSub, createdAt, lastLoginAt FROM users WHERE provider = ? AND providerSub = ?"
+  "SELECT id, email, name, pictureUrl, provider, providerSub, referralCode, createdAt, lastLoginAt FROM users WHERE provider = ? AND providerSub = ?"
 );
 const stmtGetPasswordUserByEmail = db.prepare(
-  "SELECT id, email, name, pictureUrl, provider, providerSub, country, passwordHash, createdAt, lastLoginAt FROM users WHERE email = ?"
+  "SELECT id, email, name, pictureUrl, provider, providerSub, country, referralCode, passwordHash, createdAt, lastLoginAt FROM users WHERE email = ?"
 );
 const stmtGetUserById = db.prepare(
-  "SELECT id, email, name, pictureUrl, provider, providerSub, createdAt, lastLoginAt FROM users WHERE id = ?"
+  "SELECT id, email, name, pictureUrl, provider, providerSub, country, referralCode, createdAt, lastLoginAt FROM users WHERE id = ?"
+);
+const stmtGetUserByReferralCode = db.prepare(
+  "SELECT id, email, name, provider, country, referralCode, createdAt, lastLoginAt FROM users WHERE referralCode = ?"
 );
 const stmtInsertUser = db.prepare(
   "INSERT INTO users (id, email, name, pictureUrl, provider, providerSub, createdAt, lastLoginAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
@@ -148,6 +159,7 @@ const stmtUpdateUserLogin = db.prepare(
 const stmtUpdatePasswordUserLogin = db.prepare(
   "UPDATE users SET name = ?, country = ?, lastLoginAt = ? WHERE id = ?"
 );
+const stmtUpdateUserReferralCode = db.prepare("UPDATE users SET referralCode = ? WHERE id = ?");
 const stmtInsertUserConsent = db.prepare(
   "INSERT INTO user_consents (id, userId, consentType, granted, policyVersion, acceptedAt, sourceIp, userAgent, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
 );
@@ -184,7 +196,7 @@ const stmtInsertOrder = db.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const stmtListAdminUsers = db.prepare(`
-  SELECT id, email, name, provider, country, createdAt, lastLoginAt
+  SELECT id, email, name, provider, country, referralCode, createdAt, lastLoginAt
   FROM users
   ORDER BY createdAt DESC
   LIMIT ?
@@ -372,6 +384,13 @@ const isStrongEnoughPassword = (value) =>
   /[A-Za-z]/.test(value) &&
   /\d/.test(value) &&
   /[^A-Za-z0-9]/.test(value);
+const normalizeReferralCode = (value) => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) return null;
+  if (!/^[A-Z0-9]{4,24}$/.test(normalized)) return "__INVALID__";
+  return normalized;
+};
 
 const hashPassword = async (password) => {
   const salt = crypto.randomBytes(16).toString("hex");
@@ -527,8 +546,8 @@ app.post(
 app.get("/api/auth/me", (req, res) => {
   const user = getAuthedUser(req);
   if (!user) return res.json({ user: null });
-  const { id, email, name, pictureUrl, provider, createdAt, lastLoginAt } = user;
-  res.json({ user: { id, email, name, pictureUrl, provider, createdAt, lastLoginAt } });
+  const { id, email, name, pictureUrl, provider, country, referralCode, createdAt, lastLoginAt } = user;
+  res.json({ user: { id, email, name, pictureUrl, provider, country, referralCode, createdAt, lastLoginAt } });
 });
 
 app.post(
@@ -800,6 +819,46 @@ app.get(
   })
 );
 
+app.put(
+  "/api/admin/users/:userId/referral-code",
+  requireAdminAuth,
+  asyncHandler(async (req, res) => {
+    const userId = typeof req.params.userId === "string" ? req.params.userId.trim() : "";
+    const existingUser = userId ? stmtGetUserById.get(userId) : null;
+
+    if (!existingUser) {
+      return res.status(404).json({ error: "user_not_found" });
+    }
+
+    const normalizedReferralCode = normalizeReferralCode(req.body?.referralCode);
+    if (normalizedReferralCode === "__INVALID__") {
+      return res.status(400).json({ error: "invalid_referral_code" });
+    }
+
+    if (normalizedReferralCode) {
+      const duplicateUser = stmtGetUserByReferralCode.get(normalizedReferralCode);
+      if (duplicateUser && duplicateUser.id !== userId) {
+        return res.status(409).json({ error: "referral_code_in_use" });
+      }
+    }
+
+    stmtUpdateUserReferralCode.run(normalizedReferralCode, userId);
+    const updatedUser = stmtGetUserById.get(userId);
+    res.json({
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        provider: updatedUser.provider,
+        country: updatedUser.country || null,
+        referralCode: updatedUser.referralCode || null,
+        createdAt: updatedUser.createdAt,
+        lastLoginAt: updatedUser.lastLoginAt
+      }
+    });
+  })
+);
+
 app.get(
   "/api/auth/google/start",
   asyncHandler(async (req, res) => {
@@ -976,4 +1035,3 @@ const shutdown = (signal) => {
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
-
