@@ -233,6 +233,7 @@ const stmtAdminOrderStats = db.prepare(
 
 const scryptAsync = promisify(crypto.scrypt);
 const authRateLimitState = new Map();
+let authRateLimitSweepCounter = 0;
 
 const upsertMany = db.transaction((clientId, items) => {
   for (const [key, value] of items) {
@@ -464,10 +465,22 @@ const getRequestIp = (req) => {
   return req.ip || req.socket?.remoteAddress || "unknown";
 };
 
+const sweepExpiredRateLimitEntries = (now) => {
+  authRateLimitSweepCounter += 1;
+  if (authRateLimitSweepCounter % 100 !== 0) return;
+
+  for (const [key, value] of authRateLimitState.entries()) {
+    if (value.resetAt <= now) {
+      authRateLimitState.delete(key);
+    }
+  }
+};
+
 const makeRateLimiter =
   ({ windowMs, maxAttempts, scope }) =>
   (req, res, next) => {
     const now = Date.now();
+    sweepExpiredRateLimitEntries(now);
     const key = `${scope}:${getRequestIp(req)}`;
     const current = authRateLimitState.get(key);
     if (!current || current.resetAt <= now) {
@@ -496,6 +509,18 @@ const authRegisterRateLimiter = makeRateLimiter({
   windowMs: 60 * 60 * 1000,
   maxAttempts: 10,
   scope: "register"
+});
+
+const authGoogleStartRateLimiter = makeRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  maxAttempts: 20,
+  scope: "google_start"
+});
+
+const adminRateLimiter = makeRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  maxAttempts: 25,
+  scope: "admin"
 });
 
 const getOpenAIClient = () => {
@@ -808,6 +833,7 @@ app.post(
 
 app.get(
   "/api/admin/overview",
+  adminRateLimiter,
   requireAdminAuth,
   asyncHandler(async (req, res) => {
     const userLimit = Math.min(500, Math.max(1, Number(req.query.userLimit) || 200));
@@ -837,6 +863,7 @@ app.get(
 
 app.put(
   "/api/admin/users/:userId/referral-code",
+  adminRateLimiter,
   requireAdminAuth,
   asyncHandler(async (req, res) => {
     const userId = typeof req.params.userId === "string" ? req.params.userId.trim() : "";
@@ -877,6 +904,7 @@ app.put(
 
 app.get(
   "/api/auth/google/start",
+  authGoogleStartRateLimiter,
   asyncHandler(async (req, res) => {
     const client = getGoogleOAuthClient();
     if (!client) return res.status(501).json({ error: "google_oauth_not_configured" });
