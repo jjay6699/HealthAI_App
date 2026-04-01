@@ -16,6 +16,7 @@ import {
 import { AVAILABLE_SUPPLEMENTS, Supplement } from "../../data/supplements";
 import { SUPPLEMENT_DESCRIPTIONS } from "../../data/supplementDescriptions";
 import { persistentStorage } from "../../services/persistentStorage";
+import { useAuth } from "../../services/auth";
 
 type DisplaySupplementContent = {
   benefits: string[];
@@ -30,6 +31,7 @@ const SupplementsScreen = () => {
   const isChinese = language === "zh";
   const isMalay = language === "bm";
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [recommendations, setRecommendations] = useState<SupplementRecommendation[]>([]);
   const [displayRecommendations, setDisplayRecommendations] = useState<SupplementRecommendation[]>([]);
   const [translatedContent, setTranslatedContent] = useState<Record<string, DisplaySupplementContent>>({});
@@ -37,8 +39,12 @@ const SupplementsScreen = () => {
   const [hasHydratedRecommendations, setHasHydratedRecommendations] = useState(false);
   const [isRecommendationsLoading, setIsRecommendationsLoading] = useState(true);
 
+  const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
+
   useEffect(() => {
-    const storedAnalysis = persistentStorage.getItem("bloodworkAnalysis");
+    const storedAnalysis =
+      persistentStorage.getItem(scopedKey("bloodworkAnalysis")) ??
+      persistentStorage.getItem("bloodworkAnalysis");
     if (!storedAnalysis) {
       setHasHydratedRecommendations(true);
       return;
@@ -52,7 +58,7 @@ const SupplementsScreen = () => {
     } finally {
       setHasHydratedRecommendations(true);
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!hasHydratedRecommendations) return;

@@ -58,6 +58,19 @@ const parseReferenceRange = (referenceRange?: string) => {
   const matches = normalized.match(/\d+(?:\.\d+)?/g);
   if (!matches || matches.length === 0) return null;
 
+  // Some OCR outputs malformed bounds like "<6 - 45" where the leading
+  // symbol belongs to the first bound but the actual intent is still a
+  // between-range. When we see two numbers plus a range separator, prefer
+  // the bounded interpretation before applying single-sided rules.
+  const hasRangeSeparator = /\d\s*(?:-|–|—|to)\s*\d/i.test(normalized);
+  if (matches.length >= 2 && hasRangeSeparator) {
+    const min = Number(matches[0]);
+    const max = Number(matches[1]);
+    if (!Number.isNaN(min) && !Number.isNaN(max)) {
+      return { type: "between" as const, min, max };
+    }
+  }
+
   const upperMatch = normalized.match(/^(?:<|<=)\s*(\d+(?:\.\d+)?)/);
   if (upperMatch) {
     const upper = Number(upperMatch[1]);
