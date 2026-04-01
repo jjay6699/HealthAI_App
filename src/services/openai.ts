@@ -1158,8 +1158,67 @@ const buildRowConcern = (row: ExtractedReportRow) => {
 const buildParsedRowExplanation = (row: ParsedReportRow) => {
   const valueText = row.value ? `${row.value}${row.unit ? ` ${row.unit}` : ""}` : "this value";
   const rangeText = row.referenceRange ? ` (lab range: ${row.referenceRange})` : "";
-  const marker = row.marker || "This marker";
+  const marker = canonicalizeMarkerName(row.marker || "This marker") || row.marker || "This marker";
   const markerKey = normalizeForMatch(marker);
+  const aiExplanation = row.explanation?.trim();
+
+  const closing = (() => {
+    if (/(glucose|a1c|hba1c|insulin)/.test(markerKey)) {
+      return {
+        high: "Seen repeatedly, this usually matters more as a blood-sugar pattern than as a single isolated result.",
+        low: "If this shows up more than once, it is worth matching it to meal timing, symptoms, and energy swings.",
+        normal: "The bigger picture still comes from watching the trend over time, not one reading alone."
+      };
+    }
+    if (/(ldl|hdl|cholesterol|triglyceride|triglycerides|lipid|apo b|apob|non hdl|nonhdl)/.test(markerKey)) {
+      return {
+        high: "This is most useful when reviewed together with the rest of the lipid panel rather than on its own.",
+        low: "It makes more sense when compared with your full cholesterol pattern and general diet profile.",
+        normal: "It is still worth reading this together with the rest of the cardiovascular markers."
+      };
+    }
+    if (/(alt|ast|alp|ggt|bilirubin|liver)/.test(markerKey)) {
+      return {
+        high: "Context matters here, especially whether other liver markers move in the same direction.",
+        low: "On its own this is often less important, so the surrounding liver markers matter a lot.",
+        normal: "This is best interpreted as part of the overall liver panel rather than by itself."
+      };
+    }
+    if (/(creatinine|egfr|urea|bun|kidney)/.test(markerKey)) {
+      return {
+        high: "Hydration, muscle mass, and the rest of the kidney panel can all change how important this result is.",
+        low: "This often needs context from body size, hydration, and nearby kidney markers.",
+        normal: "Kidney markers are most meaningful when looked at together rather than one by one."
+      };
+    }
+    if (/(ferritin|iron|hemoglobin|haemoglobin|b12|folate|vitamin d|vitamin\s*d)/.test(markerKey)) {
+      return {
+        high: "Supplement use, diet, and related nutrient markers can help explain whether this is meaningful or temporary.",
+        low: "This becomes especially relevant if it lines up with tiredness, poor recovery, or concentration issues.",
+        normal: "It is still helpful to compare this with symptoms and other nutrient-related results."
+      };
+    }
+    if (/(crp|esr|inflammation)/.test(markerKey)) {
+      return {
+        high: "Inflammation markers are usually most helpful when tracked as a trend instead of judged from one test alone.",
+        low: "That is generally reassuring, though the overall pattern still matters more than a standalone number.",
+        normal: "The trend and the rest of the inflammatory picture still matter most."
+      };
+    }
+    if (/(tsh|t3|t4|thyroid)/.test(markerKey)) {
+      return {
+        high: "This is much more informative when compared with the rest of the thyroid panel and symptoms.",
+        low: "The meaning depends heavily on what the other thyroid markers are doing at the same time.",
+        normal: "Thyroid results are usually best understood as a panel, not as a single value."
+      };
+    }
+
+    return {
+      high: "The significance usually depends on whether related markers show the same pattern.",
+      low: "It is more meaningful when considered alongside symptoms and related lab values.",
+      normal: "The wider lab pattern still tells more than a single isolated result."
+    };
+  })();
 
   const markerMeaning = (() => {
     if (/(glucose|a1c|hba1c|insulin)/.test(markerKey)) {
@@ -1220,16 +1279,16 @@ const buildParsedRowExplanation = (row: ParsedReportRow) => {
   })();
 
   if (row.status === "high") {
-    return `${marker} is above the lab range at ${valueText}${rangeText}. ${markerMeaning.high} It is usually more useful to review this together with related markers and compare it with previous results than to judge it in isolation.`;
+    return `${marker} is above the lab range at ${valueText}${rangeText}. ${aiExplanation || markerMeaning.high} ${closing.high}`;
   }
   if (row.status === "low") {
-    return `${marker} is below the lab range at ${valueText}${rangeText}. ${markerMeaning.low} If it stays low across repeat testing, it can be more meaningful than a one-off dip.`;
+    return `${marker} is below the lab range at ${valueText}${rangeText}. ${aiExplanation || markerMeaning.low} ${closing.low}`;
   }
   if (row.status === "flagged" || row.status === "abnormal") {
-    return `${marker} is flagged as outside the expected pattern at ${valueText}${rangeText}. A flagged result does not automatically mean disease, but it does mean the value should be interpreted alongside nearby markers, symptoms, and trend history.`;
+    return `${marker} is flagged as outside the expected pattern at ${valueText}${rangeText}. ${aiExplanation || "A flagged result does not automatically mean disease, but it does mean the value should be interpreted alongside nearby markers, symptoms, and trend history."}`;
   }
   if (row.status === "normal") {
-    return `${marker} is within the printed lab range at ${valueText}${rangeText}. ${markerMeaning.normal} Trends across time are still more informative than one isolated reading.`;
+    return `${marker} is within the printed lab range at ${valueText}${rangeText}. ${aiExplanation || markerMeaning.normal} ${closing.normal}`;
   }
   if (row.status === "comment") {
     return "This note was written by the lab/clinician and adds useful context to the numeric results. It should be interpreted together with the related markers, not in isolation.";
@@ -1975,6 +2034,11 @@ Important rules:
 - For image/PDF reports, read directly from the visible table rows in the uploaded image, not from inferred OCR fragments.
 - If the marker label is visible but the value is ambiguous, leave the value blank instead of guessing.
 - Do not summarize. Extract rows only.
+- The whyItMatters field must be specific to the exact marker, not generic.
+- Do not reuse the same explanation pattern across multiple rows.
+- Avoid vague lines like "this should be reviewed with other markers" unless you also explain what body system or health area is involved.
+- Mention the likely health area in plain language when possible, such as blood sugar, cholesterol/cardiovascular risk, inflammation, liver function, kidney function, thyroid, oxygen-carrying capacity, or nutrient status.
+- Keep whyItMatters to 1 sentence, but make it concrete and consumer-friendly.
 
 Return JSON with this exact shape:
 {
@@ -1987,7 +2051,7 @@ Return JSON with this exact shape:
       "referenceRange": "printed range if any",
       "status": "high|low|normal|abnormal|flagged|comment",
       "note": "short extraction note if needed",
-      "whyItMatters": "one short plain-language explanation of why this matters"
+      "whyItMatters": "one short marker-specific plain-language explanation of why this matters"
     }
   ]
 }`
@@ -2260,6 +2324,8 @@ Rules:
 - Never borrow a value, unit, or reference range from an adjacent marker row.
 - If the marker name is visible but the value is ambiguous, return the marker without a value instead of guessing.
 - Preserve markers like "Non HDL", "A/G ratio", "ALT (SGPT)", and "AST (SGOT)" exactly when possible.
+- If you include whyItMatters, it must be specific to that marker and should not use repeated generic wording.
+- Avoid boilerplate such as "interpret with other markers" unless you also explain the specific health area involved.
 
 Return JSON with this exact shape:
 {
@@ -2272,7 +2338,7 @@ Return JSON with this exact shape:
       "referenceRange": "printed range if any",
       "status": "high|low|normal|abnormal|flagged|comment|unknown",
       "note": "short extraction note if needed",
-      "whyItMatters": "one short plain-language explanation of why this matters"
+      "whyItMatters": "one short marker-specific plain-language explanation of why this matters"
     }
   ]
 }`
@@ -2340,6 +2406,7 @@ Rules:
 - Do not invent missing markers that are not visibly present.
 - Never assign a value from one row to a different marker.
 - For image/PDF reports, use the visible row in the image as the source of truth.
+- If you include whyItMatters, make it specific to the exact marker and avoid repeated generic sentence patterns.
 
 Return JSON with this exact shape:
 {
@@ -2352,7 +2419,7 @@ Return JSON with this exact shape:
       "referenceRange": "printed range if any",
       "status": "high|low|normal|abnormal|flagged|comment|unknown",
       "note": "short extraction note if needed",
-      "whyItMatters": "one short plain-language explanation of why this matters"
+      "whyItMatters": "one short marker-specific plain-language explanation of why this matters"
     }
   ]
 }`
@@ -2422,6 +2489,7 @@ Rules:
 - For image/PDF reports, validate directly against the visible table rows in the uploaded image.
 - If you cannot confidently verify a value for a marker, omit that corrected row rather than guessing.
 - Do not invent new markers that were not already in the extracted list.
+- If you include whyItMatters, make it specific to the exact marker and avoid repeated boilerplate wording.
 
 Return JSON with this exact shape:
 {
@@ -2434,7 +2502,7 @@ Return JSON with this exact shape:
       "referenceRange": "corrected range if visible",
       "status": "high|low|normal|abnormal|flagged|comment|unknown",
       "note": "short validation note if needed",
-      "whyItMatters": "one short plain-language explanation of why this matters"
+      "whyItMatters": "one short marker-specific plain-language explanation of why this matters"
     }
   ]
 }`
