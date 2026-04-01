@@ -365,8 +365,31 @@ const normalizeRecommendations = (analysis: BloodworkAnalysis): BloodworkAnalysi
     .join(" ")
     .toLowerCase();
 
+  const hasRecommendation = (names: string[]) =>
+    normalized.some((rec) => names.includes(rec.supplementName));
+
+  const addRecommendation = (
+    supplementName: string,
+    reason: string,
+    priority: SupplementRecommendation["priority"]
+  ) => {
+    if (normalized.length >= 8 || hasRecommendation([supplementName])) return;
+    const supplement = AVAILABLE_SUPPLEMENTS.find((item) => item.name === supplementName);
+    if (!supplement) return;
+    normalized.push({
+      supplementId: supplement.id,
+      supplementName: supplement.name,
+      reason,
+      priority
+    });
+  };
+
+  const hasHormoneSignals = /(hormone|hormonal|testosterone|free testosterone|total testosterone|estradiol|estrogen|progesterone|17[\s-]?hydroxyprogesterone|dhea|dhea-s|fsh|lh\b|prolactin|androgen|pcos|perimenopause|menopause|cycle irregular|ovulation|fertility)/i.test(
+    analysisText
+  );
+
   const pickProteinBase = () => {
-    if (/(stress|anxiety|mood|sleep|fatigue|energy|cognitive|focus)/i.test(analysisText)) {
+    if (hasHormoneSignals || /(stress|anxiety|mood|sleep|fatigue|energy|cognitive|focus)/i.test(analysisText)) {
       return "Pea Protein Cacao";
     }
     return "Pea Protein Original";
@@ -378,6 +401,14 @@ const normalizeRecommendations = (analysis: BloodworkAnalysis): BloodworkAnalysi
     }
     return "Australian Instant Oats";
   };
+
+  if (hasHormoneSignals) {
+    addRecommendation(
+      "Maca Powder",
+      "Selected to support energy, stamina, and hormone balance around the hormone-related markers seen in your report.",
+      "high"
+    );
+  }
 
   if (!hasProteinBase) {
     const proteinChoice = pickProteinBase();
