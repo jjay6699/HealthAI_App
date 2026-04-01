@@ -1158,18 +1158,78 @@ const buildRowConcern = (row: ExtractedReportRow) => {
 const buildParsedRowExplanation = (row: ParsedReportRow) => {
   const valueText = row.value ? `${row.value}${row.unit ? ` ${row.unit}` : ""}` : "this value";
   const rangeText = row.referenceRange ? ` (lab range: ${row.referenceRange})` : "";
+  const marker = row.marker || "This marker";
+  const markerKey = normalizeForMatch(marker);
+
+  const markerMeaning = (() => {
+    if (/(glucose|a1c|hba1c|insulin)/.test(markerKey)) {
+      return {
+        high: "This may suggest your blood sugar is running higher than ideal and can add stress to energy, weight, and long-term metabolic health.",
+        low: "This may reflect low blood sugar reserve or poor fuel availability, which can contribute to shakiness, fatigue, or light-headedness.",
+        normal: "This is a reassuring sign for blood sugar balance at the time of testing."
+      };
+    }
+    if (/(ldl|hdl|cholesterol|triglyceride|triglycerides|lipid|apob|nonhdl)/.test(markerKey)) {
+      return {
+        high: "This can point to higher cardiovascular strain over time, especially when seen together with other metabolic risk markers.",
+        low: "This may be worth interpreting in the context of overall metabolic health, diet, and other lipid markers.",
+        normal: "This is a positive sign for this part of your cardiovascular risk picture."
+      };
+    }
+    if (/(alt|ast|alp|ggt|bilirubin|liver)/.test(markerKey)) {
+      return {
+        high: "This can suggest extra liver stress or inflammation and is best interpreted together with the rest of your liver panel.",
+        low: "Low values here are often less concerning on their own, but they still need context from the full panel.",
+        normal: "This is generally reassuring for liver-related function on this report."
+      };
+    }
+    if (/(creatinine|egfr|urea|bun|kidney)/.test(markerKey)) {
+      return {
+        high: "This can reflect reduced kidney clearance, dehydration, or increased metabolic stress depending on the full pattern.",
+        low: "This can sometimes be seen with lower muscle mass, hydration shifts, or other non-dangerous causes.",
+        normal: "This is generally reassuring for kidney-related filtration markers on this test."
+      };
+    }
+    if (/(ferritin|iron|hemoglobin|haemoglobin|b12|folate|vitamin d|vitamin\s*d)/.test(markerKey)) {
+      return {
+        high: "This may indicate excess storage or supplementation effects and should be read alongside symptoms and related markers.",
+        low: "This may help explain tiredness, poor recovery, brain fog, or reduced resilience if symptoms are present.",
+        normal: "This is a good sign for nutrient status in this area at the time of testing."
+      };
+    }
+    if (/(crp|esr|inflammation)/.test(markerKey)) {
+      return {
+        high: "This can be a sign that inflammation is more active than ideal somewhere in the body.",
+        low: "A low result here is usually a reassuring sign of lower inflammatory activity.",
+        normal: "This is generally reassuring for inflammation-related activity on this report."
+      };
+    }
+    if (/(tsh|t3|t4|thyroid)/.test(markerKey)) {
+      return {
+        high: "This may indicate thyroid signaling is not optimal and can affect energy, mood, metabolism, and temperature regulation.",
+        low: "This may also signal thyroid imbalance depending on the rest of the thyroid panel.",
+        normal: "This is a positive sign for thyroid balance, though trends and the full panel still matter."
+      };
+    }
+
+    return {
+      high: "This suggests the marker is above the expected range and may deserve attention in the context of symptoms and related labs.",
+      low: "This suggests the marker is below the expected range and may be relevant if you have fatigue, poor recovery, or other ongoing symptoms.",
+      normal: "This is a reassuring result for this marker on this report."
+    };
+  })();
 
   if (row.status === "high") {
-    return `${row.marker} is above the lab range at ${valueText}${rangeText}. This can put extra strain on related body systems over time and may explain symptoms if you have any. Track this marker again and discuss trend changes with your clinician while improving sleep, stress, hydration, and food quality.`;
+    return `${marker} is above the lab range at ${valueText}${rangeText}. ${markerMeaning.high} It is usually more useful to review this together with related markers and compare it with previous results than to judge it in isolation.`;
   }
   if (row.status === "low") {
-    return `${row.marker} is below the lab range at ${valueText}${rangeText}. Low levels can mean your body has less reserve for normal function and recovery, especially if this stays low across multiple tests. Recheck this marker after targeted nutrition and review persistent symptoms with your clinician.`;
+    return `${marker} is below the lab range at ${valueText}${rangeText}. ${markerMeaning.low} If it stays low across repeat testing, it can be more meaningful than a one-off dip.`;
   }
   if (row.status === "flagged" || row.status === "abnormal") {
-    return `${row.marker} is flagged as outside expected pattern at ${valueText}${rangeText}. A flagged result does not always mean disease, but it is a signal to interpret together with your other markers, symptoms, and medical history. Prioritize follow-up testing if this remains abnormal on repeat reports.`;
+    return `${marker} is flagged as outside the expected pattern at ${valueText}${rangeText}. A flagged result does not automatically mean disease, but it does mean the value should be interpreted alongside nearby markers, symptoms, and trend history.`;
   }
   if (row.status === "normal") {
-    return `${row.marker} is within the printed lab range at ${valueText}${rangeText}. This is a positive sign for this area right now, but trends across time are more meaningful than one reading. Keep your current healthy habits and monitor regularly.`;
+    return `${marker} is within the printed lab range at ${valueText}${rangeText}. ${markerMeaning.normal} Trends across time are still more informative than one isolated reading.`;
   }
   if (row.status === "comment") {
     return "This note was written by the lab/clinician and adds useful context to the numeric results. It should be interpreted together with the related markers, not in isolation.";
@@ -2534,11 +2594,18 @@ AVAILABLE NUTRITION PRODUCTS:
 ${supplementsList}
 
 Please analyze the bloodwork and provide:
-1. A brief summary of the overall health status
+1. A brief summary of the overall health status that explains the main pattern and why it matters overall, not just whether numbers are high or low
 2. Key concerns or areas that need attention (ONLY values outside reference ranges)
 3. Positive findings or strengths (ONLY values clearly within healthy ranges)
 4. Specific nutrition recommendations from our list that would address any deficiencies or support optimal health
 5. Detailed insights by health category. For each abnormal or noteworthy issue, explain in plain consumer-friendly language what was found and why it may matter in everyday terms.
+
+Important writing rules:
+- Do not repeat the same closing sentence across multiple markers.
+- Avoid generic endings like "track this marker again" for every result.
+- Make each explanation specific to the marker category when possible (for example energy, inflammation, blood sugar, cardiovascular risk, liver, kidney, thyroid, nutrient status).
+- In the summary, connect the findings into an overall story (for example inflammation pattern, blood sugar pattern, nutrient deficiency pattern, lipid/cardiovascular pattern) and explain possible day-to-day impact.
+- Do not only restate the numbers; explain significance in clear, practical language.
 
 Before giving recommendations, confirm you checked common lipid/metabolic markers if present: LDL, HDL, total cholesterol, triglycerides (TG), non-HDL, ApoB, glucose, HbA1c. If any of these are missing from the report, explicitly note them as "missing/unreported".
 
@@ -2611,7 +2678,7 @@ ${getLanguageInstruction(language)}`;
       messages: [
         {
           role: "system",
-          content: "You are a knowledgeable health and nutrition expert who analyzes bloodwork and provides evidence-based nutrition recommendations with ACCURATE dosages that vary based on the specific nutrition product and severity of deficiencies. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
+          content: "You are a knowledgeable health and nutrition expert who analyzes bloodwork and provides evidence-based nutrition recommendations with ACCURATE dosages that vary based on the specific nutrition product and severity of deficiencies. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Make the overall summary explain the health pattern and significance, not just the lab numbers. Avoid repeating the same ending phrase across multiple marker explanations. Always respond with valid JSON."
         },
         {
           role: "user",
@@ -2818,10 +2885,17 @@ AVAILABLE NUTRITION PRODUCTS:
 ${supplementsList}
 
 Please provide:
-1. A brief summary of the overall health status
+1. A brief summary of the overall health status that explains the main pattern and why it matters overall, not just whether numbers are high or low
 2. Key concerns or areas that need attention (ONLY values outside reference ranges)
 3. Positive findings or strengths (ONLY values clearly within healthy ranges)
 4. Specific nutrition recommendations from our list that would address any deficiencies or support optimal health
+
+Important writing rules:
+- Do not repeat the same closing sentence across multiple markers.
+- Avoid generic endings like "track this marker again" for every result.
+- Make each explanation specific to the marker category when possible.
+- In the summary, connect abnormal results into an overall story and explain why that pattern matters.
+- Do not only restate the numbers; explain significance in practical language.
 5. Detailed insights by health category (focus on abnormal values; avoid listing all normal markers)
 
 ${BLOODWORK_EXTRACTION_RULES}
@@ -3051,7 +3125,7 @@ export async function analyzeBloodworkFile(
       messages: [
         {
           role: "system",
-          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized nutrition recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Always respond with valid JSON."
+          content: "You are a health and nutrition expert who analyzes bloodwork reports. Extract all biomarker values, compare them to reference ranges, and provide personalized nutrition recommendations with ACCURATE, evidence-based dosages. Adjust dosages based on the severity of deficiencies shown in the bloodwork. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Make the summary explain the overall health pattern and practical significance, not just the raw numbers. Avoid repetitive boilerplate endings across detailed explanations. Always respond with valid JSON."
         },
         {
           role: "user",
