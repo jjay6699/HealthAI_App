@@ -7,19 +7,24 @@ import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 import { BloodworkAnalysis } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
+import { useAuth } from "../../services/auth";
 
 const OrderReviewScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { t } = useI18n();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<"one-bottle" | "one-month" | "three-months">("one-month");
   const [analysis, setAnalysis] = useState<BloodworkAnalysis | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [couponApplied, setCouponApplied] = useState<string | null>(null);
+  const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
 
   useEffect(() => {
-    const storedAnalysis = persistentStorage.getItem("bloodworkAnalysis");
+    const storedAnalysis =
+      persistentStorage.getItem(scopedKey("bloodworkAnalysis")) ??
+      persistentStorage.getItem("bloodworkAnalysis");
     if (!storedAnalysis) return;
 
     try {
@@ -27,7 +32,7 @@ const OrderReviewScreen = () => {
     } catch (error) {
       console.error("Failed to parse analysis:", error);
     }
-  }, []);
+  }, [user?.id]);
 
   const plans = [
     { id: "one-bottle", label: t("order.review.oneBottle"), price: 45, description: t("order.review.oneBottleDesc") },
