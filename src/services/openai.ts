@@ -387,6 +387,34 @@ const normalizeRecommendations = (analysis: BloodworkAnalysis): BloodworkAnalysi
   const hasHormoneSignals = /(hormone|hormonal|testosterone|free testosterone|total testosterone|estradiol|estrogen|progesterone|17[\s-]?hydroxyprogesterone|dhea|dhea-s|fsh|lh\b|prolactin|androgen|pcos|perimenopause|menopause|cycle irregular|ovulation|fertility)/i.test(
     analysisText
   );
+  const hasRenalRiskSignals =
+    /(kidney|renal|ckd|chronic kidney|proteinuria|albuminuria|nephropathy|dialysis)/i.test(
+      analysisText
+    ) ||
+    (analysis.parsedRows || []).some((row) => {
+      const marker = row.marker.toLowerCase();
+      const status = row.status?.toLowerCase() || "";
+      if (marker.includes("creatinine") && (status === "high" || status === "abnormal" || status === "flagged")) {
+        return true;
+      }
+      if (
+        (marker.includes("egfr") || marker.includes("estimated glomerular filtration")) &&
+        (status === "low" || status === "abnormal" || status === "flagged")
+      ) {
+        return true;
+      }
+      if (
+        (marker === "urea" || marker.includes("blood urea") || marker.includes("bun")) &&
+        (status === "high" || status === "abnormal" || status === "flagged")
+      ) {
+        return true;
+      }
+      return false;
+    });
+
+  if (hasRenalRiskSignals) {
+    normalized = normalized.filter((rec) => !proteinBases.includes(rec.supplementName));
+  }
 
   const pickProteinBase = () => {
     if (hasHormoneSignals || /(stress|anxiety|mood|sleep|fatigue|energy|cognitive|focus)/i.test(analysisText)) {
@@ -410,7 +438,7 @@ const normalizeRecommendations = (analysis: BloodworkAnalysis): BloodworkAnalysi
     );
   }
 
-  if (!hasProteinBase) {
+  if (!hasRenalRiskSignals && !normalized.some((rec) => proteinBases.includes(rec.supplementName))) {
     const proteinChoice = pickProteinBase();
     const proteinSupplement = AVAILABLE_SUPPLEMENTS.find((s) => s.name === proteinChoice);
     if (proteinSupplement) {
