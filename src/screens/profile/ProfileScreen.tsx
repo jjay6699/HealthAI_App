@@ -123,6 +123,7 @@ const ProfileScreen = () => {
   const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
   const { user, setUser } = useAuth();
+  const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
   const defaultProfile: ProfileState = {
     avatarImage: null,
     name: "",
@@ -204,7 +205,7 @@ const ProfileScreen = () => {
   });
 
   const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = persistentStorage.getItem("orderHistory");
+    const saved = persistentStorage.getItem(scopedKey("orderHistory")) ?? persistentStorage.getItem("orderHistory");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -348,8 +349,24 @@ const ProfileScreen = () => {
 
   // Save order history to localStorage
   useEffect(() => {
-    persistentStorage.setItem("orderHistory", JSON.stringify(orders));
-  }, [orders]);
+    persistentStorage.setItem(scopedKey("orderHistory"), JSON.stringify(orders));
+  }, [orders, user?.id]);
+
+  useEffect(() => {
+    const saved =
+      persistentStorage.getItem(scopedKey("orderHistory")) ??
+      persistentStorage.getItem("orderHistory");
+    if (!saved) {
+      setOrders([]);
+      return;
+    }
+
+    try {
+      setOrders(JSON.parse(saved));
+    } catch {
+      setOrders([]);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     persistentStorage.setItem("bloodPressureHistory", JSON.stringify(bpHistory));

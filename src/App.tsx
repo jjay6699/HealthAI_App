@@ -22,6 +22,7 @@ import OrderReviewScreen from "./screens/order/OrderReviewScreen";
 import CheckoutScreen from "./screens/order/CheckoutScreen";
 import PaymentScreen from "./screens/order/PaymentScreen";
 import OrderConfirmationScreen from "./screens/order/OrderConfirmationScreen";
+import OrdersScreen from "./screens/order/OrdersScreen";
 import { I18nProvider } from "./i18n";
 import { AuthProvider } from "./services/auth";
 
@@ -54,6 +55,7 @@ const App = () => {
                 <Route path="/checkout" element={<CheckoutScreen />} />
                 <Route path="/payment" element={<PaymentScreen />} />
                 <Route path="/order-confirmation" element={<OrderConfirmationScreen />} />
+                <Route path="/orders" element={<OrdersScreen />} />
               </Route>
               <Route path="/intake" element={<ProfileIntakeScreen />} />
               <Route path="/questionnaire" element={<QuestionnaireScreen />} />

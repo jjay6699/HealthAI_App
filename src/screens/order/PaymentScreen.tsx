@@ -6,6 +6,7 @@ import SectionHeader from "../../components/SectionHeader";
 import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
+import { useAuth } from "../../services/auth";
 
 interface OrderDetails {
   plan: string;
@@ -20,9 +21,11 @@ const PaymentScreen = () => {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { t } = useI18n();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"card" | "fpx" | "ewallet">("card");
   const [isProcessing, setIsProcessing] = useState(false);
+  const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
 
   useEffect(() => {
     const stored = persistentStorage.getItem("orderDetails");
@@ -38,10 +41,36 @@ const PaymentScreen = () => {
   const handleCompleteOrder = async () => {
     setIsProcessing(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
       const deliveryAddressRaw = persistentStorage.getItem("deliveryAddress");
       const deliveryAddress = deliveryAddressRaw ? JSON.parse(deliveryAddressRaw) : null;
+
+      if (paymentMethod === "card") {
+        const stripeResponse = await fetch("/api/stripe/checkout-session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            plan: orderDetails?.plan,
+            planLabel: orderDetails?.planLabel,
+            price: orderDetails?.price,
+            recommendations: orderDetails?.recommendations || [],
+            couponCode: orderDetails?.couponCode || null,
+            deliveryAddress
+          })
+        });
+
+        const stripePayload = (await stripeResponse.json().catch(() => null)) as
+          | { url?: string; error?: string }
+          | null;
+
+        if (!stripeResponse.ok || !stripePayload?.url) {
+          throw new Error(stripePayload?.error || "Failed to start Stripe checkout");
+        }
+
+        window.location.assign(stripePayload.url);
+        return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 800));
       const response = await fetch("/api/orders", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -76,11 +105,15 @@ const PaymentScreen = () => {
       }
 
       const newOrder = payload.order;
-      persistentStorage.setItem("lastOrder", JSON.stringify(newOrder));
+      persistentStorage.setItem(scopedKey("lastOrder"), JSON.stringify(newOrder));
 
-      const orderHistory = JSON.parse(persistentStorage.getItem("orderHistory") || "[]");
+      const orderHistory = JSON.parse(
+        persistentStorage.getItem(scopedKey("orderHistory")) ||
+          persistentStorage.getItem("orderHistory") ||
+          "[]"
+      );
       orderHistory.unshift(newOrder);
-      persistentStorage.setItem("orderHistory", JSON.stringify(orderHistory));
+      persistentStorage.setItem(scopedKey("orderHistory"), JSON.stringify(orderHistory));
 
       navigate("/order-confirmation");
     } catch (error) {

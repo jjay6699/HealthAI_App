@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import Card from "../../components/Card";
 import Button from "../../components/Button";
 import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
+import { useAuth } from "../../services/auth";
 
 interface LastOrder {
   orderNumber: string;
@@ -13,6 +14,7 @@ interface LastOrder {
   planLabel?: string;
   price: number;
   recommendations: any[];
+  status?: string;
 }
 
 const OrderConfirmationScreen = () => {
@@ -20,18 +22,90 @@ const OrderConfirmationScreen = () => {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { language, t } = useI18n();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
   const [order, setOrder] = useState<LastOrder | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
 
   useEffect(() => {
-    const stored = persistentStorage.getItem("lastOrder");
-    if (!stored) return;
+    let cancelled = false;
 
-    try {
-      setOrder(JSON.parse(stored));
-    } catch (error) {
-      console.error("Failed to parse order:", error);
-    }
-  }, []);
+    const run = async () => {
+      const params = new URLSearchParams(location.search);
+      const stripeSessionId = params.get("session_id");
+
+      if (stripeSessionId) {
+        try {
+          const response = await fetch("/api/orders/confirm-stripe", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ sessionId: stripeSessionId })
+          });
+          const payload = (await response.json().catch(() => null)) as
+            | { order?: LastOrder; error?: string }
+            | null;
+
+          if (!response.ok || !payload?.order) {
+            throw new Error(payload?.error || "Failed to confirm Stripe order");
+          }
+
+          if (!cancelled) {
+            setOrder(payload.order);
+            persistentStorage.setItem(scopedKey("lastOrder"), JSON.stringify(payload.order));
+            const existingHistory = JSON.parse(
+              persistentStorage.getItem(scopedKey("orderHistory")) ||
+                persistentStorage.getItem("orderHistory") ||
+                "[]"
+            );
+            const nextHistory = [
+              payload.order,
+              ...existingHistory.filter((item: LastOrder) => item.orderNumber !== payload.order?.orderNumber)
+            ];
+            persistentStorage.setItem(scopedKey("orderHistory"), JSON.stringify(nextHistory));
+          }
+        } catch (error) {
+          console.error("Failed to confirm Stripe order:", error);
+        } finally {
+          if (!cancelled) {
+            setIsLoading(false);
+          }
+        }
+        return;
+      }
+
+      const stored =
+        persistentStorage.getItem(scopedKey("lastOrder")) ??
+        persistentStorage.getItem("lastOrder");
+      if (stored) {
+        try {
+          if (!cancelled) {
+            setOrder(JSON.parse(stored));
+          }
+        } catch (error) {
+          console.error("Failed to parse order:", error);
+        }
+      }
+
+      if (!cancelled) {
+        setIsLoading(false);
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.search, user?.id]);
+
+  if (isLoading) {
+    return (
+      <div style={styles.page}>
+        <h1 style={styles.heading}>{t("order.payment.processing")}</h1>
+      </div>
+    );
+  }
 
   if (!order) {
     return (
@@ -126,7 +200,7 @@ const OrderConfirmationScreen = () => {
       </Card>
 
       <div style={styles.buttonGroup}>
-        <Button title={t("order.confirm.trackOrder")} onClick={() => navigate("/history")} fullWidth />
+        <Button title={t("order.confirm.trackOrder")} onClick={() => navigate("/orders")} fullWidth />
         <Button
           title={t("order.confirm.backHome")}
           onClick={() => navigate("/")}

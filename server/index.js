@@ -8,8 +8,16 @@ import { promisify } from "node:util";
 import Database from "better-sqlite3";
 import { OAuth2Client } from "google-auth-library";
 import OpenAI from "openai";
+import Stripe from "stripe";
+import { Resend } from "resend";
 
 const PORT = Number(process.env.PORT || 3000);
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const RESEND_FROM_EMAIL =
+  process.env.RESEND_FROM_EMAIL || "RicHealth AI <no-reply@app.richealth.ai>";
+const ORDER_NOTIFICATION_EMAIL =
+  process.env.ORDER_NOTIFICATION_EMAIL || "jjaytech2019@gmail.com";
 
 // Railway volume recommendation: mount a persistent volume at /data
 // and set DATABASE_PATH=/data/app.sqlite
@@ -194,6 +202,31 @@ const stmtInsertOrder = db.prepare(`
     createdAt,
     updatedAt
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const stmtGetOrderByStripeSessionId = db.prepare(`
+  SELECT
+    id,
+    orderNumber,
+    userId,
+    userEmail,
+    customerName,
+    plan,
+    planLabel,
+    price,
+    currency,
+    paymentMethod,
+    status,
+    couponCode,
+    recommendationsJson,
+    deliveryAddressJson,
+    stripeSessionId,
+    stripePaymentIntentId,
+    source,
+    createdAt,
+    updatedAt
+  FROM orders
+  WHERE stripeSessionId = ?
+  LIMIT 1
 `);
 const stmtListAdminUsers = db.prepare(`
   SELECT id, email, name, provider, country, referralCode, createdAt, lastLoginAt
@@ -455,6 +488,179 @@ const ensureDemoUser = async () => {
     now
   );
   return stmtGetPasswordUserByEmail.get(DEMO_EMAIL);
+};
+
+const formatOrderForResponse = (order) => ({
+  ...order,
+  recommendations: order.recommendationsJson ? JSON.parse(order.recommendationsJson) : [],
+  deliveryAddress: order.deliveryAddressJson ? JSON.parse(order.deliveryAddressJson) : null,
+  date: new Date(order.createdAt).toISOString()
+});
+
+const buildOrderEmailHtml = ({ heading, intro, order, recommendations, deliveryAddress }) => {
+  const recommendationItems =
+    recommendations.length > 0
+      ? `<ul>${recommendations
+          .map(
+            (item) =>
+              `<li><strong>${item.supplementName || "Supplement"}</strong>${
+                item.dosage ? ` - ${item.dosage}` : ""
+              }</li>`
+          )
+          .join("")}</ul>`
+      : "<p>No supplement list was attached to this order.</p>";
+
+  const addressHtml = deliveryAddress
+    ? `<p>
+        ${deliveryAddress.fullName || ""}<br />
+        ${deliveryAddress.phone || ""}<br />
+        ${deliveryAddress.addressLine1 || ""}<br />
+        ${deliveryAddress.addressLine2 ? `${deliveryAddress.addressLine2}<br />` : ""}
+        ${deliveryAddress.postcode || ""} ${deliveryAddress.city || ""}<br />
+        ${deliveryAddress.state || ""}
+      </p>`
+    : "<p>No delivery address provided.</p>";
+
+  return `
+    <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
+      <h2>${heading}</h2>
+      <p>${intro}</p>
+      <p><strong>Order number:</strong> ${order.orderNumber}</p>
+      <p><strong>Customer:</strong> ${order.customerName || order.userEmail || "Unknown"}</p>
+      <p><strong>Email:</strong> ${order.userEmail || "Not provided"}</p>
+      <p><strong>Plan:</strong> ${order.planLabel || order.plan}</p>
+      <p><strong>Total:</strong> ${order.currency} ${Number(order.price).toFixed(2)}</p>
+      <p><strong>Payment method:</strong> ${order.paymentMethod || "Not specified"}</p>
+      <p><strong>Status:</strong> ${order.status}</p>
+      ${
+        order.couponCode
+          ? `<p><strong>Referral / coupon code:</strong> ${order.couponCode}</p>`
+          : ""
+      }
+      <h3>Supplements</h3>
+      ${recommendationItems}
+      <h3>Delivery details</h3>
+      ${addressHtml}
+    </div>
+  `;
+};
+
+const maybeSendOrderEmails = async (orderRecord) => {
+  if (!resend) {
+    console.warn("Resend is not configured. Skipping order email notifications.");
+    return;
+  }
+
+  const order = formatOrderForResponse(orderRecord);
+  const recommendations = order.recommendations || [];
+  const deliveryAddress = order.deliveryAddress || null;
+  const recipients = [];
+
+  if (order.userEmail) {
+    recipients.push({
+      to: order.userEmail,
+      subject: `Your RicHealth AI order ${order.orderNumber}`,
+      heading: "Your order is confirmed",
+      intro:
+        "Thank you for your order. We have received your custom blend request and will begin preparing it shortly."
+    });
+  }
+
+  recipients.push({
+    to: ORDER_NOTIFICATION_EMAIL,
+    subject: `New RicHealth AI order ${order.orderNumber}`,
+    heading: "New order received",
+    intro: "A new customer order has been placed and is ready for production review."
+  });
+
+  const emailJobs = recipients.map((recipient) =>
+    resend.emails.send({
+      from: RESEND_FROM_EMAIL,
+      to: recipient.to,
+      subject: recipient.subject,
+      replyTo: order.userEmail || undefined,
+      html: buildOrderEmailHtml({
+        heading: recipient.heading,
+        intro: recipient.intro,
+        order,
+        recommendations,
+        deliveryAddress
+      })
+    })
+  );
+
+  const results = await Promise.allSettled(emailJobs);
+  results.forEach((result) => {
+    if (result.status === "rejected") {
+      console.error("Failed to send order email:", result.reason);
+    }
+  });
+};
+
+const createOrderRecord = ({
+  user,
+  plan,
+  planLabel,
+  price,
+  paymentMethod,
+  couponCode,
+  recommendations,
+  deliveryAddress,
+  stripeSessionId = null,
+  stripePaymentIntentId = null,
+  status = "processing"
+}) => {
+  const now = Date.now();
+  const orderId = crypto.randomUUID();
+  const orderNumber = `NG${now.toString().slice(-8)}`;
+  const customerName =
+    typeof deliveryAddress?.fullName === "string" && deliveryAddress.fullName.trim()
+      ? deliveryAddress.fullName.trim()
+      : user.name || null;
+
+  stmtInsertOrder.run(
+    orderId,
+    orderNumber,
+    user.id,
+    user.email || null,
+    customerName,
+    plan,
+    planLabel,
+    price,
+    "MYR",
+    paymentMethod,
+    status,
+    couponCode,
+    JSON.stringify(recommendations),
+    deliveryAddress ? JSON.stringify(deliveryAddress) : null,
+    stripeSessionId,
+    stripePaymentIntentId,
+    "app",
+    now,
+    now
+  );
+
+  return {
+    id: orderId,
+    orderNumber,
+    userId: user.id,
+    userEmail: user.email || null,
+    customerName,
+    plan,
+    planLabel,
+    price,
+    currency: "MYR",
+    paymentMethod,
+    status,
+    couponCode,
+    recommendationsJson: JSON.stringify(recommendations),
+    deliveryAddressJson: deliveryAddress ? JSON.stringify(deliveryAddress) : null,
+    stripeSessionId,
+    stripePaymentIntentId,
+    source: "app",
+    createdAt: now,
+    updatedAt: now
+  };
 };
 
 const getRequestIp = (req) => {
@@ -740,6 +946,159 @@ app.post("/api/auth/logout", (req, res) => {
 });
 
 app.post(
+  "/api/stripe/checkout-session",
+  asyncHandler(async (req, res) => {
+    if (!stripe) {
+      return res.status(503).json({ error: "stripe_not_configured" });
+    }
+
+    const user = getAuthedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "authentication_required" });
+    }
+
+    const plan = typeof req.body?.plan === "string" ? req.body.plan.trim() : "";
+    const planLabel = typeof req.body?.planLabel === "string" ? req.body.planLabel.trim() : null;
+    const price = Number(req.body?.price);
+    const couponCode =
+      typeof req.body?.couponCode === "string" && req.body.couponCode.trim()
+        ? req.body.couponCode.trim()
+        : null;
+    const recommendations = Array.isArray(req.body?.recommendations)
+      ? req.body.recommendations
+      : [];
+    const deliveryAddress =
+      req.body?.deliveryAddress && typeof req.body.deliveryAddress === "object"
+        ? req.body.deliveryAddress
+        : null;
+
+    if (!plan || !Number.isFinite(price) || price < 0) {
+      return res.status(400).json({ error: "invalid_order_payload" });
+    }
+
+    const forwardedProto = typeof req.headers["x-forwarded-proto"] === "string"
+      ? req.headers["x-forwarded-proto"].split(",")[0]
+      : req.protocol;
+    const forwardedHost = typeof req.headers["x-forwarded-host"] === "string"
+      ? req.headers["x-forwarded-host"].split(",")[0]
+      : req.get("host");
+    const baseUrl =
+      process.env.APP_ORIGIN ||
+      req.headers.origin ||
+      `${forwardedProto}://${forwardedHost}`;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      customer_email: user.email || undefined,
+      client_reference_id: user.id,
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "myr",
+            unit_amount: Math.round(price * 100),
+            product_data: {
+              name: `RicHealth AI Custom Blend - ${planLabel || plan}`,
+              description: `${recommendations.length} nutrition item${recommendations.length === 1 ? "" : "s"}`
+            }
+          }
+        }
+      ],
+      success_url: `${baseUrl}/order-confirmation?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/payment?stripe_cancelled=1`,
+      metadata: {
+        userId: user.id,
+        plan,
+        planLabel: planLabel || "",
+        couponCode: couponCode || ""
+      }
+    });
+
+    stmtUpsert.run(
+      `stripe_checkout:${session.id}`,
+      "payload",
+      JSON.stringify({
+        plan,
+        planLabel,
+        price,
+        paymentMethod: "stripe_card",
+        couponCode,
+        recommendations,
+        deliveryAddress
+      }),
+      Date.now()
+    );
+
+    return res.json({ url: session.url, sessionId: session.id });
+  })
+);
+
+app.post(
+  "/api/orders/confirm-stripe",
+  asyncHandler(async (req, res) => {
+    if (!stripe) {
+      return res.status(503).json({ error: "stripe_not_configured" });
+    }
+
+    const user = getAuthedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "authentication_required" });
+    }
+
+    const sessionId =
+      typeof req.body?.sessionId === "string" ? req.body.sessionId.trim() : "";
+    if (!sessionId) {
+      return res.status(400).json({ error: "stripe_session_required" });
+    }
+
+    const existing = stmtGetOrderByStripeSessionId.get(sessionId);
+    if (existing) {
+      return res.json({ order: formatOrderForResponse(existing) });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (!session || session.mode !== "payment") {
+      return res.status(404).json({ error: "stripe_session_not_found" });
+    }
+
+    if (session.client_reference_id && session.client_reference_id !== user.id) {
+      return res.status(403).json({ error: "stripe_session_forbidden" });
+    }
+
+    if (session.payment_status !== "paid") {
+      return res.status(409).json({ error: "stripe_session_not_paid" });
+    }
+
+    const pending = stmtGetOne.get(`stripe_checkout:${sessionId}`, "payload");
+    if (!pending?.value) {
+      return res.status(404).json({ error: "stripe_checkout_payload_missing" });
+    }
+
+    const payload = JSON.parse(pending.value);
+    const orderRecord = createOrderRecord({
+      user,
+      plan: payload.plan,
+      planLabel: payload.planLabel,
+      price: payload.price,
+      paymentMethod: payload.paymentMethod || "stripe_card",
+      couponCode: payload.couponCode || null,
+      recommendations: Array.isArray(payload.recommendations) ? payload.recommendations : [],
+      deliveryAddress: payload.deliveryAddress || null,
+      stripeSessionId: session.id,
+      stripePaymentIntentId:
+        typeof session.payment_intent === "string" ? session.payment_intent : null,
+      status: "paid"
+    });
+
+    await maybeSendOrderEmails(orderRecord);
+    stmtDeleteOne.run(`stripe_checkout:${sessionId}`, "payload");
+
+    return res.status(201).json({ order: formatOrderForResponse(orderRecord) });
+  })
+);
+
+app.post(
   "/api/orders",
   asyncHandler(async (req, res) => {
     const user = getAuthedUser(req);
@@ -778,56 +1137,23 @@ app.post(
       return res.status(400).json({ error: "invalid_order_payload" });
     }
 
-    const now = Date.now();
-    const orderId = crypto.randomUUID();
-    const orderNumber = `NG${now.toString().slice(-8)}`;
-    const customerName =
-      typeof deliveryAddress?.fullName === "string" && deliveryAddress.fullName.trim()
-        ? deliveryAddress.fullName.trim()
-        : user.name || null;
-
-    stmtInsertOrder.run(
-      orderId,
-      orderNumber,
-      user.id,
-      user.email || null,
-      customerName,
+    const orderRecord = createOrderRecord({
+      user,
       plan,
       planLabel,
       price,
-      "MYR",
       paymentMethod,
-      status,
       couponCode,
-      JSON.stringify(recommendations),
-      deliveryAddress ? JSON.stringify(deliveryAddress) : null,
+      recommendations,
+      deliveryAddress,
       stripeSessionId,
       stripePaymentIntentId,
-      "app",
-      now,
-      now
-    );
-
-    res.status(201).json({
-      order: {
-        id: orderId,
-        orderNumber,
-        userId: user.id,
-        userEmail: user.email || null,
-        customerName,
-        plan,
-        planLabel,
-        price,
-        currency: "MYR",
-        paymentMethod,
-        status,
-        couponCode,
-        createdAt: now,
-        updatedAt: now,
-        date: new Date(now).toISOString(),
-        recommendations
-      }
+      status
     });
+
+    await maybeSendOrderEmails(orderRecord);
+
+    res.status(201).json({ order: formatOrderForResponse(orderRecord) });
   })
 );
 
