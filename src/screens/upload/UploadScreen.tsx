@@ -435,6 +435,10 @@ const UploadScreen = () => {
           </div>
         )}
 
+        <button type="button" style={{ ...styles.optionButton, ...styles.disabled }} disabled>
+          <span style={{ ...styles.optionTitle, ...styles.disabledText }}>{t("upload.doctors.title")}</span>
+          <span style={{ ...styles.optionDescription, ...styles.disabledText }}>{t("upload.doctors.description")}</span>
+        </button>
         <button
           type="button"
           style={{
