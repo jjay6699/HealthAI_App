@@ -58,6 +58,20 @@ const parseReferenceRange = (referenceRange?: string) => {
   const matches = normalized.match(/\d+(?:\.\d+)?/g);
   if (!matches || matches.length === 0) return null;
 
+  // Some OCR outputs malformed bounds like "<6 - 55" where the leading
+  // symbol belongs to the lower bound line-wrap rather than an upper-only rule.
+  // When two numeric bounds are present alongside a range separator, prefer a
+  // standard between-range interpretation so rows like ALT 41 / Range <6 - 55
+  // are treated as normal.
+  const hasRangeSeparator = /\d\s*(?:-|–|—|to)\s*\d/i.test(normalized);
+  if (matches.length >= 2 && hasRangeSeparator) {
+    const min = Number(matches[0]);
+    const max = Number(matches[1]);
+    if (!Number.isNaN(min) && !Number.isNaN(max)) {
+      return { type: "between" as const, min, max };
+    }
+  }
+
   const upperMatch = normalized.match(/^(?:<|<=)\s*(\d+(?:\.\d+)?)/);
   if (upperMatch) {
     const upper = Number(upperMatch[1]);
