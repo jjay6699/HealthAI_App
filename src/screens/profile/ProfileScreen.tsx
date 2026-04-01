@@ -958,6 +958,35 @@ const ProfileScreen = () => {
         </Card>
       ) : null}
       <Card style={styles.card}>
+        <div style={styles.sectionHeaderRow}>
+          <SectionHeader title={t("profile.orderHistory")} />
+          {orders.length > 0 && (
+            <button style={styles.viewAllButton} onClick={() => navigate("/orders")}>
+              {t("home.insights.viewAll")}
+            </button>
+          )}
+        </div>
+        {orders.length === 0 ? (
+          <div style={styles.emptyState}>
+            <p style={styles.emptyText}>{t("profile.noOrders")}</p>
+            <Button title={t("profile.startShopping")} onClick={() => navigate("/upload")} variant="secondary" />
+          </div>
+        ) : (
+          orders.slice(0, 3).map((order) => (
+            <div key={order.orderNumber} style={styles.orderItem}>
+              <div>
+                <p style={styles.orderNumber}>#{order.orderNumber}</p>
+                <p style={styles.orderDate}>{new Date(order.date).toLocaleDateString(language === "zh" ? "zh-CN" : language === "bm" ? "ms-MY" : "en-MY", { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+              </div>
+              <div style={styles.orderRight}>
+                <p style={styles.orderPrice}>RM{order.price}</p>
+                <span style={{...styles.orderStatus, ...getStatusStyle(order.status, theme)}}>{localizeOrderStatus(order.status)}</span>
+              </div>
+            </div>
+          ))
+        )}
+      </Card>
+      <Card style={styles.card}>
         <SectionHeader title={t("profile.personalInfo")} />
         <ProfileRow label={t("profile.fullName")} value={profile.name} action={t("profile.edit")} onEdit={() => openEdit("name")} />
         <ProfileRow label={t("profile.email")} value={profile.email} action={t("profile.edit")} onEdit={() => openEdit("email")} />
@@ -1015,37 +1044,6 @@ const ProfileScreen = () => {
           <InfoItem label={t("profile.topPriorities")} value={formatValue(profile.topPriorities)} action={t("profile.action.set")} onEdit={() => openEdit("topPriorities")} />
           <InfoItem label={t("profile.dataConsent")} value={formatValue(profile.dataProcessingConsent)} action={t("profile.action.set")} onEdit={() => openEdit("dataProcessingConsent")} />
         </div>
-      </Card>
-
-      {/* Order History */}
-      <Card style={styles.card}>
-        <div style={styles.sectionHeaderRow}>
-          <SectionHeader title={t("profile.orderHistory")} />
-          {orders.length > 0 && (
-            <button style={styles.viewAllButton} onClick={() => navigate("/orders")}>
-              {t("home.insights.viewAll")}
-            </button>
-          )}
-        </div>
-        {orders.length === 0 ? (
-          <div style={styles.emptyState}>
-            <p style={styles.emptyText}>{t("profile.noOrders")}</p>
-            <Button title={t("profile.startShopping")} onClick={() => navigate("/upload")} variant="secondary" />
-          </div>
-        ) : (
-          orders.slice(0, 3).map((order) => (
-            <div key={order.orderNumber} style={styles.orderItem}>
-              <div>
-                <p style={styles.orderNumber}>#{order.orderNumber}</p>
-                <p style={styles.orderDate}>{new Date(order.date).toLocaleDateString(language === "zh" ? "zh-CN" : language === "bm" ? "ms-MY" : "en-MY", { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-              </div>
-              <div style={styles.orderRight}>
-                <p style={styles.orderPrice}>RM{order.price}</p>
-                <span style={{...styles.orderStatus, ...getStatusStyle(order.status, theme)}}>{localizeOrderStatus(order.status)}</span>
-              </div>
-            </div>
-          ))
-        )}
       </Card>
 
       {/* Payment Methods */}
