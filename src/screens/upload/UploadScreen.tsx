@@ -379,12 +379,12 @@ const UploadScreen = () => {
       <Card style={styles.card}>
         <SectionHeader title="Photo tips for best accuracy" />
         <ul style={styles.captureTipsList}>
-          <li style={styles.captureTipItem}>Place the report on a flat surface (no curves or folds).</li>
-          <li style={styles.captureTipItem}>Use bright, even lighting and avoid glare.</li>
-          <li style={styles.captureTipItem}>Fill the frame with the table; take close‑ups if needed.</li>
-          <li style={styles.captureTipItem}>Hold the phone steady and keep the text in focus.</li>
+          <li style={styles.captureTipItem}>Upload a real blood test or lab report page, not a random crop, social image, or partial screenshot.</li>
+          <li style={styles.captureTipItem}>Include the full table with marker names, values, units, and reference ranges whenever possible.</li>
+          <li style={styles.captureTipItem}>Place the report on a flat surface with bright, even lighting and avoid glare, shadows, folds, or blur.</li>
+          <li style={styles.captureTipItem}>If one page is too small to read clearly, upload multiple close-up images that still show complete rows.</li>
         </ul>
-        <p style={styles.captureTipNote}>Clear, flat, well‑lit photos reduce number reading errors.</p>
+        <p style={styles.captureTipNote}>Clear, complete report photos help the app read your biomarkers accurately and generate better recommendations.</p>
       </Card>
 
       <Card style={styles.card}>
