@@ -233,12 +233,12 @@ const HomeScreen = () => {
           <Badge label={statusLabel} tone={statusTone} />
         </div>
         <div style={styles.statusGrid}>
-          <div>
+          <div style={styles.statusMetric}>
             <span style={styles.statusLabel}>{t("home.status.concerns")}</span>
             <p style={styles.statusValue}>{concernCount}</p>
           </div>
-          <div>
-            <span style={styles.statusLabel}>{t("home.status.recommendations")}</span>
+          <div style={styles.statusMetric}>
+            <span style={styles.statusLabel}>Recs</span>
             <p style={styles.statusValue}>{recommendationCount}</p>
           </div>
         </div>
@@ -382,11 +382,18 @@ const createStyles = (theme: AppTheme) => ({
     gridTemplateColumns: "repeat(2, minmax(0,1fr))",
     gap: theme.spacing.md
   },
+  statusMetric: {
+    minWidth: 0
+  },
   statusLabel: {
     fontSize: 12,
     color: theme.colors.textSecondary,
     textTransform: "uppercase" as const,
-    letterSpacing: 1
+    letterSpacing: 1,
+    display: "block",
+    whiteSpace: "nowrap" as const,
+    overflow: "hidden",
+    textOverflow: "ellipsis"
   },
   statusValue: {
     fontSize: 16,
