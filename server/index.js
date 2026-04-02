@@ -1644,7 +1644,6 @@ app.post(
         customer_email: user.email || undefined,
         client_reference_id: user.id,
         customer_creation: "always",
-        customer_update: { name: "auto", address: "auto", shipping: "auto" },
         line_items: [
           {
             quantity: 1,
