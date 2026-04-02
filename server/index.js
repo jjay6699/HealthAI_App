@@ -2218,26 +2218,3 @@ const shutdown = (signal) => {
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
- process.exit(1);
-});
-
-// Graceful shutdown so container stops (SIGTERM) don't surface as npm "errors".
-const shutdown = (signal) => {
-  // eslint-disable-next-line no-console
-  console.log(`[server] received ${signal}, shutting down...`);
-  try {
-    server.close(() => {
-      try {
-        db.close();
-      } catch {
-        // ignore
-      }
-      process.exit(0);
-    });
-  } catch {
-    process.exit(0);
-  }
-};
-
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));
