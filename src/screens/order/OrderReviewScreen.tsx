@@ -144,7 +144,12 @@ const OrderReviewScreen = () => {
             placeholder={t("order.review.enterCode")}
             style={styles.couponInput}
           />
-          <Button title={t("order.review.apply")} variant="secondary" onClick={handleApplyCoupon} />
+          <Button
+            title={t("order.review.apply")}
+            variant="secondary"
+            onClick={handleApplyCoupon}
+            style={styles.couponButton}
+          />
         </div>
         {couponApplied ? (
           <span style={styles.couponApplied}>{t("order.review.applied", { code: couponApplied })}</span>
@@ -321,10 +326,12 @@ const createStyles = (theme: AppTheme) => ({
   couponRow: {
     display: "flex",
     gap: theme.spacing.sm,
-    alignItems: "center"
+    alignItems: "center",
+    flexWrap: "wrap" as const
   },
   couponInput: {
-    flex: 1,
+    flex: "1 1 180px",
+    minWidth: 0,
     padding: theme.spacing.md,
     fontSize: 15,
     borderRadius: theme.radii.md,
@@ -332,6 +339,11 @@ const createStyles = (theme: AppTheme) => ({
     background: theme.colors.background,
     color: theme.colors.text,
     fontFamily: "inherit"
+  },
+  couponButton: {
+    flex: "0 0 auto",
+    whiteSpace: "nowrap" as const,
+    padding: `${theme.spacing.md}px ${theme.spacing.lg}px`
   },
   couponHelper: {
     display: "block",
