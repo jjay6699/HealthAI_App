@@ -413,7 +413,7 @@ export const bmTranslations: Record<TranslationKey, string> = {
   "order.payment.ewallet": "E-Wallet",
   "order.payment.ewalletDesc": "Touch 'n Go, GrabPay",
   "order.payment.stripeTitle": "Bayar dengan selamat melalui Stripe",
-  "order.payment.stripeBody": "Apabila anda tekan Lengkapkan Pesanan, Stripe akan memaparkan kaedah pembayaran yang tersedia untuk peranti dan kawasan anda (berdasarkan yang anda aktifkan dalam Stripe).",
+  "order.payment.stripeBody": "Apabila anda tekan Lengkapkan Pesanan, anda akan diarahkan ke laman pembayaran selamat Stripe untuk memilih kaedah pembayaran.",
   "order.payment.secureTitle": "Pembayaran Selamat",
   "order.payment.secureBody": "Maklumat pembayaran anda disulitkan dan selamat",
   "order.payment.processing": "Sedang diproses...",
