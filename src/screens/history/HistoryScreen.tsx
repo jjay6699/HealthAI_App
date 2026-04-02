@@ -201,6 +201,12 @@ const HistoryScreen = () => {
     return parts.join(" | ");
   };
 
+  const metricCards = (concernCount: number, strengthCount: number, recommendationCount: number) => [
+    { key: "concerns", label: "Concerns", value: concernCount },
+    { key: "strengths", label: "Strengths", value: strengthCount },
+    { key: "recommendations", label: "Recs", value: recommendationCount }
+  ];
+
   if (selectedEntry) {
     const concernCount = selectedEntry.concerns?.length ?? 0;
     const strengthCount = selectedEntry.strengths?.length ?? 0;
@@ -225,18 +231,12 @@ const HistoryScreen = () => {
           {selectedEntry.summary ? <p style={styles.summary}>{selectedEntry.summary}</p> : null}
 
           <div style={styles.statsGrid}>
-            <div>
-              <span style={styles.statLabel}>{t("history.concerns")}</span>
-              <p style={styles.statValue}>{concernCount}</p>
-            </div>
-            <div>
-              <span style={styles.statLabel}>{t("history.strengths")}</span>
-              <p style={styles.statValue}>{strengthCount}</p>
-            </div>
-            <div>
-              <span style={styles.statLabel}>{t("history.recommendations")}</span>
-              <p style={styles.statValue}>{recommendationCount}</p>
-            </div>
+            {metricCards(concernCount, strengthCount, recommendationCount).map((metric) => (
+              <div key={metric.key} style={styles.statCard}>
+                <span style={styles.statLabel}>{metric.label}</span>
+                <p style={styles.statValue}>{metric.value}</p>
+              </div>
+            ))}
           </div>
 
           {selectedEntry.concerns && selectedEntry.concerns.length > 0 ? (
@@ -327,18 +327,12 @@ const HistoryScreen = () => {
                   {entry.summary ? <p style={styles.summary}>{entry.summary}</p> : null}
 
                   <div style={styles.statsGrid}>
-                    <div>
-                      <span style={styles.statLabel}>{t("history.concerns")}</span>
-                      <p style={styles.statValue}>{concernCount}</p>
-                    </div>
-                    <div>
-                      <span style={styles.statLabel}>{t("history.strengths")}</span>
-                      <p style={styles.statValue}>{strengthCount}</p>
-                    </div>
-                    <div>
-                      <span style={styles.statLabel}>{t("history.recommendations")}</span>
-                      <p style={styles.statValue}>{recommendationCount}</p>
-                    </div>
+                    {metricCards(concernCount, strengthCount, recommendationCount).map((metric) => (
+                      <div key={`${entry.id}-${metric.key}`} style={styles.statCard}>
+                        <span style={styles.statLabel}>{metric.label}</span>
+                        <p style={styles.statValue}>{metric.value}</p>
+                      </div>
+                    ))}
                   </div>
 
                   {entry.concerns && entry.concerns.length > 0 ? (
@@ -471,7 +465,10 @@ const createStyles = (theme: AppTheme) => ({
   cardSubtitle: {
     fontSize: 12,
     color: theme.colors.textSecondary,
-    margin: 0
+    margin: 0,
+    lineHeight: "18px",
+    overflowWrap: "anywhere" as const,
+    wordBreak: "break-word" as const
   },
   summary: {
     fontSize: 14,
@@ -482,8 +479,15 @@ const createStyles = (theme: AppTheme) => ({
   statsGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
     padding: `${theme.spacing.sm}px 0`
+  },
+  statCard: {
+    borderRadius: theme.radii.md,
+    background: theme.colors.background,
+    border: `1px solid ${theme.colors.divider}`,
+    padding: `${theme.spacing.sm}px ${theme.spacing.sm}px ${theme.spacing.xs}px`,
+    minWidth: 0
   },
   statLabel: {
     fontSize: 11,
@@ -491,11 +495,12 @@ const createStyles = (theme: AppTheme) => ({
     color: theme.colors.textSecondary,
     letterSpacing: 1,
     display: "block",
-    overflowWrap: "anywhere" as const,
-    wordBreak: "break-word" as const
+    whiteSpace: "nowrap" as const,
+    overflow: "hidden",
+    textOverflow: "ellipsis"
   },
   statValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 700,
     margin: `${theme.spacing.xs}px 0 0`
   },
@@ -518,7 +523,8 @@ const createStyles = (theme: AppTheme) => ({
   },
   listItem: {
     fontSize: 14,
-    color: theme.colors.textSecondary
+    color: theme.colors.textSecondary,
+    lineHeight: "20px"
   },
   insightList: {
     marginTop: theme.spacing.sm,
