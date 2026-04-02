@@ -1624,11 +1624,16 @@ app.post(
     try {
       session = await stripe.checkout.sessions.create({
         mode: "payment",
-        // Let Stripe decide which payment methods to show based on:
-        // - your dashboard enabled methods
-        // - currency, country, amount, etc.
-        // This fixes the issue where only cards appear.
-        automatic_payment_methods: { enabled: true },
+        // Stripe Checkout does NOT support `automatic_payment_methods`.
+        // To show additional payment options on the hosted Stripe page,
+        // you must explicitly request them via `payment_method_types`.
+        // (Your Stripe dashboard still controls *whether* a method can be used.)
+        //
+        // For Malaysia (MYR), these commonly cover what you enabled:
+        // - card (also shows Apple Pay / Google Pay when available)
+        // - fpx
+        // - grabpay
+        payment_method_types: ["card", "fpx", "grabpay"],
         customer_email: user.email || undefined,
         client_reference_id: user.id,
         line_items: [
