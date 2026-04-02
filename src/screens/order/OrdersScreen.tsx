@@ -373,7 +373,8 @@ const createStyles = (theme: AppTheme) => ({
   summaryMetric: {
     display: "flex",
     flexDirection: "column" as const,
-    gap: 4
+    gap: 4,
+    minWidth: 0
   },
   metricLabel: {
     fontSize: 12,
@@ -383,7 +384,9 @@ const createStyles = (theme: AppTheme) => ({
   },
   metricValue: {
     fontSize: 20,
-    color: theme.colors.text
+    color: theme.colors.text,
+    overflowWrap: "anywhere" as const,
+    wordBreak: "break-word" as const
   },
   orderList: {
     display: "flex",
@@ -393,7 +396,8 @@ const createStyles = (theme: AppTheme) => ({
   orderRow: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
+    flexWrap: "wrap" as const,
     gap: theme.spacing.md,
     padding: theme.spacing.md,
     borderRadius: theme.radii.lg,
@@ -416,15 +420,21 @@ const createStyles = (theme: AppTheme) => ({
     display: "flex",
     flexDirection: "column" as const,
     alignItems: "flex-end" as const,
-    gap: 8
+    gap: 8,
+    marginLeft: "auto",
+    flexShrink: 0
   },
   orderNumber: {
     fontSize: 16,
-    color: theme.colors.text
+    color: theme.colors.text,
+    overflowWrap: "anywhere" as const,
+    wordBreak: "break-word" as const
   },
   orderMeta: {
     fontSize: 13,
-    color: theme.colors.textSecondary
+    color: theme.colors.textSecondary,
+    overflowWrap: "anywhere" as const,
+    wordBreak: "break-word" as const
   },
   orderPrice: {
     fontSize: 16,
