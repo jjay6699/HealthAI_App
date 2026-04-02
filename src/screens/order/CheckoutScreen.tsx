@@ -6,6 +6,7 @@ import SectionHeader from "../../components/SectionHeader";
 import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
+import { fetchShippingAddresses, saveShippingAddresses, ShippingAddressRecord } from "../../services/shippingApi";
 
 interface OrderDetails {
   plan: string;
@@ -30,32 +31,60 @@ const CheckoutScreen = () => {
     state: "",
     specialInstructions: ""
   });
+  const [shippingAddresses, setShippingAddresses] = useState<ShippingAddressRecord[]>([]);
 
   useEffect(() => {
-    const stored = persistentStorage.getItem("orderDetails");
-    if (stored) {
-      try {
-        setOrderDetails(JSON.parse(stored));
-      } catch (error) {
-        console.error("Failed to parse order details:", error);
-      }
-    }
+    let cancelled = false;
 
-    const savedAddress = persistentStorage.getItem("deliveryAddress");
-    if (savedAddress) {
-      try {
-        setFormData((prev) => ({ ...prev, ...JSON.parse(savedAddress) }));
-      } catch (error) {
-        console.error("Failed to parse saved address:", error);
+    const bootstrapCheckout = async () => {
+      const stored = persistentStorage.getItem("orderDetails");
+      if (stored) {
+        try {
+          setOrderDetails(JSON.parse(stored));
+        } catch (error) {
+          console.error("Failed to parse order details:", error);
+        }
       }
-    }
+
+      const savedAddress = persistentStorage.getItem("deliveryAddress");
+      let hasDraftAddress = false;
+      if (savedAddress) {
+        try {
+          hasDraftAddress = true;
+          setFormData((prev) => ({ ...prev, ...JSON.parse(savedAddress) }));
+        } catch (error) {
+          console.error("Failed to parse saved address:", error);
+        }
+      }
+
+      try {
+        const remoteAddresses = await fetchShippingAddresses();
+        if (cancelled) return;
+        setShippingAddresses(remoteAddresses);
+        persistentStorage.setItem("shippingAddresses", JSON.stringify(remoteAddresses));
+
+        if (!hasDraftAddress && remoteAddresses.length > 0) {
+          const defaultAddress =
+            remoteAddresses.find((address) => address.isDefault) || remoteAddresses[0];
+          setFormData((prev) => ({ ...prev, ...defaultAddress }));
+        }
+      } catch (error) {
+        console.error("Failed to load shipping addresses:", error);
+      }
+    };
+
+    void bootstrapCheckout();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!formData.fullName || !formData.phone || !formData.addressLine1 || !formData.city || !formData.postcode || !formData.state) {
       alert(t("order.checkout.requiredFields"));
       return;
@@ -63,18 +92,32 @@ const CheckoutScreen = () => {
 
     persistentStorage.setItem("deliveryAddress", JSON.stringify(formData));
 
-    const shippingAddresses = JSON.parse(persistentStorage.getItem("shippingAddresses") || "[]");
-    const addressExists = shippingAddresses.some((address: any) =>
-      address.addressLine1 === formData.addressLine1 && address.postcode === formData.postcode
+    const addressExists = shippingAddresses.some(
+      (address) =>
+        address.addressLine1 === formData.addressLine1 &&
+        address.postcode === formData.postcode &&
+        address.city === formData.city &&
+        address.state === formData.state
     );
 
     if (!addressExists) {
-      shippingAddresses.push({
-        id: `addr_${Date.now()}`,
-        ...formData,
-        isDefault: shippingAddresses.length === 0
-      });
-      persistentStorage.setItem("shippingAddresses", JSON.stringify(shippingAddresses));
+      const nextAddresses = [
+        ...shippingAddresses,
+        {
+          id: `addr_${Date.now()}`,
+          ...formData,
+          isDefault: shippingAddresses.length === 0
+        }
+      ];
+
+      setShippingAddresses(nextAddresses);
+      persistentStorage.setItem("shippingAddresses", JSON.stringify(nextAddresses));
+
+      try {
+        await saveShippingAddresses(nextAddresses);
+      } catch (error) {
+        console.error("Failed to save shipping addresses:", error);
+      }
     }
 
     navigate("/payment");

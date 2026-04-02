@@ -128,6 +128,52 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_user_consents_userId ON user_consents(userId);
   CREATE INDEX IF NOT EXISTS idx_user_consents_userId_type ON user_consents(userId, consentType);
+
+  CREATE TABLE IF NOT EXISTS user_profiles (
+    userId TEXT PRIMARY KEY,
+    dataJson TEXT NOT NULL DEFAULT '{}',
+    updatedAt INTEGER NOT NULL,
+    FOREIGN KEY(userId) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS user_shipping_addresses (
+    id TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    fullName TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    addressLine1 TEXT NOT NULL,
+    addressLine2 TEXT,
+    city TEXT NOT NULL,
+    state TEXT NOT NULL,
+    postcode TEXT NOT NULL,
+    specialInstructions TEXT,
+    isDefault INTEGER NOT NULL DEFAULT 0,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    FOREIGN KEY(userId) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_user_shipping_addresses_userId
+    ON user_shipping_addresses(userId, updatedAt DESC);
+
+  CREATE TABLE IF NOT EXISTS user_health_metrics (
+    userId TEXT PRIMARY KEY,
+    dataJson TEXT NOT NULL DEFAULT '{}',
+    updatedAt INTEGER NOT NULL,
+    FOREIGN KEY(userId) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS user_bloodwork_records (
+    id TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    analysisJson TEXT NOT NULL,
+    metaJson TEXT,
+    createdAt INTEGER NOT NULL,
+    FOREIGN KEY(userId) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_user_bloodwork_records_userId
+    ON user_bloodwork_records(userId, createdAt DESC);
 `);
 
 const stmtGetAll = db.prepare(
@@ -171,6 +217,90 @@ const stmtUpdateUserReferralCode = db.prepare("UPDATE users SET referralCode = ?
 const stmtInsertUserConsent = db.prepare(
   "INSERT INTO user_consents (id, userId, consentType, granted, policyVersion, acceptedAt, sourceIp, userAgent, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
 );
+const stmtGetUserProfile = db.prepare(
+  "SELECT userId, dataJson, updatedAt FROM user_profiles WHERE userId = ?"
+);
+const stmtUpsertUserProfile = db.prepare(`
+  INSERT INTO user_profiles (userId, dataJson, updatedAt)
+  VALUES (?, ?, ?)
+  ON CONFLICT(userId) DO UPDATE SET
+    dataJson = excluded.dataJson,
+    updatedAt = excluded.updatedAt
+`);
+const stmtListShippingAddressesByUser = db.prepare(`
+  SELECT
+    id,
+    userId,
+    fullName,
+    phone,
+    addressLine1,
+    addressLine2,
+    city,
+    state,
+    postcode,
+    specialInstructions,
+    isDefault,
+    createdAt,
+    updatedAt
+  FROM user_shipping_addresses
+  WHERE userId = ?
+  ORDER BY isDefault DESC, updatedAt DESC
+`);
+const stmtDeleteShippingAddressesByUser = db.prepare(
+  "DELETE FROM user_shipping_addresses WHERE userId = ?"
+);
+const stmtInsertShippingAddress = db.prepare(`
+  INSERT INTO user_shipping_addresses (
+    id,
+    userId,
+    fullName,
+    phone,
+    addressLine1,
+    addressLine2,
+    city,
+    state,
+    postcode,
+    specialInstructions,
+    isDefault,
+    createdAt,
+    updatedAt
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const stmtGetUserHealthMetrics = db.prepare(
+  "SELECT userId, dataJson, updatedAt FROM user_health_metrics WHERE userId = ?"
+);
+const stmtUpsertUserHealthMetrics = db.prepare(`
+  INSERT INTO user_health_metrics (userId, dataJson, updatedAt)
+  VALUES (?, ?, ?)
+  ON CONFLICT(userId) DO UPDATE SET
+    dataJson = excluded.dataJson,
+    updatedAt = excluded.updatedAt
+`);
+const stmtListBloodworkRecordsByUser = db.prepare(`
+  SELECT id, userId, analysisJson, metaJson, createdAt
+  FROM user_bloodwork_records
+  WHERE userId = ?
+  ORDER BY createdAt DESC
+`);
+const stmtGetLatestBloodworkRecordByUser = db.prepare(`
+  SELECT id, userId, analysisJson, metaJson, createdAt
+  FROM user_bloodwork_records
+  WHERE userId = ?
+  ORDER BY createdAt DESC
+  LIMIT 1
+`);
+const stmtDeleteBloodworkRecordsByUser = db.prepare(
+  "DELETE FROM user_bloodwork_records WHERE userId = ?"
+);
+const stmtInsertBloodworkRecord = db.prepare(`
+  INSERT INTO user_bloodwork_records (
+    id,
+    userId,
+    analysisJson,
+    metaJson,
+    createdAt
+  ) VALUES (?, ?, ?, ?, ?)
+`);
 
 const stmtInsertSession = db.prepare(
   "INSERT INTO sessions (token, userId, createdAt, expiresAt) VALUES (?, ?, ?, ?)"
@@ -227,6 +357,31 @@ const stmtGetOrderByStripeSessionId = db.prepare(`
   FROM orders
   WHERE stripeSessionId = ?
   LIMIT 1
+`);
+const stmtListOrdersByUser = db.prepare(`
+  SELECT
+    id,
+    orderNumber,
+    userId,
+    userEmail,
+    customerName,
+    plan,
+    planLabel,
+    price,
+    currency,
+    paymentMethod,
+    status,
+    couponCode,
+    recommendationsJson,
+    deliveryAddressJson,
+    stripeSessionId,
+    stripePaymentIntentId,
+    source,
+    createdAt,
+    updatedAt
+  FROM orders
+  WHERE userId = ?
+  ORDER BY createdAt DESC
 `);
 const stmtListAdminUsers = db.prepare(`
   SELECT id, email, name, provider, country, referralCode, createdAt, lastLoginAt
@@ -671,6 +826,186 @@ const getRequestIp = (req) => {
   return req.ip || req.socket?.remoteAddress || "unknown";
 };
 
+const normalizeProfilePayload = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== undefined);
+  return Object.fromEntries(entries);
+};
+
+const normalizeShippingAddressList = (value) => {
+  if (!Array.isArray(value)) return null;
+
+  const normalized = value
+    .map((entry, index) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+
+      const fullName = typeof entry.fullName === "string" ? entry.fullName.trim() : "";
+      const phone = typeof entry.phone === "string" ? entry.phone.trim() : "";
+      const addressLine1 = typeof entry.addressLine1 === "string" ? entry.addressLine1.trim() : "";
+      const addressLine2 = typeof entry.addressLine2 === "string" ? entry.addressLine2.trim() : "";
+      const city = typeof entry.city === "string" ? entry.city.trim() : "";
+      const state = typeof entry.state === "string" ? entry.state.trim() : "";
+      const postcode = typeof entry.postcode === "string" ? entry.postcode.trim() : "";
+      const specialInstructions =
+        typeof entry.specialInstructions === "string" ? entry.specialInstructions.trim() : "";
+
+      if (!fullName || !phone || !addressLine1 || !city || !state || !postcode) {
+        return null;
+      }
+
+      return {
+        id:
+          typeof entry.id === "string" && entry.id.trim()
+            ? entry.id.trim()
+            : `addr_${crypto.randomUUID()}`,
+        fullName,
+        phone,
+        addressLine1,
+        addressLine2,
+        city,
+        state,
+        postcode,
+        specialInstructions,
+        isDefault: index === 0
+      };
+    })
+    .filter(Boolean);
+
+  return normalized;
+};
+
+const normalizeHealthMetricsPayload = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const normalizeArray = (entries, mapper) =>
+    Array.isArray(entries) ? entries.map(mapper).filter(Boolean) : [];
+
+  const bloodPressureHistory = normalizeArray(value.bloodPressureHistory, (entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+    const date = typeof entry.date === "string" ? entry.date.trim() : "";
+    const systolic = Number(entry.systolic);
+    const diastolic = Number(entry.diastolic);
+    if (!date || !Number.isFinite(systolic) || !Number.isFinite(diastolic)) return null;
+    return { date, systolic, diastolic };
+  });
+
+  const fastingGlucoseHistory = normalizeArray(value.fastingGlucoseHistory, (entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+    const date = typeof entry.date === "string" ? entry.date.trim() : "";
+    const metricValue = Number(entry.value);
+    if (!date || !Number.isFinite(metricValue)) return null;
+    return { date, value: metricValue };
+  });
+
+  const weightHistory = normalizeArray(value.weightHistory, (entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+    const date = typeof entry.date === "string" ? entry.date.trim() : "";
+    const metricValue = Number(entry.value);
+    if (!date || !Number.isFinite(metricValue)) return null;
+    return { date, value: metricValue };
+  });
+
+  return {
+    bloodPressureHistory,
+    fastingGlucoseHistory,
+    weightHistory
+  };
+};
+
+const replaceShippingAddressesForUser = db.transaction((userId, addresses) => {
+  stmtDeleteShippingAddressesByUser.run(userId);
+  const now = Date.now();
+
+  for (const address of addresses) {
+    stmtInsertShippingAddress.run(
+      address.id,
+      userId,
+      address.fullName,
+      address.phone,
+      address.addressLine1,
+      address.addressLine2 || null,
+      address.city,
+      address.state,
+      address.postcode,
+      address.specialInstructions || null,
+      address.isDefault ? 1 : 0,
+      now,
+      now
+    );
+  }
+});
+
+const formatBloodworkRecordForResponse = (record) => {
+  let analysis = null;
+  let meta = null;
+
+  try {
+    analysis = record.analysisJson ? JSON.parse(record.analysisJson) : null;
+  } catch {
+    analysis = null;
+  }
+
+  try {
+    meta = record.metaJson ? JSON.parse(record.metaJson) : null;
+  } catch {
+    meta = null;
+  }
+
+  return {
+    id: record.id,
+    uploadedAt: new Date(record.createdAt).toISOString(),
+    analysis,
+    meta
+  };
+};
+
+const normalizeBloodworkRecordPayload = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const analysis = value.analysis;
+  if (!analysis || typeof analysis !== "object" || Array.isArray(analysis)) {
+    return null;
+  }
+
+  const meta =
+    value.meta && typeof value.meta === "object" && !Array.isArray(value.meta) ? value.meta : {};
+  const uploadedAtRaw = typeof value.uploadedAt === "string" ? value.uploadedAt : "";
+  const uploadedAtMs = uploadedAtRaw ? Date.parse(uploadedAtRaw) : NaN;
+
+  return {
+    id:
+      typeof value.id === "string" && value.id.trim() ? value.id.trim() : crypto.randomUUID(),
+    analysis,
+    meta,
+    createdAt: Number.isNaN(uploadedAtMs) ? Date.now() : uploadedAtMs
+  };
+};
+
+const normalizeBloodworkHistoryPayload = (value) => {
+  if (!Array.isArray(value)) return null;
+  return value.map(normalizeBloodworkRecordPayload).filter(Boolean);
+};
+
+const replaceBloodworkRecordsForUser = db.transaction((userId, records) => {
+  stmtDeleteBloodworkRecordsByUser.run(userId);
+  for (const record of records) {
+    stmtInsertBloodworkRecord.run(
+      record.id,
+      userId,
+      JSON.stringify(record.analysis),
+      record.meta ? JSON.stringify(record.meta) : null,
+      record.createdAt
+    );
+  }
+});
+
 const sweepExpiredRateLimitEntries = (now) => {
   authRateLimitSweepCounter += 1;
   if (authRateLimitSweepCounter % 100 !== 0) return;
@@ -945,6 +1280,262 @@ app.post("/api/auth/logout", (req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/api/profile", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  const record = stmtGetUserProfile.get(user.id);
+  if (!record) {
+    return res.json({ profile: {}, updatedAt: null });
+  }
+
+  let profile = {};
+  try {
+    profile = record.dataJson ? JSON.parse(record.dataJson) : {};
+  } catch {
+    profile = {};
+  }
+
+  return res.json({
+    profile,
+    updatedAt: record.updatedAt
+  });
+});
+
+app.put("/api/profile", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  const incomingProfile = normalizeProfilePayload(req.body?.profile);
+  if (!incomingProfile) {
+    return res.status(400).json({ error: "invalid_profile_payload" });
+  }
+
+  const existing = stmtGetUserProfile.get(user.id);
+  let existingProfile = {};
+  if (existing?.dataJson) {
+    try {
+      existingProfile = JSON.parse(existing.dataJson);
+    } catch {
+      existingProfile = {};
+    }
+  }
+
+  const nextProfile = {
+    ...existingProfile,
+    ...incomingProfile
+  };
+  const updatedAt = Date.now();
+  stmtUpsertUserProfile.run(user.id, JSON.stringify(nextProfile), updatedAt);
+
+  return res.json({
+    profile: nextProfile,
+    updatedAt
+  });
+});
+
+app.get("/api/shipping-addresses", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  const addresses = stmtListShippingAddressesByUser.all(user.id).map((address) => ({
+    ...address,
+    isDefault: Boolean(address.isDefault)
+  }));
+
+  return res.json({ addresses });
+});
+
+app.put("/api/shipping-addresses", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  const addresses = normalizeShippingAddressList(req.body?.addresses);
+  if (!addresses) {
+    return res.status(400).json({ error: "invalid_shipping_addresses_payload" });
+  }
+
+  replaceShippingAddressesForUser(user.id, addresses);
+  return res.json({ addresses });
+});
+
+app.get("/api/health-metrics", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  const record = stmtGetUserHealthMetrics.get(user.id);
+  if (!record) {
+    return res.json({
+      metrics: {
+        bloodPressureHistory: [],
+        fastingGlucoseHistory: [],
+        weightHistory: []
+      },
+      updatedAt: null
+    });
+  }
+
+  let metrics = {
+    bloodPressureHistory: [],
+    fastingGlucoseHistory: [],
+    weightHistory: []
+  };
+  try {
+    const parsed = record.dataJson ? JSON.parse(record.dataJson) : {};
+    metrics = {
+      bloodPressureHistory: Array.isArray(parsed?.bloodPressureHistory)
+        ? parsed.bloodPressureHistory
+        : [],
+      fastingGlucoseHistory: Array.isArray(parsed?.fastingGlucoseHistory)
+        ? parsed.fastingGlucoseHistory
+        : [],
+      weightHistory: Array.isArray(parsed?.weightHistory) ? parsed.weightHistory : []
+    };
+  } catch {
+    // keep defaults
+  }
+
+  return res.json({
+    metrics,
+    updatedAt: record.updatedAt
+  });
+});
+
+app.put("/api/health-metrics", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  const incomingMetrics = normalizeHealthMetricsPayload(req.body?.metrics);
+  if (!incomingMetrics) {
+    return res.status(400).json({ error: "invalid_health_metrics_payload" });
+  }
+
+  const existing = stmtGetUserHealthMetrics.get(user.id);
+  let existingMetrics = {
+    bloodPressureHistory: [],
+    fastingGlucoseHistory: [],
+    weightHistory: []
+  };
+  if (existing?.dataJson) {
+    try {
+      const parsed = JSON.parse(existing.dataJson);
+      existingMetrics = {
+        bloodPressureHistory: Array.isArray(parsed?.bloodPressureHistory)
+          ? parsed.bloodPressureHistory
+          : [],
+        fastingGlucoseHistory: Array.isArray(parsed?.fastingGlucoseHistory)
+          ? parsed.fastingGlucoseHistory
+          : [],
+        weightHistory: Array.isArray(parsed?.weightHistory) ? parsed.weightHistory : []
+      };
+    } catch {
+      // keep defaults
+    }
+  }
+
+  const nextMetrics = {
+    ...existingMetrics,
+    ...incomingMetrics
+  };
+  const updatedAt = Date.now();
+  stmtUpsertUserHealthMetrics.run(user.id, JSON.stringify(nextMetrics), updatedAt);
+
+  return res.json({
+    metrics: nextMetrics,
+    updatedAt
+  });
+});
+
+app.get("/api/bloodwork/latest", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  const record = stmtGetLatestBloodworkRecordByUser.get(user.id);
+  return res.json({
+    record: record ? formatBloodworkRecordForResponse(record) : null
+  });
+});
+
+app.get("/api/bloodwork/history", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  const records = stmtListBloodworkRecordsByUser
+    .all(user.id)
+    .map(formatBloodworkRecordForResponse);
+
+  return res.json({ records });
+});
+
+app.post("/api/bloodwork/record", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  const record = normalizeBloodworkRecordPayload(req.body?.record);
+  if (!record) {
+    return res.status(400).json({ error: "invalid_bloodwork_record_payload" });
+  }
+
+  stmtInsertBloodworkRecord.run(
+    record.id,
+    user.id,
+    JSON.stringify(record.analysis),
+    record.meta ? JSON.stringify(record.meta) : null,
+    record.createdAt
+  );
+
+  return res.status(201).json({
+    record: {
+      id: record.id,
+      uploadedAt: new Date(record.createdAt).toISOString(),
+      analysis: record.analysis,
+      meta: record.meta
+    }
+  });
+});
+
+app.put("/api/bloodwork/history", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  const records = normalizeBloodworkHistoryPayload(req.body?.records);
+  if (!records) {
+    return res.status(400).json({ error: "invalid_bloodwork_history_payload" });
+  }
+
+  replaceBloodworkRecordsForUser(user.id, records);
+  return res.json({
+    records: records
+      .sort((left, right) => right.createdAt - left.createdAt)
+      .map((record) => ({
+        id: record.id,
+        uploadedAt: new Date(record.createdAt).toISOString(),
+        analysis: record.analysis,
+        meta: record.meta
+      }))
+  });
+});
+
 app.post(
   "/api/stripe/checkout-session",
   asyncHandler(async (req, res) => {
@@ -1097,6 +1688,16 @@ app.post(
     return res.status(201).json({ order: formatOrderForResponse(orderRecord) });
   })
 );
+
+app.get("/api/orders", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  const orders = stmtListOrdersByUser.all(user.id).map(formatOrderForResponse);
+  return res.json({ orders });
+});
 
 app.post(
   "/api/orders",

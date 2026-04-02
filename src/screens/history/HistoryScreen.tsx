@@ -6,6 +6,7 @@ import { translateBloodworkAnalysis, type BloodworkAnalysis } from "../../servic
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
 import { useAuth } from "../../services/auth";
+import { BloodworkRecord, fetchBloodworkHistory, replaceBloodworkHistory } from "../../services/bloodworkApi";
 
 type HistoryRecommendation = {
   supplementName?: string;
@@ -44,16 +45,79 @@ const HistoryScreen = () => {
   const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
 
   useEffect(() => {
-    const storedHistory = persistentStorage.getItem(scopedKey("bloodworkHistory"));
-    if (!storedHistory) return;
-    try {
-      const parsed = JSON.parse(storedHistory);
-      if (Array.isArray(parsed)) {
-        setHistory(parsed);
+    let cancelled = false;
+
+    const loadHistory = async () => {
+      const storedHistory = persistentStorage.getItem(scopedKey("bloodworkHistory"));
+      let localHistory: HistoryEntry[] = [];
+      if (storedHistory) {
+        try {
+          const parsed = JSON.parse(storedHistory);
+          localHistory = Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+          console.error("Failed to parse history:", error);
+        }
       }
-    } catch (error) {
-      console.error("Failed to parse history:", error);
-    }
+
+      try {
+        const remoteRecords = await fetchBloodworkHistory();
+        if (cancelled) return;
+
+        if (remoteRecords.length > 0) {
+          const remoteHistory = remoteRecords.map((record) => ({
+            id: record.id,
+            uploadedAt: record.uploadedAt,
+            fileName: record.meta?.fileName,
+            fileType: record.meta?.fileType,
+            fileSize: record.meta?.fileSize,
+            summary: record.analysis.summary,
+            concerns: record.analysis.concerns || [],
+            strengths: record.analysis.strengths || [],
+            recommendations: record.analysis.recommendations || [],
+            detailedInsights: record.analysis.detailedInsights || []
+          }));
+          setHistory(remoteHistory);
+          persistentStorage.setItem(scopedKey("bloodworkHistory"), JSON.stringify(remoteHistory));
+        } else {
+          setHistory(localHistory);
+          if (localHistory.length > 0) {
+            const migratedHistory: BloodworkRecord[] = localHistory.map((entry) => ({
+              id: entry.id,
+              uploadedAt: entry.uploadedAt || new Date().toISOString(),
+              analysis: {
+                summary: entry.summary || "",
+                concerns: entry.concerns || [],
+                strengths: entry.strengths || [],
+                recommendations: (entry.recommendations || []) as BloodworkAnalysis["recommendations"],
+                detailedInsights: (entry.detailedInsights || []) as BloodworkAnalysis["detailedInsights"],
+                parsedRows: [],
+                translatedLanguage: "en" as const
+              } as BloodworkAnalysis,
+              meta: {
+                uploadedAt: entry.uploadedAt,
+                fileName: entry.fileName,
+                fileType: entry.fileType,
+                fileSize: entry.fileSize
+              }
+            }));
+            void replaceBloodworkHistory(migratedHistory).catch((error) => {
+              console.error("Failed to migrate local bloodwork history:", error);
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load remote history:", error);
+        if (!cancelled) {
+          setHistory(localHistory);
+        }
+      }
+    };
+
+    void loadHistory();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]);
 
   useEffect(() => {

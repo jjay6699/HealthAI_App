@@ -6,6 +6,7 @@ import ProgressBar from "../../components/ProgressBar";
 import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
+import { fetchUserProfile, saveUserProfile } from "../../services/profileApi";
 
 type FieldSpec = {
   key: string;
@@ -344,14 +345,17 @@ const ProfileIntakeScreen = () => {
       updates[profileKey] = normalized as never;
     });
 
-    persistentStorage.setItem("userProfile", JSON.stringify({ ...existing, ...updates }));
+    const nextProfile = { ...existing, ...updates };
+    persistentStorage.setItem("userProfile", JSON.stringify(nextProfile));
+    void saveUserProfile<IntakeProfile>(nextProfile).catch((error) => {
+      console.error("Failed to save intake profile:", error);
+    });
   };
 
   React.useEffect(() => {
-    const saved = persistentStorage.getItem("userProfile");
-    if (!saved) return;
-    try {
-      const parsed = JSON.parse(saved) as Partial<IntakeProfile>;
+    let cancelled = false;
+
+    const seedFieldValues = (parsed: Partial<IntakeProfile>) => {
       const seeded: Record<string, FieldValue> = {};
       const multiselectKeys = new Set(
         steps.flatMap((step) => step.fields.filter((field) => field.kind === "multiselect").map((field) => field.key))
@@ -366,9 +370,42 @@ const ProfileIntakeScreen = () => {
         seeded[fieldKey] = String(value);
       });
       setFieldValues(seeded);
-    } catch {
-      // Ignore malformed saved profile
-    }
+    };
+
+    const loadProfile = async () => {
+      const localSaved = persistentStorage.getItem("userProfile");
+      let localProfile: Partial<IntakeProfile> = {};
+
+      if (localSaved) {
+        try {
+          localProfile = JSON.parse(localSaved) as Partial<IntakeProfile>;
+        } catch {
+          localProfile = {};
+        }
+      }
+
+      try {
+        const { profile: remoteProfile } = await fetchUserProfile<IntakeProfile>();
+        if (cancelled) return;
+
+        const hasRemoteProfile = Object.keys(remoteProfile).length > 0;
+        const chosenProfile = hasRemoteProfile ? remoteProfile : localProfile;
+        seedFieldValues(chosenProfile);
+
+        if (!hasRemoteProfile && Object.keys(localProfile).length > 0) {
+          await saveUserProfile<IntakeProfile>(localProfile);
+        }
+      } catch {
+        if (cancelled) return;
+        seedFieldValues(localProfile);
+      }
+    };
+
+    void loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleFieldChange = (field: FieldSpec, value: string) => {

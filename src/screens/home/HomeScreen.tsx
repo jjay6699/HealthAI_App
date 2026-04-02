@@ -11,6 +11,7 @@ import { BloodworkAnalysis, translateBloodworkAnalysis } from "../../services/op
 import { persistentStorage } from "../../services/persistentStorage";
 import { useAuth } from "../../services/auth";
 import { Language, useI18n } from "../../i18n";
+import { fetchLatestBloodworkRecord } from "../../services/bloodworkApi";
 
 type AnalysisMeta = {
   uploadedAt?: string;
@@ -32,23 +33,56 @@ const HomeScreen = () => {
   const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
 
   useEffect(() => {
-    const storedAnalysis = persistentStorage.getItem(scopedKey("bloodworkAnalysis"));
-    if (storedAnalysis) {
-      try {
-        setAnalysis(JSON.parse(storedAnalysis));
-      } catch (error) {
-        console.error("Failed to parse bloodwork analysis:", error);
-      }
-    }
+    let cancelled = false;
 
-    const storedMeta = persistentStorage.getItem(scopedKey("bloodworkAnalysisMeta"));
-    if (storedMeta) {
-      try {
-        setMeta(JSON.parse(storedMeta));
-      } catch (error) {
-        console.error("Failed to parse bloodwork metadata:", error);
+    const loadLatestAnalysis = async () => {
+      const storedAnalysis = persistentStorage.getItem(scopedKey("bloodworkAnalysis"));
+      const storedMeta = persistentStorage.getItem(scopedKey("bloodworkAnalysisMeta"));
+
+      let localAnalysis: BloodworkAnalysis | null = null;
+      let localMeta: AnalysisMeta | null = null;
+
+      if (storedAnalysis) {
+        try {
+          localAnalysis = JSON.parse(storedAnalysis);
+        } catch (error) {
+          console.error("Failed to parse bloodwork analysis:", error);
+        }
       }
-    }
+
+      if (storedMeta) {
+        try {
+          localMeta = JSON.parse(storedMeta);
+        } catch (error) {
+          console.error("Failed to parse bloodwork metadata:", error);
+        }
+      }
+
+      try {
+        const record = await fetchLatestBloodworkRecord();
+        if (cancelled) return;
+
+        if (record) {
+          setAnalysis(record.analysis);
+          setMeta(record.meta || { uploadedAt: record.uploadedAt });
+          persistentStorage.setItem(scopedKey("bloodworkAnalysis"), JSON.stringify(record.analysis));
+          persistentStorage.setItem(
+            scopedKey("bloodworkAnalysisMeta"),
+            JSON.stringify(record.meta || { uploadedAt: record.uploadedAt })
+          );
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to load remote bloodwork analysis:", error);
+      }
+
+      if (!cancelled) {
+        setAnalysis(localAnalysis);
+        setMeta(localMeta);
+      }
+    };
+
+    void loadLatestAnalysis();
   }, [user?.id]);
 
   useEffect(() => {

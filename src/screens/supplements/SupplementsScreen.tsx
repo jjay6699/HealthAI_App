@@ -17,6 +17,7 @@ import { AVAILABLE_SUPPLEMENTS, Supplement } from "../../data/supplements";
 import { SUPPLEMENT_DESCRIPTIONS } from "../../data/supplementDescriptions";
 import { persistentStorage } from "../../services/persistentStorage";
 import { useAuth } from "../../services/auth";
+import { fetchLatestBloodworkRecord } from "../../services/bloodworkApi";
 
 type DisplaySupplementContent = {
   benefits: string[];
@@ -42,22 +43,49 @@ const SupplementsScreen = () => {
   const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
 
   useEffect(() => {
-    const storedAnalysis =
-      persistentStorage.getItem(scopedKey("bloodworkAnalysis")) ??
-      persistentStorage.getItem("bloodworkAnalysis");
-    if (!storedAnalysis) {
-      setHasHydratedRecommendations(true);
-      return;
-    }
+    let cancelled = false;
 
-    try {
-      const analysis: BloodworkAnalysis = JSON.parse(storedAnalysis);
-      setRecommendations(analysis.recommendations || []);
-    } catch (error) {
-      console.error("Failed to parse bloodwork analysis:", error);
-    } finally {
-      setHasHydratedRecommendations(true);
-    }
+    const loadRecommendations = async () => {
+      const storedAnalysis =
+        persistentStorage.getItem(scopedKey("bloodworkAnalysis")) ??
+        persistentStorage.getItem("bloodworkAnalysis");
+      let localRecommendations: SupplementRecommendation[] = [];
+
+      if (storedAnalysis) {
+        try {
+          const analysis: BloodworkAnalysis = JSON.parse(storedAnalysis);
+          localRecommendations = analysis.recommendations || [];
+        } catch (error) {
+          console.error("Failed to parse bloodwork analysis:", error);
+        }
+      }
+
+      try {
+        const record = await fetchLatestBloodworkRecord();
+        if (cancelled) return;
+
+        if (record) {
+          setRecommendations(record.analysis.recommendations || []);
+          persistentStorage.setItem(
+            scopedKey("bloodworkAnalysis"),
+            JSON.stringify(record.analysis)
+          );
+        } else {
+          setRecommendations(localRecommendations);
+        }
+      } catch (error) {
+        console.error("Failed to load remote bloodwork analysis:", error);
+        if (!cancelled) {
+          setRecommendations(localRecommendations);
+        }
+      } finally {
+        if (!cancelled) {
+          setHasHydratedRecommendations(true);
+        }
+      }
+    };
+
+    void loadRecommendations();
   }, [user?.id]);
 
   useEffect(() => {

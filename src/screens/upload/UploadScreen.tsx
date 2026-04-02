@@ -10,13 +10,32 @@ import {
   analyzeBloodworkFile,
   analyzeBloodworkImages,
   analyzeBloodworkPdf,
-  analyzeHealthDocumentBundle
+  analyzeHealthDocumentBundle,
+  BloodworkAnalysis
 } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
 import { useAuth } from "../../services/auth";
 import { useI18n } from "../../i18n";
+import {
+  BloodworkRecord,
+  fetchBloodworkHistory,
+  replaceBloodworkHistory,
+  saveBloodworkRecord
+} from "../../services/bloodworkApi";
 
 type IntegrationTab = "wearables" | "apps";
+type PastUploadEntry = {
+  id: string;
+  uploadedAt?: string;
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  summary?: string;
+  concerns?: string[];
+  strengths?: string[];
+  recommendations?: BloodworkAnalysis["recommendations"];
+  detailedInsights?: BloodworkAnalysis["detailedInsights"];
+};
 
 const UploadScreen = () => {
   const theme = useTheme();
@@ -32,7 +51,7 @@ const UploadScreen = () => {
   const [connectedIntegrations, setConnectedIntegrations] = useState<string[]>([]);
   const [activeIntegrationTab, setActiveIntegrationTab] = useState<IntegrationTab>("wearables");
   const [queuedFiles, setQueuedFiles] = useState<File[]>([]);
-  const [pastUploads, setPastUploads] = useState<Array<{ id: string; uploadedAt?: string; fileName?: string; concerns?: string[]; detailedInsights?: Array<{ category?: string }> }>>([]);
+  const [pastUploads, setPastUploads] = useState<PastUploadEntry[]>([]);
   const [showHealthConsentDialog, setShowHealthConsentDialog] = useState(false);
   const [pendingAnalyzeFiles, setPendingAnalyzeFiles] = useState<File[] | null>(null);
   const [healthConsentChecked, setHealthConsentChecked] = useState(false);
@@ -66,17 +85,79 @@ const UploadScreen = () => {
   const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
 
   React.useEffect(() => {
-    const raw = persistentStorage.getItem(scopedKey("bloodworkHistory"));
-    if (!raw) {
-      setPastUploads([]);
-      return;
-    }
-    try {
-      const parsed = JSON.parse(raw);
-      setPastUploads(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      setPastUploads([]);
-    }
+    let cancelled = false;
+
+    const loadPastUploads = async () => {
+      const raw = persistentStorage.getItem(scopedKey("bloodworkHistory"));
+      let localHistory: PastUploadEntry[] = [];
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          localHistory = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          localHistory = [];
+        }
+      }
+
+      try {
+        const remoteRecords = await fetchBloodworkHistory();
+        if (cancelled) return;
+
+        if (remoteRecords.length > 0) {
+          const remoteHistory = remoteRecords.map((record) => ({
+            id: record.id,
+            uploadedAt: record.uploadedAt,
+            fileName: record.meta?.fileName,
+            fileType: record.meta?.fileType,
+            fileSize: record.meta?.fileSize,
+            summary: record.analysis.summary,
+            concerns: record.analysis.concerns || [],
+            strengths: record.analysis.strengths || [],
+            recommendations: record.analysis.recommendations || [],
+            detailedInsights: record.analysis.detailedInsights || []
+          }));
+          setPastUploads(remoteHistory);
+          persistentStorage.setItem(scopedKey("bloodworkHistory"), JSON.stringify(remoteHistory));
+        } else {
+          setPastUploads(localHistory);
+          if (localHistory.length > 0) {
+            const migratedHistory: BloodworkRecord[] = localHistory.map((entry) => ({
+              id: entry.id,
+              uploadedAt: entry.uploadedAt || new Date().toISOString(),
+              analysis: {
+                summary: entry.summary || "",
+                concerns: entry.concerns || [],
+                strengths: entry.strengths || [],
+                recommendations: (entry.recommendations || []) as BloodworkAnalysis["recommendations"],
+                detailedInsights: (entry.detailedInsights || []) as BloodworkAnalysis["detailedInsights"],
+                parsedRows: [],
+                translatedLanguage: "en" as const
+              } as BloodworkAnalysis,
+              meta: {
+                uploadedAt: entry.uploadedAt,
+                fileName: entry.fileName,
+                fileType: entry.fileType,
+                fileSize: entry.fileSize
+              }
+            }));
+            void replaceBloodworkHistory(migratedHistory).catch((error) => {
+              console.error("Failed to migrate local bloodwork history:", error);
+            });
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load bloodwork history:", error);
+          setPastUploads(localHistory);
+        }
+      }
+    };
+
+    void loadPastUploads();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]);
 
   const hasHealthDataConsent = () => {
@@ -176,8 +257,6 @@ const UploadScreen = () => {
         analysis = result;
       }
 
-      // Save (locally + to Railway-backed SQLite when available)
-      persistentStorage.setItem(scopedKey("bloodworkAnalysis"), JSON.stringify(analysis));
       const uploadedAt = new Date().toISOString();
       const fileName = files.map((file) => file.name).join(", ");
       const fileType =
@@ -190,15 +269,22 @@ const UploadScreen = () => {
           : (files[0].type || "unknown");
       const fileSize = files.reduce((total, file) => total + file.size, 0);
 
-      persistentStorage.setItem(
-        scopedKey("bloodworkAnalysisMeta"),
-        JSON.stringify({
-          uploadedAt,
-          fileName,
-          fileType,
-          fileSize
-        })
-      );
+      const nextMeta = {
+        uploadedAt,
+        fileName,
+        fileType,
+        fileSize
+      };
+      const nextRecord = {
+        id: `${uploadedAt}:${fileName}:${fileSize}`,
+        uploadedAt,
+        analysis,
+        meta: nextMeta
+      };
+
+      // Save local cache for fast navigation.
+      persistentStorage.setItem(scopedKey("bloodworkAnalysis"), JSON.stringify(analysis));
+      persistentStorage.setItem(scopedKey("bloodworkAnalysisMeta"), JSON.stringify(nextMeta));
 
       const historyRaw = persistentStorage.getItem(scopedKey("bloodworkHistory"));
       let history: any[] = [];
@@ -210,7 +296,7 @@ const UploadScreen = () => {
         }
       }
       history.unshift({
-        id: `${uploadedAt}:${fileName}:${fileSize}`,
+        id: nextRecord.id,
         uploadedAt,
         fileName,
         fileType,
@@ -224,6 +310,10 @@ const UploadScreen = () => {
       const nextHistory = history.slice(0, 20);
       persistentStorage.setItem(scopedKey("bloodworkHistory"), JSON.stringify(nextHistory));
       setPastUploads(nextHistory);
+
+      void saveBloodworkRecord(nextRecord).catch((saveError) => {
+        console.error("Failed to save bloodwork record:", saveError);
+      });
 
       // Navigate to insights
       navigate("/insights");

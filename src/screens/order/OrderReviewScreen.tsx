@@ -8,6 +8,7 @@ import { AppTheme, useTheme } from "../../theme";
 import { BloodworkAnalysis } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
 import { useAuth } from "../../services/auth";
+import { fetchLatestBloodworkRecord } from "../../services/bloodworkApi";
 
 const OrderReviewScreen = () => {
   const theme = useTheme();
@@ -22,16 +23,45 @@ const OrderReviewScreen = () => {
   const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
 
   useEffect(() => {
-    const storedAnalysis =
-      persistentStorage.getItem(scopedKey("bloodworkAnalysis")) ??
-      persistentStorage.getItem("bloodworkAnalysis");
-    if (!storedAnalysis) return;
+    let cancelled = false;
 
-    try {
-      setAnalysis(JSON.parse(storedAnalysis));
-    } catch (error) {
-      console.error("Failed to parse analysis:", error);
-    }
+    const loadAnalysis = async () => {
+      const storedAnalysis =
+        persistentStorage.getItem(scopedKey("bloodworkAnalysis")) ??
+        persistentStorage.getItem("bloodworkAnalysis");
+      let localAnalysis: BloodworkAnalysis | null = null;
+
+      if (storedAnalysis) {
+        try {
+          localAnalysis = JSON.parse(storedAnalysis);
+        } catch (error) {
+          console.error("Failed to parse analysis:", error);
+        }
+      }
+
+      try {
+        const record = await fetchLatestBloodworkRecord();
+        if (cancelled) return;
+
+        if (record) {
+          setAnalysis(record.analysis);
+          persistentStorage.setItem(scopedKey("bloodworkAnalysis"), JSON.stringify(record.analysis));
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to load remote analysis:", error);
+      }
+
+      if (!cancelled) {
+        setAnalysis(localAnalysis);
+      }
+    };
+
+    void loadAnalysis();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]);
 
   const plans = [

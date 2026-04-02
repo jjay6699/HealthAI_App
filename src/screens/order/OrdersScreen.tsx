@@ -5,7 +5,6 @@ import Button from "../../components/Button";
 import SectionHeader from "../../components/SectionHeader";
 import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
-import { persistentStorage } from "../../services/persistentStorage";
 import { useAuth } from "../../services/auth";
 
 type OrderRecommendation = {
@@ -44,27 +43,66 @@ const OrdersScreen = () => {
   const { user } = useAuth();
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [selectedOrderNumber, setSelectedOrderNumber] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
-  const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
   const locale = language === "zh" ? "zh-CN" : language === "bm" ? "ms-MY" : "en-MY";
 
   useEffect(() => {
-    const stored =
-      persistentStorage.getItem(scopedKey("orderHistory")) ??
-      persistentStorage.getItem("orderHistory");
-    if (!stored) return;
+    let cancelled = false;
 
-    try {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) {
-        setOrders(parsed);
-        if (parsed.length > 0) {
-          setSelectedOrderNumber(parsed[0].orderNumber);
+    const loadOrders = async () => {
+      if (!user?.id) {
+        setOrders([]);
+        setSelectedOrderNumber(null);
+        setLoadError("");
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      setLoadError("");
+
+      try {
+        const response = await fetch("/api/orders", {
+          credentials: "same-origin"
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json();
+        const nextOrders: OrderRecord[] = Array.isArray(payload?.orders)
+          ? (payload.orders as OrderRecord[])
+          : [];
+        if (cancelled) return;
+
+        setOrders(nextOrders);
+        setSelectedOrderNumber((current) => {
+          if (current && nextOrders.some((order) => order.orderNumber === current)) {
+            return current;
+          }
+          return nextOrders[0]?.orderNumber ?? null;
+        });
+      } catch (error) {
+        console.error("Failed to load orders:", error);
+        if (cancelled) return;
+        setOrders([]);
+        setSelectedOrderNumber(null);
+        setLoadError("We couldn't load your order history right now. Please try again.");
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
         }
       }
-    } catch (error) {
-      console.error("Failed to parse order history:", error);
-    }
+    };
+
+    void loadOrders();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]);
 
   const selectedOrder = useMemo(
@@ -115,6 +153,25 @@ const OrdersScreen = () => {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div style={styles.page}>
+        <button onClick={() => navigate("/profile")} style={styles.backButton}>
+          <span style={styles.backArrow}>←</span>
+          <span>Back to profile</span>
+        </button>
+
+        <h1 style={styles.heading}>Your orders</h1>
+        <p style={styles.subheading}>Track confirmed purchases, review delivery details, and revisit your blend summary.</p>
+
+        <Card style={styles.emptyCard}>
+          <h3 style={styles.emptyTitle}>Loading orders</h3>
+          <p style={styles.emptyBody}>We’re fetching your latest order history from your account.</p>
+        </Card>
+      </div>
+    );
+  }
+
   if (orders.length === 0) {
     return (
       <div style={styles.page}>
@@ -127,8 +184,11 @@ const OrdersScreen = () => {
         <p style={styles.subheading}>Track confirmed purchases, review delivery details, and revisit your blend summary.</p>
 
         <Card style={styles.emptyCard}>
-          <h3 style={styles.emptyTitle}>No orders yet</h3>
-          <p style={styles.emptyBody}>Once you place an order, it will appear here with the status, total, and blend details.</p>
+          <h3 style={styles.emptyTitle}>{loadError ? "Orders unavailable" : "No orders yet"}</h3>
+          <p style={styles.emptyBody}>
+            {loadError ||
+              "Once you place an order, it will appear here with the status, total, and blend details."}
+          </p>
           <Button title="Start a new order" onClick={() => navigate("/supplements")} fullWidth />
         </Card>
       </div>

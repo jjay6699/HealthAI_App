@@ -10,6 +10,15 @@ import { generateProfileSummary, translateDailyProfileSummary } from "../../serv
 import { persistentStorage } from "../../services/persistentStorage";
 import { useAuth } from "../../services/auth";
 import { Language, useI18n } from "../../i18n";
+import { fetchUserProfile, saveUserProfile } from "../../services/profileApi";
+import { fetchShippingAddresses, saveShippingAddresses, ShippingAddressRecord } from "../../services/shippingApi";
+import {
+  BloodPressureEntry,
+  FastingGlucoseEntry,
+  WeightEntry,
+  fetchHealthMetrics,
+  saveHealthMetrics
+} from "../../services/healthMetricsApi";
 
 type ProfileState = {
   avatarImage: string | null;
@@ -73,23 +82,7 @@ type Order = {
   date: string;
   plan: string;
   price: number;
-  status: "processing" | "shipped" | "delivered" | "cancelled";
-};
-
-type BloodPressureEntry = {
-  date: string;
-  systolic: number;
-  diastolic: number;
-};
-
-type FastingGlucoseEntry = {
-  date: string;
-  value: number;
-};
-
-type WeightEntry = {
-  date: string;
-  value: number;
+  status: "paid" | "processing" | "shipped" | "delivered" | "cancelled" | string;
 };
 
 type EditKey = keyof ProfileState;
@@ -204,17 +197,10 @@ const ProfileScreen = () => {
     return [];
   });
 
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = persistentStorage.getItem(scopedKey("orderHistory")) ?? persistentStorage.getItem("orderHistory");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState("");
+  const hasHydratedShippingRef = React.useRef(false);
 
   const [editState, setEditState] = useState<null | {
     key: EditKey;
@@ -276,6 +262,8 @@ const ProfileScreen = () => {
   const [aiSummaryError, setAiSummaryError] = useState("");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [consentRefreshTick, setConsentRefreshTick] = useState(0);
+  const hasHydratedProfileRef = React.useRef(false);
+  const hasHydratedMetricsRef = React.useRef(false);
   const languageOptions: { value: Language; label: string }[] = [
     { value: "en", label: t("common.language.en") },
     { value: "zh", label: t("common.language.zh") },
@@ -332,40 +320,184 @@ const ProfileScreen = () => {
   // Auto-generate initials from name
   const avatarInitials = useMemo(() => getInitials(profile.name), [profile.name]);
 
-  // Save profile to localStorage whenever it changes
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const loadProfile = async () => {
+      const localSaved = persistentStorage.getItem("userProfile");
+      let localProfile: Partial<ProfileState> = {};
+      if (localSaved) {
+        try {
+          localProfile = JSON.parse(localSaved) as Partial<ProfileState>;
+        } catch {
+          localProfile = {};
+        }
+      }
+
+      if (!user?.id) {
+        hasHydratedProfileRef.current = true;
+        return;
+      }
+
+      try {
+        const { profile: remoteProfile } = await fetchUserProfile<ProfileState>();
+        if (cancelled) return;
+
+        const hasRemoteProfile = Object.keys(remoteProfile).length > 0;
+        const mergedProfile = { ...defaultProfile, ...localProfile, ...remoteProfile };
+        setProfile(mergedProfile);
+        persistentStorage.setItem("userProfile", JSON.stringify(mergedProfile));
+
+        if (!hasRemoteProfile && Object.keys(localProfile).length > 0) {
+          void saveUserProfile<ProfileState>(localProfile).catch((error) => {
+            console.error("Failed to migrate local profile:", error);
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load remote profile:", error);
+        }
+      } finally {
+        if (!cancelled) {
+          hasHydratedProfileRef.current = true;
+        }
+      }
+    };
+
+    void loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  // Keep local cache for fast resume, but backend is the source of truth.
   useEffect(() => {
     persistentStorage.setItem("userProfile", JSON.stringify(profile));
   }, [profile]);
+
+  useEffect(() => {
+    if (!hasHydratedProfileRef.current || !user?.id) return;
+
+    void saveUserProfile<ProfileState>(profile).catch((error) => {
+      console.error("Failed to save profile:", error);
+    });
+  }, [profile, user?.id]);
 
   // Save payment methods to localStorage
   useEffect(() => {
     persistentStorage.setItem("paymentMethods", JSON.stringify(paymentMethods));
   }, [paymentMethods]);
 
-  // Save shipping addresses to localStorage
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const loadShippingAddresses = async () => {
+      const localSaved = persistentStorage.getItem("shippingAddresses");
+      let localAddresses: ShippingAddressRecord[] = [];
+      if (localSaved) {
+        try {
+          localAddresses = JSON.parse(localSaved) as ShippingAddressRecord[];
+        } catch {
+          localAddresses = [];
+        }
+      }
+
+      if (!user?.id) {
+        hasHydratedShippingRef.current = true;
+        return;
+      }
+
+      try {
+        const remoteAddresses = await fetchShippingAddresses();
+        if (cancelled) return;
+
+        if (remoteAddresses.length > 0) {
+          setShippingAddresses(remoteAddresses);
+          persistentStorage.setItem("shippingAddresses", JSON.stringify(remoteAddresses));
+        } else {
+          setShippingAddresses(localAddresses);
+          if (localAddresses.length > 0) {
+            void saveShippingAddresses(localAddresses).catch((error) => {
+              console.error("Failed to migrate local shipping addresses:", error);
+            });
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load shipping addresses:", error);
+          setShippingAddresses(localAddresses);
+        }
+      } finally {
+        if (!cancelled) {
+          hasHydratedShippingRef.current = true;
+        }
+      }
+    };
+
+    void loadShippingAddresses();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  // Keep a local cache for fast resume, but backend is the source of truth.
   useEffect(() => {
     persistentStorage.setItem("shippingAddresses", JSON.stringify(shippingAddresses));
   }, [shippingAddresses]);
 
-  // Save order history to localStorage
   useEffect(() => {
-    persistentStorage.setItem(scopedKey("orderHistory"), JSON.stringify(orders));
-  }, [orders, user?.id]);
+    if (!hasHydratedShippingRef.current || !user?.id) return;
+
+    void saveShippingAddresses(shippingAddresses as ShippingAddressRecord[]).catch((error) => {
+      console.error("Failed to save shipping addresses:", error);
+    });
+  }, [shippingAddresses, user?.id]);
 
   useEffect(() => {
-    const saved =
-      persistentStorage.getItem(scopedKey("orderHistory")) ??
-      persistentStorage.getItem("orderHistory");
-    if (!saved) {
-      setOrders([]);
-      return;
-    }
+    let cancelled = false;
 
-    try {
-      setOrders(JSON.parse(saved));
-    } catch {
-      setOrders([]);
-    }
+    const loadOrders = async () => {
+      if (!user?.id) {
+        setOrders([]);
+        setOrdersError("");
+        setOrdersLoading(false);
+        return;
+      }
+
+      setOrdersLoading(true);
+      setOrdersError("");
+
+      try {
+        const response = await fetch("/api/orders", {
+          credentials: "same-origin"
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json();
+        if (cancelled) return;
+        setOrders(Array.isArray(payload?.orders) ? payload.orders : []);
+      } catch (error) {
+        console.error("Failed to load profile orders:", error);
+        if (cancelled) return;
+        setOrders([]);
+        setOrdersError("We couldn't load your order history right now.");
+      } finally {
+        if (!cancelled) {
+          setOrdersLoading(false);
+        }
+      }
+    };
+
+    void loadOrders();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]);
 
   useEffect(() => {
@@ -379,6 +511,89 @@ const ProfileScreen = () => {
   useEffect(() => {
     persistentStorage.setItem("weightHistory", JSON.stringify(weightHistory));
   }, [weightHistory]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMetrics = async () => {
+      const localBp = persistentStorage.getJSON<BloodPressureEntry[]>("bloodPressureHistory", []);
+      const localGlucose =
+        persistentStorage.getJSON<FastingGlucoseEntry[]>("fastingGlucoseHistory", []);
+      const localWeight = persistentStorage.getJSON<WeightEntry[]>("weightHistory", []);
+
+      if (!user?.id) {
+        hasHydratedMetricsRef.current = true;
+        return;
+      }
+
+      try {
+        const remoteMetrics = await fetchHealthMetrics();
+        if (cancelled) return;
+
+        const hasRemoteMetrics =
+          remoteMetrics.bloodPressureHistory.length > 0 ||
+          remoteMetrics.fastingGlucoseHistory.length > 0 ||
+          remoteMetrics.weightHistory.length > 0;
+
+        if (hasRemoteMetrics) {
+          setBpHistory(remoteMetrics.bloodPressureHistory);
+          setGlucoseHistory(remoteMetrics.fastingGlucoseHistory);
+          setWeightHistory(remoteMetrics.weightHistory);
+          persistentStorage.setItem(
+            "bloodPressureHistory",
+            JSON.stringify(remoteMetrics.bloodPressureHistory)
+          );
+          persistentStorage.setItem(
+            "fastingGlucoseHistory",
+            JSON.stringify(remoteMetrics.fastingGlucoseHistory)
+          );
+          persistentStorage.setItem("weightHistory", JSON.stringify(remoteMetrics.weightHistory));
+        } else {
+          setBpHistory(localBp);
+          setGlucoseHistory(localGlucose);
+          setWeightHistory(localWeight);
+          if (localBp.length > 0 || localGlucose.length > 0 || localWeight.length > 0) {
+            void saveHealthMetrics({
+              bloodPressureHistory: localBp,
+              fastingGlucoseHistory: localGlucose,
+              weightHistory: localWeight
+            }).catch((error) => {
+              console.error("Failed to migrate local health metrics:", error);
+            });
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load health metrics:", error);
+          setBpHistory(localBp);
+          setGlucoseHistory(localGlucose);
+          setWeightHistory(localWeight);
+        }
+      } finally {
+        if (!cancelled) {
+          hasHydratedMetricsRef.current = true;
+        }
+      }
+    };
+
+    void loadMetrics();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!hasHydratedMetricsRef.current || !user?.id) return;
+
+    void saveHealthMetrics({
+      bloodPressureHistory: bpHistory,
+      fastingGlucoseHistory: glucoseHistory,
+      weightHistory
+    }).catch((error) => {
+      console.error("Failed to save health metrics:", error);
+    });
+  }, [bpHistory, glucoseHistory, weightHistory, user?.id]);
 
   const editConfig: Record<EditKey, EditConfig> = {
     avatarImage: { label: t("profile.profilePhoto") },
@@ -605,6 +820,7 @@ const ProfileScreen = () => {
   const localizeOrderStatus = (status: Order["status"]) => {
     switch (status) {
       case "processing": return t("profile.orderStatus.processing");
+      case "paid": return t("profile.orderStatus.processing");
       case "shipped": return t("profile.orderStatus.shipped");
       case "delivered": return t("profile.orderStatus.delivered");
       case "cancelled": return t("profile.orderStatus.cancelled");
@@ -966,9 +1182,13 @@ const ProfileScreen = () => {
             </button>
           )}
         </div>
-        {orders.length === 0 ? (
+        {ordersLoading ? (
           <div style={styles.emptyState}>
-            <p style={styles.emptyText}>{t("profile.noOrders")}</p>
+            <p style={styles.emptyText}>Loading your latest orders...</p>
+          </div>
+        ) : orders.length === 0 ? (
+          <div style={styles.emptyState}>
+            <p style={styles.emptyText}>{ordersError || t("profile.noOrders")}</p>
             <Button title={t("profile.startShopping")} onClick={() => navigate("/upload")} variant="secondary" />
           </div>
         ) : (
