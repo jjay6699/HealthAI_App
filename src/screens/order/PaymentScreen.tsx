@@ -59,11 +59,13 @@ const PaymentScreen = () => {
       });
 
       const stripePayload = (await stripeResponse.json().catch(() => null)) as
-        | { url?: string; error?: string }
+        | { url?: string; error?: string; message?: string }
         | null;
 
       if (!stripeResponse.ok || !stripePayload?.url) {
-        throw new Error(stripePayload?.error || "Failed to start Stripe checkout");
+        const errMessage =
+          stripePayload?.message || stripePayload?.error || "Failed to start Stripe checkout";
+        throw new Error(errMessage);
       }
 
       window.location.assign(stripePayload.url);

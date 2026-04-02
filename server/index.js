@@ -1567,48 +1567,118 @@ app.post(
       return res.status(400).json({ error: "invalid_order_payload" });
     }
 
-    const forwardedProto = typeof req.headers["x-forwarded-proto"] === "string"
-      ? req.headers["x-forwarded-proto"].split(",")[0]
-      : req.protocol;
-    const forwardedHost = typeof req.headers["x-forwarded-host"] === "string"
-      ? req.headers["x-forwarded-host"].split(",")[0]
-      : req.get("host");
-    const baseUrl =
-      process.env.APP_ORIGIN ||
-      req.headers.origin ||
-      `${forwardedProto}://${forwardedHost}`;
+    const normalizeOrigin = (value) => {
+      if (!value || typeof value !== "string") return null;
+      try {
+        const url = new URL(value);
+        if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+        return `${url.protocol}//${url.host}`;
+      } catch {
+        return null;
+      }
+    };
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      // Let Stripe decide which payment methods to show based on:
-      // - your dashboard enabled methods
-      // - currency, country, amount, etc.
-      // This fixes the issue where only cards appear.
-      automatic_payment_methods: { enabled: true },
-      customer_email: user.email || undefined,
-      client_reference_id: user.id,
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: "myr",
-            unit_amount: Math.round(price * 100),
-            product_data: {
-              name: `RicHealth AI Custom Blend - ${planLabel || plan}`,
-              description: `${recommendations.length} nutrition item${recommendations.length === 1 ? "" : "s"}`
+    // Stripe requires a fully-qualified https URL for live-mode redirects.
+    // In production behind Railway/Cloudflare/etc, req.protocol is often "http",
+    // so we prefer forwarded headers and force https.
+    const forwardedProtoRaw =
+      typeof req.headers["x-forwarded-proto"] === "string"
+        ? req.headers["x-forwarded-proto"].split(",")[0].trim()
+        : "";
+    const forwardedHostRaw =
+      typeof req.headers["x-forwarded-host"] === "string"
+        ? req.headers["x-forwarded-host"].split(",")[0].trim()
+        : "";
+
+    const inferredHost = forwardedHostRaw || req.get("host");
+    let inferredProto = forwardedProtoRaw || req.protocol || "http";
+    if (inferredProto.includes("https")) inferredProto = "https";
+    if (isProd) inferredProto = "https";
+
+    const baseOrigin =
+      normalizeOrigin(process.env.APP_ORIGIN) ||
+      (!isProd ? normalizeOrigin(req.headers.origin) : null) ||
+      (inferredHost ? `${inferredProto}://${inferredHost}` : null);
+
+    if (!baseOrigin) {
+      return res.status(400).json({ error: "invalid_app_origin" });
+    }
+    if (isProd && !baseOrigin.startsWith("https://")) {
+      return res.status(400).json({
+        error: "invalid_app_origin",
+        message: "APP_ORIGIN must be an https URL in production"
+      });
+    }
+
+    const successUrl = `${baseOrigin}/order-confirmation?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${baseOrigin}/payment?stripe_cancelled=1`;
+
+    let session;
+    try {
+      session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        // Let Stripe decide which payment methods to show based on:
+        // - your dashboard enabled methods
+        // - currency, country, amount, etc.
+        // This fixes the issue where only cards appear.
+        automatic_payment_methods: { enabled: true },
+        customer_email: user.email || undefined,
+        client_reference_id: user.id,
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: "myr",
+              unit_amount: Math.round(price * 100),
+              product_data: {
+                name: `RicHealth AI Custom Blend - ${planLabel || plan}`,
+                description: `${recommendations.length} nutrition item${recommendations.length === 1 ? "" : "s"}`
+              }
             }
           }
+        ],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: {
+          userId: user.id,
+          plan,
+          planLabel: planLabel || "",
+          couponCode: couponCode || ""
         }
-      ],
-      success_url: `${baseUrl}/order-confirmation?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/payment?stripe_cancelled=1`,
-      metadata: {
-        userId: user.id,
-        plan,
-        planLabel: planLabel || "",
-        couponCode: couponCode || ""
-      }
-    });
+      });
+    } catch (error) {
+      const stripeError = error && typeof error === "object" ? error : null;
+      console.error("[stripe] checkout session create failed", {
+        message: stripeError?.message,
+        type: stripeError?.type,
+        code: stripeError?.code,
+        requestId: stripeError?.requestId,
+        statusCode: stripeError?.statusCode,
+        baseOrigin,
+        successUrl,
+        cancelUrl
+      });
+
+      const statusCode =
+        typeof stripeError?.statusCode === "number" && Number.isFinite(stripeError.statusCode)
+          ? stripeError.statusCode
+          : 500;
+      return res.status(statusCode).json({
+        error: "stripe_error",
+        message: stripeError?.message || "Stripe request failed",
+        type: stripeError?.type,
+        code: stripeError?.code,
+        requestId: stripeError?.requestId
+      });
+    }
+
+    if (!session?.url) {
+      console.error("[stripe] checkout session created but no URL returned", {
+        sessionId: session?.id,
+        baseOrigin
+      });
+      return res.status(500).json({ error: "stripe_session_missing_url" });
+    }
 
     stmtUpsert.run(
       `stripe_checkout:${session.id}`,
