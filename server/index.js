@@ -425,6 +425,9 @@ const stmtAdminUserCount = db.prepare("SELECT COUNT(*) AS count, MAX(createdAt) 
 const stmtAdminOrderStats = db.prepare(
   "SELECT COUNT(*) AS count, COALESCE(SUM(price), 0) AS revenue, MAX(createdAt) AS latestCreatedAt FROM orders"
 );
+const stmtAdminPaidOrderStats = db.prepare(
+  "SELECT COUNT(*) AS count, COALESCE(SUM(price), 0) AS revenue, MAX(createdAt) AS latestCreatedAt FROM orders WHERE lower(status) IN ('paid', 'completed', 'succeeded')"
+);
 
 const scryptAsync = promisify(crypto.scrypt);
 const authRateLimitState = new Map();
@@ -603,6 +606,9 @@ const normalizeReferralCode = (value) => {
   if (!/^[A-Z0-9]{4,24}$/.test(normalized)) return "__INVALID__";
   return normalized;
 };
+
+const isPaidStatus = (status) =>
+  typeof status === "string" && ["paid", "completed", "succeeded"].includes(status.trim().toLowerCase());
 
 const hashPassword = async (password) => {
   const salt = crypto.randomBytes(16).toString("hex");
@@ -1821,7 +1827,10 @@ app.get("/api/orders", (req, res) => {
     return res.status(401).json({ error: "auth_required" });
   }
 
-  const orders = stmtListOrdersByUser.all(user.id).map(formatOrderForResponse);
+  const orders = stmtListOrdersByUser
+    .all(user.id)
+    .filter((order) => isPaidStatus(order.status))
+    .map(formatOrderForResponse);
   return res.json({ orders });
 });
 
@@ -1893,6 +1902,13 @@ app.get(
     const orderLimit = Math.min(500, Math.max(1, Number(req.query.orderLimit) || 200));
     const userStats = stmtAdminUserCount.get();
     const orderStats = stmtAdminOrderStats.get();
+    const paidOrderStats = stmtAdminPaidOrderStats.get();
+    const totalOrderRevenue = Number(orderStats?.revenue || 0);
+    const paidOrderRevenue = Number(paidOrderStats?.revenue || 0);
+    const totalOrderCount = Number(orderStats?.count || 0);
+    const paidOrderCount = Number(paidOrderStats?.count || 0);
+    const potentialRevenue = Math.max(0, totalOrderRevenue - paidOrderRevenue);
+    const potentialSales = Math.max(0, totalOrderCount - paidOrderCount);
     const users = stmtListAdminUsers.all(userLimit);
     const orders = stmtListAdminOrders.all(orderLimit).map((order) => ({
       ...order,
@@ -1903,10 +1919,12 @@ app.get(
     res.json({
       stats: {
         totalUsers: userStats.count,
-        totalSales: orderStats.count,
-        totalRevenue: orderStats.revenue,
+        totalSales: paidOrderCount,
+        totalRevenue: paidOrderRevenue,
+        potentialSales,
+        potentialRevenue,
         latestUserAt: userStats.latestCreatedAt || null,
-        latestSaleAt: orderStats.latestCreatedAt || null
+        latestSaleAt: paidOrderStats.latestCreatedAt || orderStats.latestCreatedAt || null
       },
       users,
       orders
