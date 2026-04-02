@@ -597,7 +597,6 @@ const requireAdminAuth = (req, res, next) => {
     return next();
   }
 
-  res.setHeader("WWW-Authenticate", 'Basic realm="Admin Dashboard"');
   return res.status(401).json({ error: "admin_auth_required" });
 };
 
