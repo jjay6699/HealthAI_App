@@ -1156,144 +1156,84 @@ const buildRowConcern = (row: ExtractedReportRow) => {
 };
 
 const buildParsedRowExplanation = (row: ParsedReportRow) => {
-  const valueText = row.value ? `${row.value}${row.unit ? ` ${row.unit}` : ""}` : "this value";
-  const rangeText = row.referenceRange ? ` (lab range: ${row.referenceRange})` : "";
   const marker = canonicalizeMarkerName(row.marker || "This marker") || row.marker || "This marker";
   const markerKey = normalizeForMatch(marker);
   const aiExplanation = row.explanation?.trim();
 
-  const closing = (() => {
-    if (/(glucose|a1c|hba1c|insulin)/.test(markerKey)) {
-      return {
-        high: "Seen repeatedly, this usually matters more as a blood-sugar pattern than as a single isolated result.",
-        low: "If this shows up more than once, it is worth matching it to meal timing, symptoms, and energy swings.",
-        normal: "The bigger picture still comes from watching the trend over time, not one reading alone."
-      };
-    }
-    if (/(ldl|hdl|cholesterol|triglyceride|triglycerides|lipid|apo b|apob|non hdl|nonhdl)/.test(markerKey)) {
-      return {
-        high: "This is most useful when reviewed together with the rest of the lipid panel rather than on its own.",
-        low: "It makes more sense when compared with your full cholesterol pattern and general diet profile.",
-        normal: "It is still worth reading this together with the rest of the cardiovascular markers."
-      };
-    }
-    if (/(alt|ast|alp|ggt|bilirubin|liver)/.test(markerKey)) {
-      return {
-        high: "Context matters here, especially whether other liver markers move in the same direction.",
-        low: "On its own this is often less important, so the surrounding liver markers matter a lot.",
-        normal: "This is best interpreted as part of the overall liver panel rather than by itself."
-      };
-    }
-    if (/(creatinine|egfr|urea|bun|kidney)/.test(markerKey)) {
-      return {
-        high: "Hydration, muscle mass, and the rest of the kidney panel can all change how important this result is.",
-        low: "This often needs context from body size, hydration, and nearby kidney markers.",
-        normal: "Kidney markers are most meaningful when looked at together rather than one by one."
-      };
-    }
-    if (/(ferritin|iron|hemoglobin|haemoglobin|b12|folate|vitamin d|vitamin\s*d)/.test(markerKey)) {
-      return {
-        high: "Supplement use, diet, and related nutrient markers can help explain whether this is meaningful or temporary.",
-        low: "This becomes especially relevant if it lines up with tiredness, poor recovery, or concentration issues.",
-        normal: "It is still helpful to compare this with symptoms and other nutrient-related results."
-      };
-    }
-    if (/(crp|esr|inflammation)/.test(markerKey)) {
-      return {
-        high: "Inflammation markers are usually most helpful when tracked as a trend instead of judged from one test alone.",
-        low: "That is generally reassuring, though the overall pattern still matters more than a standalone number.",
-        normal: "The trend and the rest of the inflammatory picture still matter most."
-      };
-    }
-    if (/(tsh|t3|t4|thyroid)/.test(markerKey)) {
-      return {
-        high: "This is much more informative when compared with the rest of the thyroid panel and symptoms.",
-        low: "The meaning depends heavily on what the other thyroid markers are doing at the same time.",
-        normal: "Thyroid results are usually best understood as a panel, not as a single value."
-      };
-    }
-
-    return {
-      high: "The significance usually depends on whether related markers show the same pattern.",
-      low: "It is more meaningful when considered alongside symptoms and related lab values.",
-      normal: "The wider lab pattern still tells more than a single isolated result."
-    };
-  })();
-
   const markerMeaning = (() => {
     if (/(glucose|a1c|hba1c|insulin)/.test(markerKey)) {
       return {
-        high: "This may suggest your blood sugar is running higher than ideal and can add stress to energy, weight, and long-term metabolic health.",
-        low: "This may reflect low blood sugar reserve or poor fuel availability, which can contribute to shakiness, fatigue, or light-headedness.",
-        normal: "This is a reassuring sign for blood sugar balance at the time of testing."
+        high: "This may reflect poorer blood sugar control and can affect energy, appetite, and long-term metabolic health.",
+        low: "This may reflect lower sugar reserve and can contribute to shakiness, fatigue, or light-headedness.",
+        normal: "This is reassuring for blood sugar balance on this report."
       };
     }
     if (/(ldl|hdl|cholesterol|triglyceride|triglycerides|lipid|apob|nonhdl)/.test(markerKey)) {
       return {
-        high: "This can point to higher cardiovascular strain over time, especially when seen together with other metabolic risk markers.",
-        low: "This may be worth interpreting in the context of overall metabolic health, diet, and other lipid markers.",
+        high: "This can point to higher cardiovascular strain, especially if other lipid markers also look unfavorable.",
+        low: "This is best interpreted alongside the rest of the lipid pattern.",
         normal: "This is a positive sign for this part of your cardiovascular risk picture."
       };
     }
     if (/(alt|ast|alp|ggt|bilirubin|liver)/.test(markerKey)) {
       return {
-        high: "This can suggest extra liver stress or inflammation and is best interpreted together with the rest of your liver panel.",
-        low: "Low values here are often less concerning on their own, but they still need context from the full panel.",
+        high: "This may suggest liver stress and makes more sense when viewed with the rest of the liver panel.",
+        low: "Low values here are often less significant on their own and need full-panel context.",
         normal: "This is generally reassuring for liver-related function on this report."
       };
     }
     if (/(creatinine|egfr|urea|bun|kidney)/.test(markerKey)) {
       return {
-        high: "This can reflect reduced kidney clearance, dehydration, or increased metabolic stress depending on the full pattern.",
-        low: "This can sometimes be seen with lower muscle mass, hydration shifts, or other non-dangerous causes.",
+        high: "This can suggest reduced kidney clearance or extra kidney stress, depending on the wider renal pattern.",
+        low: "This can sometimes be seen with lower muscle mass or hydration shifts.",
         normal: "This is generally reassuring for kidney-related filtration markers on this test."
       };
     }
     if (/(ferritin|iron|hemoglobin|haemoglobin|b12|folate|vitamin d|vitamin\s*d)/.test(markerKey)) {
       return {
-        high: "This may indicate excess storage or supplementation effects and should be read alongside symptoms and related markers.",
-        low: "This may help explain tiredness, poor recovery, brain fog, or reduced resilience if symptoms are present.",
-        normal: "This is a good sign for nutrient status in this area at the time of testing."
+        high: "This may reflect higher stores or supplementation effects and should be read with related markers.",
+        low: "This may help explain tiredness, poorer recovery, or lower resilience if symptoms are present.",
+        normal: "This is a good sign for nutrient status in this area."
       };
     }
     if (/(crp|esr|inflammation)/.test(markerKey)) {
       return {
-        high: "This can be a sign that inflammation is more active than ideal somewhere in the body.",
-        low: "A low result here is usually a reassuring sign of lower inflammatory activity.",
-        normal: "This is generally reassuring for inflammation-related activity on this report."
+        high: "This can be a sign that inflammation is more active than ideal in the body.",
+        low: "A low result here is usually reassuring for inflammatory activity.",
+        normal: "This is generally reassuring for inflammation-related activity."
       };
     }
     if (/(tsh|t3|t4|thyroid)/.test(markerKey)) {
       return {
-        high: "This may indicate thyroid signaling is not optimal and can affect energy, mood, metabolism, and temperature regulation.",
-        low: "This may also signal thyroid imbalance depending on the rest of the thyroid panel.",
-        normal: "This is a positive sign for thyroid balance, though trends and the full panel still matter."
+        high: "This may indicate thyroid signaling is not optimal and can affect energy, mood, and metabolism.",
+        low: "This may also suggest thyroid imbalance depending on the rest of the panel.",
+        normal: "This is a positive sign for thyroid balance on this report."
       };
     }
 
     return {
-      high: "This suggests the marker is above the expected range and may deserve attention in the context of symptoms and related labs.",
-      low: "This suggests the marker is below the expected range and may be relevant if you have fatigue, poor recovery, or other ongoing symptoms.",
-      normal: "This is a reassuring result for this marker on this report."
+      high: "This is above the expected range and may deserve follow-up in the context of related labs and symptoms.",
+      low: "This is below the expected range and may be relevant if you have matching symptoms.",
+      normal: "This is a reassuring result for this marker."
     };
   })();
 
   if (row.status === "high") {
-    return `${marker} is above the lab range at ${valueText}${rangeText}. ${aiExplanation || markerMeaning.high} ${closing.high}`;
+    return aiExplanation || markerMeaning.high;
   }
   if (row.status === "low") {
-    return `${marker} is below the lab range at ${valueText}${rangeText}. ${aiExplanation || markerMeaning.low} ${closing.low}`;
+    return aiExplanation || markerMeaning.low;
   }
   if (row.status === "flagged" || row.status === "abnormal") {
-    return `${marker} is flagged as outside the expected pattern at ${valueText}${rangeText}. ${aiExplanation || "A flagged result does not automatically mean disease, but it does mean the value should be interpreted alongside nearby markers, symptoms, and trend history."}`;
+    return aiExplanation || "This stands out from the expected pattern and should be interpreted together with nearby markers and symptoms.";
   }
   if (row.status === "normal") {
-    return `${marker} is within the printed lab range at ${valueText}${rangeText}. ${aiExplanation || markerMeaning.normal} ${closing.normal}`;
+    return aiExplanation || markerMeaning.normal;
   }
   if (row.status === "comment") {
-    return "This note was written by the lab/clinician and adds useful context to the numeric results. It should be interpreted together with the related markers, not in isolation.";
+    return "This note adds useful context to the surrounding results.";
   }
-  return `${row.marker} was extracted from the report, but the status could not be fully classified from printed values/ranges alone. This usually means the row is partially readable or needs context from neighboring results. A clearer report image or repeat test can improve interpretation accuracy.`;
+  return `${marker} could not be fully classified from the printed report, so a clearer image or more context may help interpretation.`;
 };
 
 const buildParsedRowConcern = (row: ParsedReportRow) =>
@@ -2674,6 +2614,8 @@ Important writing rules:
 - Make each explanation specific to the marker category when possible (for example energy, inflammation, blood sugar, cardiovascular risk, liver, kidney, thyroid, nutrient status).
 - In the summary, connect the findings into an overall story (for example inflammation pattern, blood sugar pattern, nutrient deficiency pattern, lipid/cardiovascular pattern) and explain possible day-to-day impact.
 - Do not only restate the numbers; explain significance in clear, practical language.
+- Keep each detailed insight "impact" brief: 1 short sentence, ideally under 18 words.
+- Do not repeat the exact value or reference range again in "impact" if it is already stated in "findings".
 
 Before giving recommendations, confirm you checked common lipid/metabolic markers if present: LDL, HDL, total cholesterol, triglycerides (TG), non-HDL, ApoB, glucose, HbA1c. If any of these are missing from the report, explicitly note them as "missing/unreported".
 
@@ -2746,7 +2688,7 @@ ${getLanguageInstruction(language)}`;
       messages: [
         {
           role: "system",
-          content: "You are a knowledgeable health and nutrition expert who analyzes bloodwork and provides evidence-based nutrition recommendations with ACCURATE dosages that vary based on the specific nutrition product and severity of deficiencies. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Make the overall summary explain the health pattern and significance, not just the lab numbers. Avoid repeating the same ending phrase across multiple marker explanations. Always respond with valid JSON."
+          content: "You are a knowledgeable health and nutrition expert who analyzes bloodwork and provides evidence-based nutrition recommendations with ACCURATE dosages that vary based on the specific nutrition product and severity of deficiencies. Use plain, non-medical language for concerns, strengths, and detailed insights so a layperson can understand. Make the overall summary explain the health pattern and significance, not just the lab numbers. Avoid repeating the same ending phrase across multiple marker explanations. Keep each detailed insight impact short and non-repetitive, without restating the value/range already shown in findings. Always respond with valid JSON."
         },
         {
           role: "user",
