@@ -120,6 +120,17 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_orders_userId ON orders(userId);
   CREATE INDEX IF NOT EXISTS idx_orders_createdAt ON orders(createdAt DESC);
 
+  CREATE TABLE IF NOT EXISTS referral_agents (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT,
+    email TEXT,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_referral_agents_code ON referral_agents(code);
+
   CREATE TABLE IF NOT EXISTS user_consents (
     id TEXT PRIMARY KEY,
     userId TEXT NOT NULL,
@@ -421,12 +432,23 @@ const stmtListAdminOrders = db.prepare(`
   ORDER BY createdAt DESC
   LIMIT ?
 `);
+const stmtListReferralAgents = db.prepare(`
+  SELECT id, code, name, email, createdAt, updatedAt
+  FROM referral_agents
+  ORDER BY createdAt DESC
+`);
 const stmtAdminUserCount = db.prepare("SELECT COUNT(*) AS count, MAX(createdAt) AS latestCreatedAt FROM users");
 const stmtAdminOrderStats = db.prepare(
   "SELECT COUNT(*) AS count, COALESCE(SUM(price), 0) AS revenue, MAX(createdAt) AS latestCreatedAt FROM orders"
 );
 const stmtAdminPaidOrderStats = db.prepare(
   "SELECT COUNT(*) AS count, COALESCE(SUM(price), 0) AS revenue, MAX(createdAt) AS latestCreatedAt FROM orders WHERE lower(status) IN ('paid', 'completed', 'succeeded')"
+);
+const stmtGetReferralAgentByCode = db.prepare(
+  "SELECT id, code, name, email, createdAt, updatedAt FROM referral_agents WHERE code = ?"
+);
+const stmtInsertReferralAgent = db.prepare(
+  "INSERT INTO referral_agents (id, code, name, email, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)"
 );
 
 const scryptAsync = promisify(crypto.scrypt);
@@ -1903,6 +1925,7 @@ app.get(
     const userStats = stmtAdminUserCount.get();
     const orderStats = stmtAdminOrderStats.get();
     const paidOrderStats = stmtAdminPaidOrderStats.get();
+    const referralAgents = stmtListReferralAgents.all();
     const totalOrderRevenue = Number(orderStats?.revenue || 0);
     const paidOrderRevenue = Number(paidOrderStats?.revenue || 0);
     const totalOrderCount = Number(orderStats?.count || 0);
@@ -1927,7 +1950,51 @@ app.get(
         latestSaleAt: paidOrderStats.latestCreatedAt || orderStats.latestCreatedAt || null
       },
       users,
-      orders
+      orders,
+      referralAgents
+    });
+  })
+);
+
+app.post(
+  "/api/admin/referral-agents",
+  adminRateLimiter,
+  requireAdminAuth,
+  asyncHandler(async (req, res) => {
+    const code = normalizeReferralCode(req.body?.code);
+    if (!code) {
+      return res.status(400).json({ error: "invalid_referral_code" });
+    }
+
+    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    if (email && !isValidEmail(email)) {
+      return res.status(400).json({ error: "invalid_email" });
+    }
+
+    const existingUser = stmtGetUserByReferralCode.get(code);
+    if (existingUser) {
+      return res.status(409).json({ error: "referral_code_in_use" });
+    }
+
+    const existingAgent = stmtGetReferralAgentByCode.get(code);
+    if (existingAgent) {
+      return res.status(409).json({ error: "referral_code_in_use" });
+    }
+
+    const now = Date.now();
+    const agentId = crypto.randomUUID();
+    stmtInsertReferralAgent.run(agentId, code, name || null, email || null, now, now);
+
+    return res.status(201).json({
+      agent: {
+        id: agentId,
+        code,
+        name: name || null,
+        email: email || null,
+        createdAt: now,
+        updatedAt: now
+      }
     });
   })
 );
