@@ -1634,8 +1634,17 @@ app.post(
         // - fpx
         // - grabpay
         payment_method_types: ["card", "fpx", "grabpay"],
+        // FPX eligibility note:
+        // Stripe will only *display* FPX when the session is eligible (typically MYR
+        // and a Malaysia customer context). We help Stripe infer this by collecting
+        // a Malaysia shipping address on the hosted page.
+        shipping_address_collection: { allowed_countries: ["MY"] },
+        phone_number_collection: { enabled: true },
+        billing_address_collection: "required",
         customer_email: user.email || undefined,
         client_reference_id: user.id,
+        customer_creation: "always",
+        customer_update: { name: "auto", address: "auto", shipping: "auto" },
         line_items: [
           {
             quantity: 1,
