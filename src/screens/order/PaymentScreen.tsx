@@ -23,7 +23,6 @@ const PaymentScreen = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "fpx" | "ewallet">("card");
   const [isProcessing, setIsProcessing] = useState(false);
   const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
 
@@ -44,34 +43,9 @@ const PaymentScreen = () => {
       const deliveryAddressRaw = persistentStorage.getItem("deliveryAddress");
       const deliveryAddress = deliveryAddressRaw ? JSON.parse(deliveryAddressRaw) : null;
 
-      if (paymentMethod === "card") {
-        const stripeResponse = await fetch("/api/stripe/checkout-session", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            plan: orderDetails?.plan,
-            planLabel: orderDetails?.planLabel,
-            price: orderDetails?.price,
-            recommendations: orderDetails?.recommendations || [],
-            couponCode: orderDetails?.couponCode || null,
-            deliveryAddress
-          })
-        });
-
-        const stripePayload = (await stripeResponse.json().catch(() => null)) as
-          | { url?: string; error?: string }
-          | null;
-
-        if (!stripeResponse.ok || !stripePayload?.url) {
-          throw new Error(stripePayload?.error || "Failed to start Stripe checkout");
-        }
-
-        window.location.assign(stripePayload.url);
-        return;
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      const response = await fetch("/api/orders", {
+      // Always go through Stripe Checkout. Stripe will automatically
+      // display the payment methods enabled in your Stripe dashboard.
+      const stripeResponse = await fetch("/api/stripe/checkout-session", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -80,42 +54,20 @@ const PaymentScreen = () => {
           price: orderDetails?.price,
           recommendations: orderDetails?.recommendations || [],
           couponCode: orderDetails?.couponCode || null,
-          paymentMethod,
           deliveryAddress
         })
       });
 
-      const payload = (await response.json().catch(() => null)) as
-        | {
-            order?: {
-              orderNumber: string;
-              date: string;
-              plan: string;
-              planLabel?: string;
-              price: number;
-              recommendations: any[];
-              status: "processing";
-            };
-            error?: string;
-          }
+      const stripePayload = (await stripeResponse.json().catch(() => null)) as
+        | { url?: string; error?: string }
         | null;
 
-      if (!response.ok || !payload?.order) {
-        throw new Error(payload?.error || "Failed to save order");
+      if (!stripeResponse.ok || !stripePayload?.url) {
+        throw new Error(stripePayload?.error || "Failed to start Stripe checkout");
       }
 
-      const newOrder = payload.order;
-      persistentStorage.setItem(scopedKey("lastOrder"), JSON.stringify(newOrder));
-
-      const orderHistory = JSON.parse(
-        persistentStorage.getItem(scopedKey("orderHistory")) ||
-          persistentStorage.getItem("orderHistory") ||
-          "[]"
-      );
-      orderHistory.unshift(newOrder);
-      persistentStorage.setItem(scopedKey("orderHistory"), JSON.stringify(orderHistory));
-
-      navigate("/order-confirmation");
+      window.location.assign(stripePayload.url);
+      return;
     } catch (error) {
       console.error("Failed to complete order:", error);
       alert("Unable to complete your order right now. Please try again.");
@@ -133,12 +85,6 @@ const PaymentScreen = () => {
       </div>
     );
   }
-
-  const paymentMethods = [
-    { id: "card", icon: "💳", label: t("order.payment.card"), description: t("order.payment.cardDesc") },
-    { id: "fpx", icon: "🏦", label: t("order.payment.fpx"), description: t("order.payment.fpxDesc") },
-    { id: "ewallet", icon: "📱", label: t("order.payment.ewallet"), description: t("order.payment.ewalletDesc") }
-  ];
 
   return (
     <div style={styles.page}>
@@ -172,31 +118,10 @@ const PaymentScreen = () => {
       <Card style={styles.card}>
         <SectionHeader title={t("order.payment.method")} />
         <div style={styles.paymentList}>
-          {paymentMethods.map((method) => {
-            const isSelected = paymentMethod === method.id;
-            return (
-              <button
-                key={method.id}
-                style={{
-                  ...styles.paymentOption,
-                  borderColor: isSelected ? theme.colors.primary : theme.colors.divider,
-                  boxShadow: isSelected ? "0 2px 8px rgba(239, 68, 68, 0.1)" : "none"
-                }}
-                onClick={() => setPaymentMethod(method.id as typeof paymentMethod)}
-              >
-                <div style={styles.radioContainer}>
-                  <div style={{ ...styles.radio, ...(isSelected ? styles.radioSelected : {}) }}>
-                    {isSelected ? <div style={styles.radioDot} /> : null}
-                  </div>
-                </div>
-                <div style={styles.paymentIcon}>{method.icon}</div>
-                <div style={styles.paymentInfo}>
-                  <span style={styles.paymentLabel}>{method.label}</span>
-                  <span style={styles.paymentDescription}>{method.description}</span>
-                </div>
-              </button>
-            );
-          })}
+          <div style={styles.stripeNotice}>
+            <div style={styles.stripeNoticeTitle}>{t("order.payment.stripeTitle")}</div>
+            <div style={styles.stripeNoticeBody}>{t("order.payment.stripeBody")}</div>
+          </div>
         </div>
       </Card>
 
@@ -305,61 +230,22 @@ const createStyles = (theme: AppTheme) => ({
     flexDirection: "column" as const,
     gap: theme.spacing.md
   },
-  paymentOption: {
-    display: "flex",
-    alignItems: "center",
-    gap: theme.spacing.md,
-    padding: theme.spacing.md,
-    background: theme.colors.surface,
+  stripeNotice: {
     borderRadius: theme.radii.lg,
-    borderWidth: 2,
-    borderStyle: "solid",
-    cursor: "pointer",
-    transition: "all 0.2s ease",
-    fontFamily: "inherit",
-    textAlign: "left" as const,
-    width: "100%"
+    border: `1px solid ${theme.colors.divider}`,
+    background: theme.colors.background,
+    padding: theme.spacing.md
   },
-  radioContainer: {
-    flexShrink: 0
-  },
-  radio: {
-    width: 20,
-    height: 20,
-    borderRadius: "50%",
-    border: `2px solid ${theme.colors.divider}`,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    transition: "all 0.2s ease"
-  },
-  radioSelected: {
-    borderColor: theme.colors.primary
-  },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: "50%",
-    background: theme.colors.primary
-  },
-  paymentIcon: {
-    fontSize: 28,
-    flexShrink: 0
-  },
-  paymentInfo: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: 2
-  },
-  paymentLabel: {
+  stripeNoticeTitle: {
     fontSize: 15,
-    fontWeight: 600,
-    color: theme.colors.text
+    fontWeight: 700,
+    color: theme.colors.text,
+    marginBottom: 4
   },
-  paymentDescription: {
+  stripeNoticeBody: {
     fontSize: 13,
-    color: theme.colors.textSecondary
+    color: theme.colors.textSecondary,
+    lineHeight: "18px"
   },
   securityCard: {
     background: "#F0FDF4",

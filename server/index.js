@@ -1580,7 +1580,11 @@ app.post(
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
-      payment_method_types: ["card"],
+      // Let Stripe decide which payment methods to show based on:
+      // - your dashboard enabled methods
+      // - currency, country, amount, etc.
+      // This fixes the issue where only cards appear.
+      automatic_payment_methods: { enabled: true },
       customer_email: user.email || undefined,
       client_reference_id: user.id,
       line_items: [
@@ -1613,7 +1617,9 @@ app.post(
         plan,
         planLabel,
         price,
-        paymentMethod: "stripe_card",
+        // Note: the final payment method is resolved during confirm-stripe
+        // (based on the PaymentIntent / Charge details).
+        paymentMethod: "stripe",
         couponCode,
         recommendations,
         deliveryAddress
@@ -1661,6 +1667,37 @@ app.post(
       return res.status(409).json({ error: "stripe_session_not_paid" });
     }
 
+    let resolvedPaymentMethod = null;
+    let resolvedPaymentIntentId =
+      typeof session.payment_intent === "string" ? session.payment_intent : null;
+
+    // Best-effort: store the actual payment method used (e.g. card, fpx, grabpay).
+    // This is helpful for admin/order reporting and avoids hard-coding "stripe_card".
+    if (resolvedPaymentIntentId) {
+      try {
+        const paymentIntent = await stripe.paymentIntents.retrieve(resolvedPaymentIntentId, {
+          expand: ["latest_charge"]
+        });
+
+        const latestCharge =
+          paymentIntent?.latest_charge && typeof paymentIntent.latest_charge === "object"
+            ? paymentIntent.latest_charge
+            : null;
+
+        const type = latestCharge?.payment_method_details?.type;
+        if (typeof type === "string" && type.trim()) {
+          resolvedPaymentMethod = `stripe_${type.trim()}`;
+        } else if (
+          Array.isArray(paymentIntent?.payment_method_types) &&
+          typeof paymentIntent.payment_method_types[0] === "string"
+        ) {
+          resolvedPaymentMethod = `stripe_${paymentIntent.payment_method_types[0]}`;
+        }
+      } catch (error) {
+        console.warn("[stripe] failed to resolve payment method type:", error);
+      }
+    }
+
     const pending = stmtGetOne.get(`stripe_checkout:${sessionId}`, "payload");
     if (!pending?.value) {
       return res.status(404).json({ error: "stripe_checkout_payload_missing" });
@@ -1672,13 +1709,12 @@ app.post(
       plan: payload.plan,
       planLabel: payload.planLabel,
       price: payload.price,
-      paymentMethod: payload.paymentMethod || "stripe_card",
+      paymentMethod: resolvedPaymentMethod || payload.paymentMethod || "stripe",
       couponCode: payload.couponCode || null,
       recommendations: Array.isArray(payload.recommendations) ? payload.recommendations : [],
       deliveryAddress: payload.deliveryAddress || null,
       stripeSessionId: session.id,
-      stripePaymentIntentId:
-        typeof session.payment_intent === "string" ? session.payment_intent : null,
+      stripePaymentIntentId: resolvedPaymentIntentId,
       status: "paid"
     });
 
