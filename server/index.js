@@ -1972,26 +1972,25 @@ app.post(
       return res.status(400).json({ error: "invalid_email" });
     }
 
-    const existingUser = stmtGetUserByReferralCode.get(code);
-    if (existingUser) {
-      return res.status(409).json({ error: "referral_code_in_use" });
-    }
-
     const existingAgent = stmtGetReferralAgentByCode.get(code);
     if (existingAgent) {
-      return res.status(409).json({ error: "referral_code_in_use" });
+      return res.status(200).json({ agent: existingAgent });
     }
+
+    const existingUser = stmtGetUserByReferralCode.get(code);
 
     const now = Date.now();
     const agentId = crypto.randomUUID();
-    stmtInsertReferralAgent.run(agentId, code, name || null, email || null, now, now);
+    const resolvedName = name || existingUser?.name || null;
+    const resolvedEmail = email || existingUser?.email || null;
+    stmtInsertReferralAgent.run(agentId, code, resolvedName, resolvedEmail, now, now);
 
     return res.status(201).json({
       agent: {
         id: agentId,
         code,
-        name: name || null,
-        email: email || null,
+        name: resolvedName,
+        email: resolvedEmail,
         createdAt: now,
         updatedAt: now
       }
