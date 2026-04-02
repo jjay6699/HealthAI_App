@@ -489,7 +489,10 @@ const createStyles = (theme: AppTheme) => ({
     fontSize: 11,
     textTransform: "uppercase" as const,
     color: theme.colors.textSecondary,
-    letterSpacing: 1
+    letterSpacing: 1,
+    display: "block",
+    overflowWrap: "anywhere" as const,
+    wordBreak: "break-word" as const
   },
   statValue: {
     fontSize: 16,
