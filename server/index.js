@@ -12,7 +12,14 @@ import Stripe from "stripe";
 import { Resend } from "resend";
 
 const PORT = Number(process.env.PORT || 3000);
-const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+// NOTE: If your Stripe account is pinned to an old API version, Stripe may reject
+// newer params (e.g. `automatic_payment_methods`) with "Received unknown parameter".
+// We explicitly set a modern Stripe API version to ensure these parameters work.
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: process.env.STRIPE_API_VERSION || "2023-10-16"
+    })
+  : null;
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const RESEND_FROM_EMAIL =
   process.env.RESEND_FROM_EMAIL || "RicHealth AI <no-reply@app.richealth.ai>";
