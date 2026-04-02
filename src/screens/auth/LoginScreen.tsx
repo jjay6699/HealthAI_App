@@ -3,13 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
 import { useI18n } from "../../i18n";
 import { useAuth } from "../../services/auth";
-import { persistentStorage } from "../../services/persistentStorage";
 import { AppTheme, useTheme } from "../../theme";
-
-const demoCredentials = {
-  email: "demo@newgene.app",
-  password: "DemoPass!1"
-};
 
 const LoginScreen = () => {
   const theme = useTheme();
@@ -48,17 +42,6 @@ const LoginScreen = () => {
         throw new Error("Unable to log in right now.");
       }
 
-      if (email.trim().toLowerCase() === demoCredentials.email) {
-        persistentStorage.setJSON("userConsents", {
-          termsPrivacyAccepted: true,
-          healthDataProcessingAccepted: true,
-          researchParticipation: false,
-          marketingCommunication: false,
-          policyVersion: "2026-03",
-          acceptedAt: new Date().toISOString()
-        });
-      }
-
       await refreshAuth();
       setIsLoading(false);
       navigate("/home");
@@ -68,25 +51,10 @@ const LoginScreen = () => {
     }
   };
 
-  const handleUseDemo = () => {
-    setEmail(demoCredentials.email);
-    setPassword(demoCredentials.password);
-  };
-
   return (
     <div style={styles.wrapper}>
       <h1 style={styles.heading}>{t("auth.login.heading")}</h1>
       <p style={styles.subheading}>{t("auth.login.subheading")}</p>
-      <div style={styles.demoBox}>
-        <div>
-          <p style={styles.demoTitle}>{t("auth.login.demoTitle")}</p>
-          <p style={styles.demoCopy}>
-            Email: <strong>{demoCredentials.email}</strong>
-            <br />Password: <strong>{demoCredentials.password}</strong>
-          </p>
-        </div>
-        <Button title={t("auth.login.fillDetails")} variant="secondary" onClick={handleUseDemo} style={{ alignSelf: "flex-start" }} />
-      </div>
       <form style={styles.form} onSubmit={handleSubmit}>
         {error ? <p style={styles.error}>{error}</p> : null}
         <label style={styles.label} htmlFor="email">
@@ -151,27 +119,6 @@ const createStyles = (theme: AppTheme) => ({
     fontSize: 16,
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.md
-  },
-  demoBox: {
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: theme.spacing.sm,
-    padding: theme.spacing.lg,
-    borderRadius: theme.radii.lg,
-    background: "rgba(59, 130, 246, 0.08)",
-    border: `1px solid rgba(59, 130, 246, 0.2)`
-  },
-  demoTitle: {
-    fontSize: 14,
-    fontWeight: 700,
-    color: theme.colors.info,
-    margin: 0
-  },
-  demoCopy: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    margin: 0,
-    lineHeight: "20px"
   },
   form: {
     display: "flex",
