@@ -131,6 +131,41 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_referral_agents_code ON referral_agents(code);
 
+  CREATE TABLE IF NOT EXISTS discount_coupons (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    title TEXT,
+    description TEXT,
+    discountType TEXT NOT NULL,
+    discountValue REAL NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'MYR',
+    minimumSubtotal REAL,
+    maxDiscountAmount REAL,
+    startsAt INTEGER,
+    endsAt INTEGER,
+    usageLimit INTEGER,
+    usageCount INTEGER NOT NULL DEFAULT 0,
+    perUserLimit INTEGER,
+    isActive INTEGER NOT NULL DEFAULT 1,
+    metadataJson TEXT,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_discount_coupons_code ON discount_coupons(code);
+
+  CREATE TABLE IF NOT EXISTS discount_coupon_redemptions (
+    id TEXT PRIMARY KEY,
+    couponId TEXT NOT NULL,
+    userId TEXT,
+    orderId TEXT,
+    redeemedAt INTEGER NOT NULL,
+    FOREIGN KEY(couponId) REFERENCES discount_coupons(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_couponId ON discount_coupon_redemptions(couponId);
+  CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_user_coupon ON discount_coupon_redemptions(userId, couponId);
+
   CREATE TABLE IF NOT EXISTS user_consents (
     id TEXT PRIMARY KEY,
     userId TEXT NOT NULL,
@@ -452,6 +487,112 @@ const stmtInsertReferralAgent = db.prepare(
 );
 const stmtDeleteReferralAgentById = db.prepare("DELETE FROM referral_agents WHERE id = ?");
 
+const stmtListDiscountCoupons = db.prepare(`
+  SELECT
+    id,
+    code,
+    title,
+    description,
+    discountType,
+    discountValue,
+    currency,
+    minimumSubtotal,
+    maxDiscountAmount,
+    startsAt,
+    endsAt,
+    usageLimit,
+    usageCount,
+    perUserLimit,
+    isActive,
+    metadataJson,
+    createdAt,
+    updatedAt
+  FROM discount_coupons
+  ORDER BY createdAt DESC
+`);
+
+const stmtGetDiscountCouponByCode = db.prepare(
+  `SELECT
+     id,
+     code,
+     title,
+     description,
+     discountType,
+     discountValue,
+     currency,
+     minimumSubtotal,
+     maxDiscountAmount,
+     startsAt,
+     endsAt,
+     usageLimit,
+     usageCount,
+     perUserLimit,
+     isActive,
+     metadataJson,
+     createdAt,
+     updatedAt
+   FROM discount_coupons
+   WHERE code = ?
+   LIMIT 1`
+);
+
+const stmtGetDiscountCouponById = db.prepare(
+  "SELECT id, code, title, description, discountType, discountValue, currency, minimumSubtotal, maxDiscountAmount, startsAt, endsAt, usageLimit, usageCount, perUserLimit, isActive, metadataJson, createdAt, updatedAt FROM discount_coupons WHERE id = ? LIMIT 1"
+);
+
+const stmtInsertDiscountCoupon = db.prepare(`
+  INSERT INTO discount_coupons (
+    id,
+    code,
+    title,
+    description,
+    discountType,
+    discountValue,
+    currency,
+    minimumSubtotal,
+    maxDiscountAmount,
+    startsAt,
+    endsAt,
+    usageLimit,
+    usageCount,
+    perUserLimit,
+    isActive,
+    metadataJson,
+    createdAt,
+    updatedAt
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
+const stmtUpdateDiscountCoupon = db.prepare(`
+  UPDATE discount_coupons SET
+    title = ?,
+    description = ?,
+    discountType = ?,
+    discountValue = ?,
+    currency = ?,
+    minimumSubtotal = ?,
+    maxDiscountAmount = ?,
+    startsAt = ?,
+    endsAt = ?,
+    usageLimit = ?,
+    perUserLimit = ?,
+    isActive = ?,
+    metadataJson = ?,
+    updatedAt = ?
+  WHERE id = ?
+`);
+
+const stmtDeleteDiscountCouponById = db.prepare("DELETE FROM discount_coupons WHERE id = ?");
+const stmtInsertDiscountCouponRedemption = db.prepare(
+  "INSERT INTO discount_coupon_redemptions (id, couponId, userId, orderId, redeemedAt) VALUES (?, ?, ?, ?, ?)"
+);
+const stmtCountCouponRedemptionsByUser = db.prepare(
+  "SELECT COUNT(*) AS count FROM discount_coupon_redemptions WHERE couponId = ? AND userId = ?"
+);
+const stmtIncrementCouponUsageCount = db.prepare(
+  "UPDATE discount_coupons SET usageCount = usageCount + 1, updatedAt = ? WHERE id = ?"
+);
+
 const scryptAsync = promisify(crypto.scrypt);
 const authRateLimitState = new Map();
 let authRateLimitSweepCounter = 0;
@@ -627,6 +768,127 @@ const normalizeReferralCode = (value) => {
   if (!normalized) return null;
   if (!/^[A-Z0-9]{4,24}$/.test(normalized)) return "__INVALID__";
   return normalized;
+};
+
+const normalizeCouponCode = (value) => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) return null;
+  // Allow hyphens/underscores for marketing codes.
+  if (!/^[A-Z0-9_-]{3,32}$/.test(normalized)) return "__INVALID__";
+  return normalized;
+};
+
+const parseOptionalNumber = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "__INVALID__";
+  return num;
+};
+
+const parseOptionalInteger = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const num = Number(value);
+  if (!Number.isFinite(num) || !Number.isInteger(num)) return "__INVALID__";
+  return num;
+};
+
+const parseOptionalTimestamp = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const date = new Date(trimmed);
+    const ts = date.getTime();
+    if (!Number.isFinite(ts)) return "__INVALID__";
+    return ts;
+  }
+  return "__INVALID__";
+};
+
+const formatDiscountCouponForResponse = (coupon) => {
+  if (!coupon) return null;
+  let metadata = null;
+  try {
+    metadata = coupon.metadataJson ? JSON.parse(coupon.metadataJson) : null;
+  } catch {
+    metadata = null;
+  }
+  return {
+    id: coupon.id,
+    code: coupon.code,
+    title: coupon.title || null,
+    description: coupon.description || null,
+    discountType: coupon.discountType,
+    discountValue: Number(coupon.discountValue),
+    currency: coupon.currency || "MYR",
+    minimumSubtotal: coupon.minimumSubtotal == null ? null : Number(coupon.minimumSubtotal),
+    maxDiscountAmount: coupon.maxDiscountAmount == null ? null : Number(coupon.maxDiscountAmount),
+    startsAt: coupon.startsAt == null ? null : Number(coupon.startsAt),
+    endsAt: coupon.endsAt == null ? null : Number(coupon.endsAt),
+    usageLimit: coupon.usageLimit == null ? null : Number(coupon.usageLimit),
+    usageCount: Number(coupon.usageCount || 0),
+    perUserLimit: coupon.perUserLimit == null ? null : Number(coupon.perUserLimit),
+    isActive: Boolean(coupon.isActive),
+    metadata,
+    createdAt: Number(coupon.createdAt),
+    updatedAt: Number(coupon.updatedAt)
+  };
+};
+
+const computeDiscountForSubtotal = ({ coupon, subtotal }) => {
+  if (!coupon) {
+    return { isValid: false, reason: "coupon_not_found" };
+  }
+
+  const now = Date.now();
+  if (!coupon.isActive) {
+    return { isValid: false, reason: "coupon_inactive" };
+  }
+
+  if (coupon.startsAt && now < coupon.startsAt) {
+    return { isValid: false, reason: "coupon_not_started" };
+  }
+
+  if (coupon.endsAt && now > coupon.endsAt) {
+    return { isValid: false, reason: "coupon_expired" };
+  }
+
+  if (typeof subtotal !== "number" || !Number.isFinite(subtotal) || subtotal < 0) {
+    return { isValid: false, reason: "invalid_subtotal" };
+  }
+
+  if (coupon.minimumSubtotal != null && subtotal < coupon.minimumSubtotal) {
+    return { isValid: false, reason: "minimum_not_met", minimumSubtotal: coupon.minimumSubtotal };
+  }
+
+  if (coupon.usageLimit != null && coupon.usageCount >= coupon.usageLimit) {
+    return { isValid: false, reason: "usage_limit_reached" };
+  }
+
+  let discountAmount = 0;
+  if (coupon.discountType === "percent") {
+    discountAmount = (subtotal * coupon.discountValue) / 100;
+  } else if (coupon.discountType === "fixed_amount") {
+    discountAmount = coupon.discountValue;
+  } else {
+    return { isValid: false, reason: "invalid_discount_type" };
+  }
+
+  if (coupon.maxDiscountAmount != null) {
+    discountAmount = Math.min(discountAmount, coupon.maxDiscountAmount);
+  }
+
+  discountAmount = Math.max(0, Math.min(discountAmount, subtotal));
+  const total = Math.max(0, subtotal - discountAmount);
+  return {
+    isValid: true,
+    subtotal,
+    discountAmount,
+    total,
+    currency: coupon.currency || "MYR"
+  };
 };
 
 const isPaidStatus = (status) =>
@@ -1586,10 +1848,11 @@ app.post(
     const plan = typeof req.body?.plan === "string" ? req.body.plan.trim() : "";
     const planLabel = typeof req.body?.planLabel === "string" ? req.body.planLabel.trim() : null;
     const price = Number(req.body?.price);
-    const couponCode =
+    const couponCodeRaw =
       typeof req.body?.couponCode === "string" && req.body.couponCode.trim()
         ? req.body.couponCode.trim()
         : null;
+    const couponCode = couponCodeRaw ? couponCodeRaw.trim().toUpperCase() : null;
     const recommendations = Array.isArray(req.body?.recommendations)
       ? req.body.recommendations
       : [];
@@ -1600,6 +1863,36 @@ app.post(
 
     if (!plan || !Number.isFinite(price) || price < 0) {
       return res.status(400).json({ error: "invalid_order_payload" });
+    }
+
+    let finalPrice = price;
+    let appliedDiscountCouponId = null;
+    let appliedDiscountAmount = 0;
+
+    if (couponCode) {
+      const normalizedCouponCode = normalizeCouponCode(couponCode);
+      if (normalizedCouponCode && normalizedCouponCode !== "__INVALID__") {
+        const discountCouponRecord = stmtGetDiscountCouponByCode.get(normalizedCouponCode);
+        if (discountCouponRecord) {
+          const discountCoupon = formatDiscountCouponForResponse(discountCouponRecord);
+          const discountResult = computeDiscountForSubtotal({ coupon: discountCoupon, subtotal: price });
+          if (discountResult.isValid) {
+            if (discountCoupon.perUserLimit != null) {
+              const usageByUser = stmtCountCouponRedemptionsByUser.get(discountCoupon.id, user.id);
+              const alreadyUsed = Number(usageByUser?.count || 0);
+              if (alreadyUsed < discountCoupon.perUserLimit) {
+                finalPrice = discountResult.total;
+                appliedDiscountCouponId = discountCoupon.id;
+                appliedDiscountAmount = discountResult.discountAmount;
+              }
+            } else {
+              finalPrice = discountResult.total;
+              appliedDiscountCouponId = discountCoupon.id;
+              appliedDiscountAmount = discountResult.discountAmount;
+            }
+          }
+        }
+      }
     }
 
     const normalizeOrigin = (value) => {
@@ -1677,7 +1970,7 @@ app.post(
             quantity: 1,
             price_data: {
               currency: "myr",
-              unit_amount: Math.round(price * 100),
+              unit_amount: Math.round(finalPrice * 100),
               product_data: {
                 name: `RicHealth AI Custom Blend - ${planLabel || plan}`,
                 description: `${recommendations.length} nutrition item${recommendations.length === 1 ? "" : "s"}`
@@ -1691,7 +1984,9 @@ app.post(
           userId: user.id,
           plan,
           planLabel: planLabel || "",
-          couponCode: couponCode || ""
+          couponCode: couponCode || "",
+          discountCouponId: appliedDiscountCouponId || "",
+          discountAmount: appliedDiscountAmount ? String(appliedDiscountAmount) : ""
         }
       });
     } catch (error) {
@@ -1734,11 +2029,13 @@ app.post(
       JSON.stringify({
         plan,
         planLabel,
-        price,
+        price: finalPrice,
         // Note: the final payment method is resolved during confirm-stripe
         // (based on the PaymentIntent / Charge details).
         paymentMethod: "stripe",
         couponCode,
+        discountCouponId: appliedDiscountCouponId,
+        discountAmount: appliedDiscountAmount,
         recommendations,
         deliveryAddress
       }),
@@ -1835,6 +2132,21 @@ app.post(
       stripePaymentIntentId: resolvedPaymentIntentId,
       status: "paid"
     });
+
+    if (payload.discountCouponId && typeof payload.discountCouponId === "string") {
+      try {
+        stmtInsertDiscountCouponRedemption.run(
+          crypto.randomUUID(),
+          payload.discountCouponId,
+          user.id,
+          orderRecord.id,
+          Date.now()
+        );
+        stmtIncrementCouponUsageCount.run(Date.now(), payload.discountCouponId);
+      } catch (error) {
+        console.warn("[discount] failed to record coupon redemption", error);
+      }
+    }
 
     await maybeSendOrderEmails(orderRecord);
     stmtDeleteOne.run(`stripe_checkout:${sessionId}`, "payload");
@@ -2034,6 +2346,295 @@ app.put(
         referralCode: updatedUser.referralCode || null,
         createdAt: updatedUser.createdAt,
         lastLoginAt: updatedUser.lastLoginAt
+      }
+    });
+  })
+);
+
+app.get(
+  "/api/admin/discount-coupons",
+  adminRateLimiter,
+  requireAdminAuth,
+  asyncHandler(async (_req, res) => {
+    const coupons = stmtListDiscountCoupons.all().map(formatDiscountCouponForResponse);
+    res.json({ coupons });
+  })
+);
+
+app.post(
+  "/api/admin/discount-coupons",
+  adminRateLimiter,
+  requireAdminAuth,
+  asyncHandler(async (req, res) => {
+    const code = normalizeCouponCode(req.body?.code);
+    if (!code) {
+      return res.status(400).json({ error: "invalid_coupon_code" });
+    }
+    if (code === "__INVALID__") {
+      return res.status(400).json({ error: "invalid_coupon_code" });
+    }
+
+    const discountType = typeof req.body?.discountType === "string" ? req.body.discountType.trim() : "";
+    if (!discountType || !["percent", "fixed_amount"].includes(discountType)) {
+      return res.status(400).json({ error: "invalid_discount_type" });
+    }
+
+    const discountValue = Number(req.body?.discountValue);
+    if (!Number.isFinite(discountValue) || discountValue <= 0) {
+      return res.status(400).json({ error: "invalid_discount_value" });
+    }
+    if (discountType === "percent" && discountValue > 100) {
+      return res.status(400).json({ error: "invalid_discount_value" });
+    }
+
+    const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+    const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
+    const currency = typeof req.body?.currency === "string" && req.body.currency.trim()
+      ? req.body.currency.trim().toUpperCase()
+      : "MYR";
+
+    const minimumSubtotal = parseOptionalNumber(req.body?.minimumSubtotal);
+    if (minimumSubtotal === "__INVALID__" || (minimumSubtotal != null && minimumSubtotal < 0)) {
+      return res.status(400).json({ error: "invalid_minimum_subtotal" });
+    }
+
+    const maxDiscountAmount = parseOptionalNumber(req.body?.maxDiscountAmount);
+    if (maxDiscountAmount === "__INVALID__" || (maxDiscountAmount != null && maxDiscountAmount < 0)) {
+      return res.status(400).json({ error: "invalid_max_discount_amount" });
+    }
+
+    const startsAt = parseOptionalTimestamp(req.body?.startsAt);
+    if (startsAt === "__INVALID__") {
+      return res.status(400).json({ error: "invalid_starts_at" });
+    }
+
+    const endsAt = parseOptionalTimestamp(req.body?.endsAt);
+    if (endsAt === "__INVALID__") {
+      return res.status(400).json({ error: "invalid_ends_at" });
+    }
+    if (startsAt && endsAt && endsAt <= startsAt) {
+      return res.status(400).json({ error: "invalid_date_window" });
+    }
+
+    const usageLimit = parseOptionalInteger(req.body?.usageLimit);
+    if (usageLimit === "__INVALID__" || (usageLimit != null && usageLimit < 1)) {
+      return res.status(400).json({ error: "invalid_usage_limit" });
+    }
+
+    const perUserLimit = parseOptionalInteger(req.body?.perUserLimit);
+    if (perUserLimit === "__INVALID__" || (perUserLimit != null && perUserLimit < 1)) {
+      return res.status(400).json({ error: "invalid_per_user_limit" });
+    }
+
+    const isActive = req.body?.isActive === false ? 0 : 1;
+
+    let metadataJson = null;
+    if (req.body?.metadata && typeof req.body.metadata === "object" && !Array.isArray(req.body.metadata)) {
+      metadataJson = JSON.stringify(req.body.metadata);
+    }
+
+    const existing = stmtGetDiscountCouponByCode.get(code);
+    if (existing) {
+      return res.status(409).json({ error: "coupon_code_in_use" });
+    }
+
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    stmtInsertDiscountCoupon.run(
+      id,
+      code,
+      title || null,
+      description || null,
+      discountType,
+      discountValue,
+      currency,
+      minimumSubtotal,
+      maxDiscountAmount,
+      startsAt,
+      endsAt,
+      usageLimit,
+      0,
+      perUserLimit,
+      isActive,
+      metadataJson,
+      now,
+      now
+    );
+
+    const created = stmtGetDiscountCouponById.get(id);
+    return res.status(201).json({ coupon: formatDiscountCouponForResponse(created) });
+  })
+);
+
+app.put(
+  "/api/admin/discount-coupons/:couponId",
+  adminRateLimiter,
+  requireAdminAuth,
+  asyncHandler(async (req, res) => {
+    const couponId = typeof req.params.couponId === "string" ? req.params.couponId.trim() : "";
+    const existing = couponId ? stmtGetDiscountCouponById.get(couponId) : null;
+    if (!existing) {
+      return res.status(404).json({ error: "coupon_not_found" });
+    }
+
+    const discountType = typeof req.body?.discountType === "string" ? req.body.discountType.trim() : existing.discountType;
+    if (!discountType || !["percent", "fixed_amount"].includes(discountType)) {
+      return res.status(400).json({ error: "invalid_discount_type" });
+    }
+
+    const discountValueRaw = req.body?.discountValue;
+    const discountValue = discountValueRaw === undefined ? Number(existing.discountValue) : Number(discountValueRaw);
+    if (!Number.isFinite(discountValue) || discountValue <= 0) {
+      return res.status(400).json({ error: "invalid_discount_value" });
+    }
+    if (discountType === "percent" && discountValue > 100) {
+      return res.status(400).json({ error: "invalid_discount_value" });
+    }
+
+    const title = typeof req.body?.title === "string" ? req.body.title.trim() : existing.title || "";
+    const description = typeof req.body?.description === "string" ? req.body.description.trim() : existing.description || "";
+    const currency = typeof req.body?.currency === "string" && req.body.currency.trim()
+      ? req.body.currency.trim().toUpperCase()
+      : existing.currency || "MYR";
+
+    const minimumSubtotal = req.body?.minimumSubtotal === undefined
+      ? existing.minimumSubtotal
+      : parseOptionalNumber(req.body?.minimumSubtotal);
+    if (minimumSubtotal === "__INVALID__" || (minimumSubtotal != null && Number(minimumSubtotal) < 0)) {
+      return res.status(400).json({ error: "invalid_minimum_subtotal" });
+    }
+
+    const maxDiscountAmount = req.body?.maxDiscountAmount === undefined
+      ? existing.maxDiscountAmount
+      : parseOptionalNumber(req.body?.maxDiscountAmount);
+    if (maxDiscountAmount === "__INVALID__" || (maxDiscountAmount != null && Number(maxDiscountAmount) < 0)) {
+      return res.status(400).json({ error: "invalid_max_discount_amount" });
+    }
+
+    const startsAt = req.body?.startsAt === undefined ? existing.startsAt : parseOptionalTimestamp(req.body?.startsAt);
+    if (startsAt === "__INVALID__") {
+      return res.status(400).json({ error: "invalid_starts_at" });
+    }
+    const endsAt = req.body?.endsAt === undefined ? existing.endsAt : parseOptionalTimestamp(req.body?.endsAt);
+    if (endsAt === "__INVALID__") {
+      return res.status(400).json({ error: "invalid_ends_at" });
+    }
+    if (startsAt && endsAt && endsAt <= startsAt) {
+      return res.status(400).json({ error: "invalid_date_window" });
+    }
+
+    const usageLimit = req.body?.usageLimit === undefined ? existing.usageLimit : parseOptionalInteger(req.body?.usageLimit);
+    if (usageLimit === "__INVALID__" || (usageLimit != null && Number(usageLimit) < 1)) {
+      return res.status(400).json({ error: "invalid_usage_limit" });
+    }
+    const perUserLimit = req.body?.perUserLimit === undefined ? existing.perUserLimit : parseOptionalInteger(req.body?.perUserLimit);
+    if (perUserLimit === "__INVALID__" || (perUserLimit != null && Number(perUserLimit) < 1)) {
+      return res.status(400).json({ error: "invalid_per_user_limit" });
+    }
+
+    const isActive = req.body?.isActive === undefined ? existing.isActive : (req.body.isActive ? 1 : 0);
+
+    let metadataJson = existing.metadataJson || null;
+    if (req.body?.metadata === null) {
+      metadataJson = null;
+    } else if (req.body?.metadata && typeof req.body.metadata === "object" && !Array.isArray(req.body.metadata)) {
+      metadataJson = JSON.stringify(req.body.metadata);
+    }
+
+    const now = Date.now();
+    stmtUpdateDiscountCoupon.run(
+      title || null,
+      description || null,
+      discountType,
+      discountValue,
+      currency,
+      minimumSubtotal,
+      maxDiscountAmount,
+      startsAt,
+      endsAt,
+      usageLimit,
+      perUserLimit,
+      isActive,
+      metadataJson,
+      now,
+      couponId
+    );
+
+    const updated = stmtGetDiscountCouponById.get(couponId);
+    return res.json({ coupon: formatDiscountCouponForResponse(updated) });
+  })
+);
+
+app.delete(
+  "/api/admin/discount-coupons/:couponId",
+  adminRateLimiter,
+  requireAdminAuth,
+  asyncHandler(async (req, res) => {
+    const couponId = typeof req.params.couponId === "string" ? req.params.couponId.trim() : "";
+    const existing = couponId ? stmtGetDiscountCouponById.get(couponId) : null;
+    if (!existing) {
+      return res.status(404).json({ error: "coupon_not_found" });
+    }
+    stmtDeleteDiscountCouponById.run(couponId);
+    return res.json({ ok: true });
+  })
+);
+
+app.post(
+  "/api/discount-coupons/preview",
+  asyncHandler(async (req, res) => {
+    const user = getAuthedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "auth_required" });
+    }
+
+    const code = normalizeCouponCode(req.body?.code);
+    if (!code || code === "__INVALID__") {
+      return res.status(400).json({ error: "invalid_coupon_code" });
+    }
+
+    const subtotal = Number(req.body?.subtotal);
+    if (!Number.isFinite(subtotal) || subtotal < 0) {
+      return res.status(400).json({ error: "invalid_subtotal" });
+    }
+
+    const couponRecord = stmtGetDiscountCouponByCode.get(code);
+    if (!couponRecord) {
+      return res.status(404).json({ error: "coupon_not_found" });
+    }
+
+    const coupon = formatDiscountCouponForResponse(couponRecord);
+    const baseResult = computeDiscountForSubtotal({ coupon, subtotal });
+    if (!baseResult.isValid) {
+      return res.status(409).json({
+        error: "coupon_not_applicable",
+        reason: baseResult.reason,
+        ...(baseResult.minimumSubtotal != null ? { minimumSubtotal: baseResult.minimumSubtotal } : null)
+      });
+    }
+
+    if (coupon.perUserLimit != null) {
+      const usageByUser = stmtCountCouponRedemptionsByUser.get(coupon.id, user.id);
+      const alreadyUsed = Number(usageByUser?.count || 0);
+      if (alreadyUsed >= coupon.perUserLimit) {
+        return res.status(409).json({ error: "coupon_not_applicable", reason: "per_user_limit_reached" });
+      }
+    }
+
+    return res.json({
+      coupon: {
+        id: coupon.id,
+        code: coupon.code,
+        title: coupon.title,
+        description: coupon.description,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue
+      },
+      pricing: {
+        subtotal: baseResult.subtotal,
+        discountAmount: baseResult.discountAmount,
+        total: baseResult.total,
+        currency: baseResult.currency
       }
     });
   })
