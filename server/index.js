@@ -2427,6 +2427,52 @@ app.put(
 );
 
 app.get(
+  "/api/admin/users/:userId/details",
+  adminRateLimiter,
+  requireAdminAuth,
+  asyncHandler(async (req, res) => {
+    const userId = typeof req.params.userId === "string" ? req.params.userId.trim() : "";
+    if (!userId) {
+      return res.status(400).json({ error: "user_id_required" });
+    }
+
+    const existingUser = stmtGetUserById.get(userId);
+    if (!existingUser) {
+      return res.status(404).json({ error: "user_not_found" });
+    }
+
+    const profileRecord = stmtGetUserProfile.get(userId);
+    let profile = {};
+    if (profileRecord?.dataJson) {
+      try {
+        profile = JSON.parse(profileRecord.dataJson);
+      } catch {
+        profile = {};
+      }
+    }
+
+    const addresses = stmtListShippingAddressesByUser.all(userId).map((address) => ({
+      id: address.id,
+      fullName: address.fullName,
+      phone: address.phone,
+      addressLine1: address.addressLine1,
+      addressLine2: address.addressLine2 || "",
+      city: address.city,
+      state: address.state,
+      postcode: address.postcode,
+      isDefault: Boolean(address.isDefault),
+      updatedAt: address.updatedAt
+    }));
+
+    return res.json({
+      profile,
+      shippingAddress: addresses[0] || null,
+      shippingAddresses: addresses
+    });
+  })
+);
+
+app.get(
   "/api/admin/discount-coupons",
   adminRateLimiter,
   requireAdminAuth,
