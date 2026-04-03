@@ -14,6 +14,12 @@ interface OrderDetails {
   price: number;
   recommendations: any[];
   couponCode?: string | null;
+  couponPreview?: {
+    subtotal: number;
+    discountAmount: number;
+    total: number;
+    currency: string;
+  } | null;
 }
 
 const PaymentScreen = () => {
@@ -106,6 +112,12 @@ const PaymentScreen = () => {
           </span>
           <span style={styles.summaryValue}>RM{orderDetails.price.toFixed(2)}</span>
         </div>
+        {orderDetails.couponPreview ? (
+          <div style={styles.summaryRow}>
+            <span style={styles.summaryLabel}>{t("order.summary.discount")}</span>
+            <span style={styles.summaryValueDiscount}>-RM{orderDetails.couponPreview.discountAmount.toFixed(2)}</span>
+          </div>
+        ) : null}
         <div style={styles.summaryRow}>
           <span style={styles.summaryLabel}>{t("order.payment.shipping")}</span>
           <span style={styles.summaryValueFree}>{t("order.payment.free")}</span>
@@ -113,7 +125,9 @@ const PaymentScreen = () => {
         <div style={styles.divider} />
         <div style={styles.summaryRow}>
           <span style={styles.summaryLabelTotal}>{t("order.payment.total")}</span>
-          <span style={styles.summaryValueTotal}>RM{orderDetails.price.toFixed(2)}</span>
+          <span style={styles.summaryValueTotal}>
+            RM{(orderDetails.couponPreview?.total ?? orderDetails.price).toFixed(2)}
+          </span>
         </div>
       </Card>
 
@@ -141,7 +155,11 @@ const PaymentScreen = () => {
       <div style={styles.footer}>
         <div style={styles.footerContent}>
           <Button
-            title={isProcessing ? t("order.payment.processing") : t("order.payment.complete", { price: orderDetails.price })}
+            title={
+              isProcessing
+                ? t("order.payment.processing")
+                : t("order.payment.complete", { price: orderDetails.couponPreview?.total ?? orderDetails.price })
+            }
             onClick={handleCompleteOrder}
             loading={isProcessing}
             fullWidth
@@ -206,6 +224,11 @@ const createStyles = (theme: AppTheme) => ({
     fontSize: 14,
     fontWeight: 600,
     color: theme.colors.text
+  },
+  summaryValueDiscount: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: theme.colors.danger
   },
   summaryValueFree: {
     fontSize: 14,

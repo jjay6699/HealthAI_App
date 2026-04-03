@@ -13,6 +13,13 @@ interface OrderDetails {
   planLabel?: string;
   price: number;
   recommendations: any[];
+  couponCode?: string | null;
+  couponPreview?: {
+    subtotal: number;
+    discountAmount: number;
+    total: number;
+    currency: string;
+  } | null;
 }
 
 const CheckoutScreen = () => {
@@ -256,6 +263,12 @@ const CheckoutScreen = () => {
           </span>
           <span style={styles.summaryValue}>RM{orderDetails.price.toFixed(2)}</span>
         </div>
+        {orderDetails.couponPreview ? (
+          <div style={styles.summaryRow}>
+            <span style={styles.summaryLabel}>{t("order.summary.discount")}</span>
+            <span style={styles.summaryValueDiscount}>-RM{orderDetails.couponPreview.discountAmount.toFixed(2)}</span>
+          </div>
+        ) : null}
         <div style={styles.summaryRow}>
           <span style={styles.summaryLabel}>{t("order.checkout.shipping")}</span>
           <span style={styles.summaryValueFree}>{t("order.checkout.free")}</span>
@@ -263,7 +276,9 @@ const CheckoutScreen = () => {
         <div style={styles.divider} />
         <div style={styles.summaryRow}>
           <span style={styles.summaryLabelTotal}>{t("order.checkout.total")}</span>
-          <span style={styles.summaryValueTotal}>RM{orderDetails.price.toFixed(2)}</span>
+          <span style={styles.summaryValueTotal}>
+            RM{(orderDetails.couponPreview?.total ?? orderDetails.price).toFixed(2)}
+          </span>
         </div>
       </Card>
 
@@ -378,6 +393,11 @@ const createStyles = (theme: AppTheme) => ({
     fontSize: 14,
     fontWeight: 600,
     color: theme.colors.text
+  },
+  summaryValueDiscount: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: theme.colors.danger
   },
   summaryValueFree: {
     fontSize: 14,

@@ -20,6 +20,17 @@ const OrderReviewScreen = () => {
   const [analysis, setAnalysis] = useState<BloodworkAnalysis | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [couponApplied, setCouponApplied] = useState<string | null>(null);
+  const [couponPreview, setCouponPreview] = useState<
+    | {
+        subtotal: number;
+        discountAmount: number;
+        total: number;
+        currency: string;
+      }
+    | null
+  >(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
   const scopedKey = (baseKey: string) => (user?.id ? `${baseKey}:${user.id}` : baseKey);
 
   useEffect(() => {
@@ -78,18 +89,92 @@ const OrderReviewScreen = () => {
       planLabel: selectedPlanDetails?.label,
       price: selectedPlanDetails?.price,
       recommendations: analysis?.recommendations,
-      couponCode: couponApplied
+      couponCode: couponApplied,
+      couponPreview
     }));
     navigate("/checkout");
   };
 
-  const handleApplyCoupon = () => {
-    if (!couponCode.trim()) {
+  const resolveCouponError = (payload: { error?: string; reason?: string; minimumSubtotal?: number } | null) => {
+    if (!payload) return t("order.review.couponError.generic");
+    if (payload.error === "invalid_coupon_code" || payload.error === "coupon_not_found") {
+      return t("order.review.couponError.invalid");
+    }
+    if (payload.error === "coupon_not_applicable") {
+      switch (payload.reason) {
+        case "coupon_expired":
+          return t("order.review.couponError.expired");
+        case "coupon_not_started":
+          return t("order.review.couponError.notStarted");
+        case "minimum_not_met":
+          return t("order.review.couponError.minimum", { minimum: payload.minimumSubtotal ?? 0 });
+        case "usage_limit_reached":
+          return t("order.review.couponError.usageLimit");
+        case "per_user_limit_reached":
+          return t("order.review.couponError.perUserLimit");
+        default:
+          return t("order.review.couponError.generic");
+      }
+    }
+    return t("order.review.couponError.generic");
+  };
+
+  const previewCoupon = async (code: string, subtotal: number) => {
+    setCouponLoading(true);
+    setCouponError(null);
+
+    try {
+      const response = await fetch("/api/discount-coupons/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code, subtotal })
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            coupon?: { code: string };
+            pricing?: { subtotal: number; discountAmount: number; total: number; currency: string };
+            error?: string;
+            reason?: string;
+            minimumSubtotal?: number;
+          }
+        | null;
+
+      if (!response.ok || !payload?.pricing) {
+        throw new Error(resolveCouponError(payload));
+      }
+
+      setCouponApplied(code);
+      setCouponPreview(payload.pricing);
+      setCouponError(null);
+    } catch (error) {
       setCouponApplied(null);
+      setCouponPreview(null);
+      setCouponError(error instanceof Error ? error.message : t("order.review.couponError.generic"));
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleApplyCoupon = () => {
+    const trimmed = couponCode.trim().toUpperCase();
+    if (!trimmed) {
+      setCouponApplied(null);
+      setCouponPreview(null);
+      setCouponError(null);
       return;
     }
-    setCouponApplied(couponCode.trim().toUpperCase());
+    if (!selectedPlanDetails?.price) {
+      setCouponError(t("order.review.couponError.generic"));
+      return;
+    }
+    void previewCoupon(trimmed, selectedPlanDetails.price);
   };
+
+  useEffect(() => {
+    if (!couponApplied || !selectedPlanDetails?.price) return;
+    void previewCoupon(couponApplied, selectedPlanDetails.price);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPlan]);
 
   if (!analysis) {
     return (
@@ -165,34 +250,49 @@ const OrderReviewScreen = () => {
         </div>
       </Card>
 
-      <Card style={styles.card}>
-        <SectionHeader title={t("order.review.coupon")} />
-        <div style={styles.couponRow}>
-          <input
-            value={couponCode}
-            onChange={(event) => setCouponCode(event.target.value)}
-            placeholder={t("order.review.enterCode")}
-            style={styles.couponInput}
-          />
-          <Button
-            title={t("order.review.apply")}
-            variant="secondary"
-            onClick={handleApplyCoupon}
-            style={styles.couponButton}
-          />
-        </div>
-        {couponApplied ? (
-          <span style={styles.couponApplied}>{t("order.review.applied", { code: couponApplied })}</span>
-        ) : (
-          <span style={styles.couponHelper}>{t("order.review.couponHelper")}</span>
-        )}
-      </Card>
+        <Card style={styles.card}>
+          <SectionHeader title={t("order.review.coupon")} />
+          <div style={styles.couponRow}>
+            <input
+              value={couponCode}
+              onChange={(event) => setCouponCode(event.target.value)}
+              placeholder={t("order.review.enterCode")}
+              style={styles.couponInput}
+            />
+            <Button
+              title={couponLoading ? t("order.review.applying") : t("order.review.apply")}
+              variant="secondary"
+              onClick={handleApplyCoupon}
+              style={styles.couponButton}
+              loading={couponLoading}
+            />
+          </div>
+          {couponError ? (
+            <span style={styles.couponError}>{couponError}</span>
+          ) : couponApplied ? (
+            <span style={styles.couponApplied}>{t("order.review.applied", { code: couponApplied })}</span>
+          ) : (
+            <span style={styles.couponHelper}>{t("order.review.couponHelper")}</span>
+          )}
+          {couponPreview ? (
+            <div style={styles.couponSummary}>
+              <div style={styles.couponSummaryRow}>
+                <span style={styles.couponSummaryLabel}>{t("order.summary.discount")}</span>
+                <span style={styles.couponSummaryValue}>-RM{couponPreview.discountAmount.toFixed(2)}</span>
+              </div>
+              <div style={styles.couponSummaryRow}>
+                <span style={styles.couponSummaryLabel}>{t("order.review.totalAfterDiscount")}</span>
+                <span style={styles.couponSummaryValue}>RM{couponPreview.total.toFixed(2)}</span>
+              </div>
+            </div>
+          ) : null}
+        </Card>
 
       <div style={styles.footerSpacer} />
       <div style={styles.footer}>
         <div style={styles.footerContent}>
           <Button
-            title={t("order.review.continue", { price: selectedPlanDetails?.price ?? 0 })}
+            title={t("order.review.continue", { price: couponPreview?.total ?? selectedPlanDetails?.price ?? 0 })}
             onClick={handleContinue}
             fullWidth
           />
@@ -381,12 +481,41 @@ const createStyles = (theme: AppTheme) => ({
     fontSize: 12,
     color: theme.colors.textSecondary
   },
+  couponError: {
+    display: "block",
+    marginTop: theme.spacing.xs,
+    fontSize: 12,
+    color: theme.colors.danger,
+    fontWeight: 600
+  },
   couponApplied: {
     display: "block",
     marginTop: theme.spacing.xs,
     fontSize: 12,
     color: theme.colors.success,
     fontWeight: 600
+  },
+  couponSummary: {
+    marginTop: theme.spacing.sm,
+    padding: theme.spacing.sm,
+    background: theme.colors.background,
+    borderRadius: theme.radii.md,
+    border: `1px solid ${theme.colors.divider}`
+  },
+  couponSummaryRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4
+  },
+  couponSummaryLabel: {
+    fontSize: 13,
+    color: theme.colors.textSecondary
+  },
+  couponSummaryValue: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: theme.colors.text
   },
   footerSpacer: {
     height: 120
