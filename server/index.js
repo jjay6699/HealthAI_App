@@ -467,6 +467,35 @@ const stmtListAdminOrders = db.prepare(`
   ORDER BY createdAt DESC
   LIMIT ?
 `);
+const stmtGetOrderById = db.prepare(`
+  SELECT
+    id,
+    orderNumber,
+    userId,
+    userEmail,
+    customerName,
+    plan,
+    planLabel,
+    price,
+    currency,
+    paymentMethod,
+    status,
+    couponCode,
+    recommendationsJson,
+    deliveryAddressJson,
+    stripeSessionId,
+    stripePaymentIntentId,
+    source,
+    createdAt,
+    updatedAt
+  FROM orders
+  WHERE id = ?
+  LIMIT 1
+`);
+const stmtUpdateOrderStatus = db.prepare("UPDATE orders SET status = ?, updatedAt = ? WHERE id = ?");
+const stmtExpireProcessingOrders = db.prepare(
+  "UPDATE orders SET status = ?, updatedAt = ? WHERE lower(status) = 'processing' AND createdAt <= ?"
+);
 const stmtListReferralAgents = db.prepare(`
   SELECT id, code, name, email, createdAt, updatedAt
   FROM referral_agents
@@ -893,6 +922,20 @@ const computeDiscountForSubtotal = ({ coupon, subtotal }) => {
 
 const isPaidStatus = (status) =>
   typeof status === "string" && ["paid", "completed", "succeeded"].includes(status.trim().toLowerCase());
+
+const ORDER_PROCESSING_EXPIRE_MS = 12 * 60 * 60 * 1000;
+
+const expireStaleProcessingOrders = () => {
+  const cutoff = Date.now() - ORDER_PROCESSING_EXPIRE_MS;
+  try {
+    const info = stmtExpireProcessingOrders.run("failed", Date.now(), cutoff);
+    if (info?.changes) {
+      console.log(`[orders] auto-expired ${info.changes} processing orders`);
+    }
+  } catch (error) {
+    console.warn("[orders] failed to auto-expire processing orders", error);
+  }
+};
 
 const hashPassword = async (password) => {
   const salt = crypto.randomBytes(16).toString("hex");
@@ -2268,6 +2311,38 @@ app.get(
   })
 );
 
+app.put(
+  "/api/admin/orders/:orderId/status",
+  adminRateLimiter,
+  requireAdminAuth,
+  asyncHandler(async (req, res) => {
+    const orderId = typeof req.params.orderId === "string" ? req.params.orderId.trim() : "";
+    const nextStatusRaw = typeof req.body?.status === "string" ? req.body.status.trim() : "";
+    const nextStatus = nextStatusRaw.toLowerCase();
+
+    if (!orderId) {
+      return res.status(400).json({ error: "order_id_required" });
+    }
+
+    if (!nextStatus || !["failed", "cancelled"].includes(nextStatus)) {
+      return res.status(400).json({ error: "invalid_order_status" });
+    }
+
+    const existing = stmtGetOrderById.get(orderId);
+    if (!existing) {
+      return res.status(404).json({ error: "order_not_found" });
+    }
+
+    if (isPaidStatus(existing.status)) {
+      return res.status(409).json({ error: "order_already_paid" });
+    }
+
+    stmtUpdateOrderStatus.run(nextStatus, Date.now(), orderId);
+    const updated = stmtGetOrderById.get(orderId);
+    return res.json({ order: formatOrderForResponse(updated) });
+  })
+);
+
 app.post(
   "/api/admin/referral-agents",
   adminRateLimiter,
@@ -2785,6 +2860,9 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "server_error" });
 });
 
+expireStaleProcessingOrders();
+const expireInterval = setInterval(expireStaleProcessingOrders, 15 * 60 * 1000);
+
 const server = app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`[server] listening on :${PORT} (db: ${DATABASE_PATH})`);
@@ -2801,6 +2879,7 @@ server.on("error", (err) => {
 const shutdown = (signal) => {
   // eslint-disable-next-line no-console
   console.log(`[server] received ${signal}, shutting down...`);
+  clearInterval(expireInterval);
   try {
     server.close(() => {
       try {
