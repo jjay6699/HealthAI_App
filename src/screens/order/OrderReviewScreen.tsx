@@ -485,7 +485,7 @@ const createStyles = (theme: AppTheme) => ({
     display: "block",
     marginTop: theme.spacing.xs,
     fontSize: 12,
-    color: theme.colors.danger,
+    color: theme.colors.error,
     fontWeight: 600
   },
   couponApplied: {

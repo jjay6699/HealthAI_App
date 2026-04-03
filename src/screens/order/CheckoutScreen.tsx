@@ -397,7 +397,7 @@ const createStyles = (theme: AppTheme) => ({
   summaryValueDiscount: {
     fontSize: 14,
     fontWeight: 600,
-    color: theme.colors.danger
+    color: theme.colors.error
   },
   summaryValueFree: {
     fontSize: 14,
