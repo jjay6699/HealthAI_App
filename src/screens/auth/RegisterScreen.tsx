@@ -1,6 +1,7 @@
 import React, { FormEvent, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
+import { COUNTRIES } from "../../data/countries";
 import { useI18n } from "../../i18n";
 import { persistentStorage } from "../../services/persistentStorage";
 import { AppTheme, useTheme } from "../../theme";
@@ -17,9 +18,21 @@ const RegisterScreen = () => {
   const [agreeHealthProcessing, setAgreeHealthProcessing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [countrySearchOpen, setCountrySearchOpen] = useState(false);
 
   const updateField = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [key]: event.target.value }));
+  };
+
+  const filteredCountries = useMemo(() => {
+    const query = form.country.trim().toLowerCase();
+    if (!query) return COUNTRIES;
+    return COUNTRIES.filter((country) => country.toLowerCase().includes(query));
+  }, [form.country]);
+
+  const selectCountry = (country: string) => {
+    setForm((prev) => ({ ...prev, country }));
+    setCountrySearchOpen(false);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -111,13 +124,57 @@ const RegisterScreen = () => {
         <label style={styles.label} htmlFor="register-country">
           {t("auth.register.country")}
         </label>
-        <input
-          id="register-country"
-          placeholder="United States"
-          value={form.country}
-          onChange={updateField("country")}
-          style={styles.input}
-        />
+        <div style={styles.countryCombobox}>
+          <input
+            id="register-country"
+            placeholder="Search country or region"
+            value={form.country}
+            onChange={(event) => {
+              updateField("country")(event);
+              setCountrySearchOpen(true);
+            }}
+            onFocus={() => setCountrySearchOpen(true)}
+            onBlur={() => window.setTimeout(() => setCountrySearchOpen(false), 120)}
+            style={{ ...styles.input, ...styles.countryInput }}
+            autoComplete="country-name"
+            role="combobox"
+            aria-expanded={countrySearchOpen}
+            aria-controls="register-country-options"
+          />
+          <button
+            type="button"
+            style={styles.countryToggle}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => setCountrySearchOpen((current) => !current)}
+            aria-label="Show countries"
+          >
+            {countrySearchOpen ? "^" : "v"}
+          </button>
+          {countrySearchOpen ? (
+            <div id="register-country-options" role="listbox" style={styles.countryMenu}>
+              {filteredCountries.length > 0 ? (
+                filteredCountries.map((country) => (
+                  <button
+                    key={country}
+                    type="button"
+                    role="option"
+                    aria-selected={form.country === country}
+                    style={{
+                      ...styles.countryOption,
+                      ...(form.country === country ? styles.countryOptionSelected : {})
+                    }}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectCountry(country)}
+                  >
+                    {country}
+                  </button>
+                ))
+              ) : (
+                <p style={styles.countryEmpty}>No country found.</p>
+              )}
+            </div>
+          ) : null}
+        </div>
 
         <label style={styles.checkboxRow}>
           <input
@@ -194,6 +251,67 @@ const createStyles = (theme: AppTheme) => ({
     fontSize: 16,
     color: theme.colors.text,
     outline: "none"
+  },
+  countryCombobox: {
+    position: "relative" as const
+  },
+  countryInput: {
+    paddingRight: 48
+  },
+  countryToggle: {
+    position: "absolute" as const,
+    top: "50%",
+    right: theme.spacing.md,
+    transform: "translateY(-50%)",
+    width: 30,
+    height: 30,
+    border: "none",
+    borderRadius: theme.radii.pill,
+    background: theme.colors.surface,
+    color: theme.colors.primary,
+    fontSize: 18,
+    fontWeight: 800,
+    lineHeight: "30px",
+    cursor: "pointer"
+  },
+  countryMenu: {
+    position: "absolute" as const,
+    zIndex: 20,
+    top: "calc(100% + 6px)",
+    left: 0,
+    right: 0,
+    maxHeight: 260,
+    overflowY: "auto" as const,
+    display: "flex",
+    flexDirection: "column" as const,
+    borderRadius: theme.radii.lg,
+    border: `1px solid ${theme.colors.divider}`,
+    background: theme.colors.background,
+    boxShadow: "0 18px 40px rgba(69, 48, 25, 0.14)",
+    padding: theme.spacing.xs
+  },
+  countryOption: {
+    width: "100%",
+    border: "none",
+    borderRadius: theme.radii.md,
+    background: "transparent",
+    color: theme.colors.text,
+    fontFamily: "inherit",
+    fontSize: 15,
+    textAlign: "left" as const,
+    padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+    cursor: "pointer"
+  },
+  countryOptionSelected: {
+    background: theme.colors.accentPeach,
+    color: theme.colors.primary,
+    fontWeight: 800
+  },
+  countryEmpty: {
+    margin: 0,
+    padding: `${theme.spacing.md}px`,
+    color: theme.colors.textSecondary,
+    fontSize: 14
   },
   helper: {
     fontSize: 12,
