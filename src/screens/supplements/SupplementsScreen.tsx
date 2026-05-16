@@ -18,6 +18,7 @@ import { SUPPLEMENT_DESCRIPTIONS } from "../../data/supplementDescriptions";
 import { persistentStorage } from "../../services/persistentStorage";
 import { useAuth } from "../../services/auth";
 import { fetchLatestBloodworkRecord } from "../../services/bloodworkApi";
+import { CUSTOM_BLEND_SERVING_GRAMS, getCustomBlendPlan } from "../../utils/customBlend";
 
 type DisplaySupplementContent = {
   benefits: string[];
@@ -198,51 +199,20 @@ const SupplementsScreen = () => {
     }
   };
 
-  const parseDosageGrams = (dosage?: string) => {
-    if (!dosage) return undefined;
-    const matches = [...dosage.matchAll(/(\d+(\.\d+)?)\s*g/gi)].map((match) => Number(match[1]));
-    if (matches.length === 0) return undefined;
-    if (matches.length === 1) return matches[0];
-    const sum = matches.reduce((accumulator, value) => accumulator + value, 0);
-    return sum / matches.length;
-  };
-
-  const servingGrams = 10;
+  const servingGrams = CUSTOM_BLEND_SERVING_GRAMS;
   const servingsPerBottle = 14;
   const servingsPerMonth = 28;
   const bottlesPerMonth = 2;
   const monthPrice = 85;
-
-  const totalGrams = displayRecommendations.reduce((sum, recommendation) => {
-    const grams = recommendation.dosageGramsPerDay ?? parseDosageGrams(recommendation.dosage);
-    return grams ? sum + grams : sum;
-  }, 0);
-
-  const scaledGrams = displayRecommendations.map((recommendation) => {
-    const grams = recommendation.dosageGramsPerDay ?? parseDosageGrams(recommendation.dosage);
-    if (!grams || totalGrams === 0) {
-      return { id: recommendation.supplementId, grams: undefined };
-    }
-    return {
-      id: recommendation.supplementId,
-      grams: Number(((grams / totalGrams) * servingGrams).toFixed(2))
-    };
-  });
-
-  const getBaseSelections = () => {
-    const proteinBases = ["Pea Protein Original", "Pea Protein Cacao"];
-    const fiberBases = ["Australian Instant Oats", "Organic Psyllium Husk"];
-    const protein = displayRecommendations.find((recommendation) => proteinBases.includes(recommendation.supplementName))?.supplementName;
-    const fiber = displayRecommendations.find((recommendation) => fiberBases.includes(recommendation.supplementName))?.supplementName;
-    return { protein, fiber };
-  };
+  const blendPlan = getCustomBlendPlan(displayRecommendations);
 
   const generateSummary = () => {
-    const supplementNames = displayRecommendations.map((recommendation) => recommendation.supplementName).join(", ");
-    const base = getBaseSelections();
-    const baseText = base.protein && base.fiber
-      ? t("supplements.baseBlend", { protein: base.protein, fiber: base.fiber })
-      : "";
+    const supplementNames = blendPlan.activeRecommendations.length > 0
+      ? blendPlan.activeRecommendations.map((recommendation) => recommendation.supplementName).join(", ")
+      : displayRecommendations.map((recommendation) => recommendation.supplementName).join(", ");
+    const proteinBase = `${blendPlan.proteinBase.supplementName} (${blendPlan.proteinBaseGrams} g)`;
+    const oatBase = `${blendPlan.oatBase.supplementName} (${blendPlan.oatBaseGrams} g)`;
+    const baseText = t("supplements.baseBlend", { protein: proteinBase, fiber: oatBase });
     const gramsText = t("supplements.servingBlend", { grams: servingGrams.toFixed(1) });
 
     return t("supplements.blendIncludes", {
@@ -316,10 +286,7 @@ const SupplementsScreen = () => {
           const supplementDetails = getSupplementDetails(recommendation.supplementId);
           const content = translatedContent[recommendation.supplementId];
           const description = content?.description ?? SUPPLEMENT_DESCRIPTIONS[recommendation.supplementId];
-          const grams =
-            scaledGrams.find((item) => item.id === recommendation.supplementId)?.grams ??
-            recommendation.dosageGramsPerDay ??
-            parseDosageGrams(recommendation.dosage);
+          const grams = blendPlan.gramsBySupplementId.get(recommendation.supplementId);
 
           return (
             <Card key={index} style={styles.card}>

@@ -9,6 +9,7 @@ import { BloodworkAnalysis } from "../../services/openai";
 import { persistentStorage } from "../../services/persistentStorage";
 import { useAuth } from "../../services/auth";
 import { fetchLatestBloodworkRecord } from "../../services/bloodworkApi";
+import { withCustomBlendDosages } from "../../utils/customBlend";
 
 const OrderReviewScreen = () => {
   const theme = useTheme();
@@ -82,13 +83,14 @@ const OrderReviewScreen = () => {
   ];
 
   const selectedPlanDetails = plans.find((plan) => plan.id === selectedPlan);
+  const blendRecommendations = analysis?.recommendations ? withCustomBlendDosages(analysis.recommendations) : [];
 
   const handleContinue = () => {
     persistentStorage.setItem("orderDetails", JSON.stringify({
       plan: selectedPlan,
       planLabel: selectedPlanDetails?.label,
       price: selectedPlanDetails?.price,
-      recommendations: analysis?.recommendations,
+      recommendations: blendRecommendations,
       couponCode: couponApplied,
       couponPreview
     }));
@@ -199,7 +201,7 @@ const OrderReviewScreen = () => {
       <Card style={styles.card}>
         <SectionHeader title={t("order.review.customBlend")} />
         <div style={styles.supplementList}>
-          {analysis.recommendations.map((recommendation, index) => (
+          {blendRecommendations.map((recommendation, index) => (
             <div key={index} style={styles.supplementItem}>
               <div style={styles.supplementIcon}>💊</div>
               <div style={styles.supplementInfo}>
