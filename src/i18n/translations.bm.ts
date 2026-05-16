@@ -530,6 +530,7 @@ export const bmTranslations: Record<TranslationKey, string> = {
   "intake.back": "Kembali",
   "intake.finish": "Selesai",
   "intake.next": "Seterusnya",
+  "intake.skip": "Langkau",
   "intake.basics.title": "Asas",
   "intake.basics.description": "Beritahu kami tentang diri anda supaya julat boleh diperibadikan.",
   "intake.vitals.title": "Vital",

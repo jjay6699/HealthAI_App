@@ -43,6 +43,7 @@ const App = () => {
                 <Route path="/register" element={<RegisterScreen />} />
               </Route>
             </Route>
+            <Route path="/intake" element={<ProfileIntakeScreen />} />
             <Route element={<RequireAuth />}>
               <Route element={<AppLayout />}>
                 <Route path="/home" element={<HomeScreen />} />
@@ -57,7 +58,6 @@ const App = () => {
                 <Route path="/order-confirmation" element={<OrderConfirmationScreen />} />
                 <Route path="/orders" element={<OrdersScreen />} />
               </Route>
-              <Route path="/intake" element={<ProfileIntakeScreen />} />
               <Route path="/questionnaire" element={<QuestionnaireScreen />} />
             </Route>
             <Route path="*" element={<Navigate to="/home" replace />} />

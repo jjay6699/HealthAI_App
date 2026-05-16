@@ -5,9 +5,12 @@ import Card from "../../components/Card";
 import ProgressBar from "../../components/ProgressBar";
 import { useI18n } from "../../i18n";
 import type { TranslationKey } from "../../i18n";
+import { useAuth } from "../../services/auth";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
 import { fetchUserProfile, saveUserProfile } from "../../services/profileApi";
+
+const PENDING_REGISTRATION_KEY = "pendingRegistration";
 
 type FieldSpec = {
   key: string;
@@ -63,6 +66,21 @@ type RequiredRule = {
   key: string;
   label: string;
   validate: (value: FieldValue | undefined) => boolean;
+};
+
+type PendingRegistration = {
+  form: {
+    name: string;
+    email: string;
+    password: string;
+    country: string;
+  };
+  consents: {
+    termsPrivacyAccepted: boolean;
+    healthDataProcessingAccepted: boolean;
+    consentVersion: string;
+    acceptedAt: string;
+  };
 };
 
 const steps: {
@@ -237,10 +255,13 @@ const ProfileIntakeScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { t } = useI18n();
+  const { refreshAuth, user } = useAuth();
   const navigate = useNavigate();
   const [stepIndex, setStepIndex] = useState(0);
   const [fieldValues, setFieldValues] = useState<Record<string, FieldValue>>({});
   const [attemptedNext, setAttemptedNext] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const currentStep = steps[stepIndex];
   const progress = (stepIndex + 1) / steps.length;
@@ -294,19 +315,7 @@ const ProfileIntakeScreen = () => {
   const requiredRules: RequiredRule[] = [
     { key: "firstName", label: "First name", validate: (value) => Boolean(String(value || "").trim()) },
     { key: "gender", label: "Gender", validate: (value) => Boolean(String(value || "").trim()) },
-    { key: "dob", label: "Date of birth", validate: (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) },
-    { key: "heightCm", label: "Height", validate: (value) => Number(value) > 0 },
-    { key: "weightKg", label: "Weight", validate: (value) => Number(value) > 0 },
-    {
-      key: "activityLevel",
-      label: "Activity level",
-      validate: (value) => Boolean(String(value || "").trim())
-    },
-    {
-      key: "dataProcessingConsent",
-      label: "Data processing consent",
-      validate: (value) => Boolean(String(value || "").trim())
-    }
+    { key: "dob", label: "Date of birth", validate: (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) }
   ];
 
   const requiredMap = new Map(requiredRules.map((rule) => [rule.key, rule]));
@@ -319,24 +328,89 @@ const ProfileIntakeScreen = () => {
   };
 
   const isStepValid = () => currentStep.fields.every((field) => isFieldValid(field.key));
+  const isStepRequired = () => currentStep.fields.some((field) => isFieldRequired(field.key));
+  const isStepEmpty = () =>
+    currentStep.fields.every((field) => {
+      const value = fieldValues[field.key];
+      if (Array.isArray(value)) return value.length === 0;
+      return !String(value || "").trim();
+    });
+  const shouldShowSkip = !isStepRequired() && isStepEmpty() && stepIndex < steps.length - 1;
+  const primaryActionTitle = stepIndex === steps.length - 1
+    ? t("intake.finish")
+    : shouldShowSkip
+    ? t("intake.skip")
+    : t("intake.next");
 
-  const handleNext = () => {
+  const createPendingAccount = async (profile: Partial<IntakeProfile>) => {
+    const pending = getPendingRegistration();
+    if (!pending) return;
+
+    const response = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...pending.form,
+        name: String(profile.name || pending.form.name || "").trim(),
+        consents: pending.consents
+      })
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      if (payload?.error === "email_already_registered") {
+        throw new Error("This email is already registered.");
+      }
+      if (payload?.error === "too_many_attempts") {
+        throw new Error("Too many signup attempts. Please wait and try again.");
+      }
+      if (payload?.error === "invalid_registration_payload") {
+        throw new Error("Please complete the registration fields and use a stronger password.");
+      }
+      if (payload?.error === "consent_required") {
+        throw new Error("Please accept Terms, Privacy Policy, and Health Data Processing Consent.");
+      }
+      throw new Error("Unable to create account right now.");
+    }
+
+    sessionStorage.removeItem(PENDING_REGISTRATION_KEY);
+    await refreshAuth();
+    await saveUserProfile<IntakeProfile>(profile).catch((error) => {
+      console.error("Failed to save intake profile after registration:", error);
+    });
+  };
+
+  const handleNext = async () => {
     if (!isStepValid()) {
       setAttemptedNext(true);
       return;
     }
     if (stepIndex === steps.length - 1) {
-      persistProfile(fieldValues);
-      navigate("/questionnaire");
+      setIsSubmitting(true);
+      setSubmitError("");
+      try {
+        const profile = persistProfile(fieldValues);
+        await createPendingAccount(profile);
+        navigate("/questionnaire");
+      } catch (error) {
+        setSubmitError(error instanceof Error ? error.message : "Unable to create account right now.");
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
     setStepIndex((prev) => prev + 1);
     setAttemptedNext(false);
   };
 
-  const handleBack = () => {
+  const handleBack = async () => {
     if (stepIndex === 0) {
-      navigate("/register");
+      if (getPendingRegistration()) {
+        sessionStorage.removeItem(PENDING_REGISTRATION_KEY);
+        navigate("/register", { replace: true });
+        return;
+      }
+      navigate("/profile");
       return;
     }
     setStepIndex((prev) => prev - 1);
@@ -394,6 +468,15 @@ const ProfileIntakeScreen = () => {
     "waterIntake"
   ]);
 
+  const getPendingRegistration = (): PendingRegistration | null => {
+    try {
+      const raw = sessionStorage.getItem(PENDING_REGISTRATION_KEY);
+      return raw ? (JSON.parse(raw) as PendingRegistration) : null;
+    } catch {
+      return null;
+    }
+  };
+
   const persistProfile = (values: Record<string, FieldValue>) => {
     const saved = persistentStorage.getItem("userProfile");
     let existing: Partial<IntakeProfile> = {};
@@ -423,9 +506,12 @@ const ProfileIntakeScreen = () => {
 
     const nextProfile = { ...existing, ...updates };
     persistentStorage.setItem("userProfile", JSON.stringify(nextProfile));
-    void saveUserProfile<IntakeProfile>(nextProfile).catch((error) => {
-      console.error("Failed to save intake profile:", error);
-    });
+    if (user?.id) {
+      void saveUserProfile<IntakeProfile>(nextProfile).catch((error) => {
+        console.error("Failed to save intake profile:", error);
+      });
+    }
+    return nextProfile;
   };
 
   React.useEffect(() => {
@@ -483,6 +569,11 @@ const ProfileIntakeScreen = () => {
       cancelled = true;
     };
   }, []);
+
+  React.useEffect(() => {
+    if (user?.id || getPendingRegistration()) return;
+    navigate("/register", { replace: true });
+  }, [navigate, user?.id]);
 
   const handleFieldChange = (field: FieldSpec, value: string) => {
     const nextValue = field.format === "date" ? formatDateInput(value) : value;
@@ -598,6 +689,8 @@ const ProfileIntakeScreen = () => {
         </div>
       </Card>
 
+      {submitError ? <p style={styles.submitError}>{submitError}</p> : null}
+
       <footer style={styles.footer}>
         <Button
           title={t("intake.back")}
@@ -606,9 +699,10 @@ const ProfileIntakeScreen = () => {
           fullWidth
         />
         <Button
-          title={stepIndex === steps.length - 1 ? t("intake.finish") : t("intake.next")}
+          title={primaryActionTitle}
           onClick={handleNext}
-          disabled={!isStepValid()}
+          disabled={!isStepValid() || isSubmitting}
+          loading={isSubmitting}
           fullWidth
         />
       </footer>
@@ -674,6 +768,11 @@ const createStyles = (theme: AppTheme) => ({
   errorText: {
     fontSize: 12,
     color: theme.colors.error
+  },
+  submitError: {
+    margin: 0,
+    color: theme.colors.error,
+    fontSize: 14
   },
   input: {
     borderRadius: theme.radii.md,

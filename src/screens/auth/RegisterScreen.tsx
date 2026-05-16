@@ -2,16 +2,16 @@ import React, { FormEvent, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
 import { useI18n } from "../../i18n";
-import { useAuth } from "../../services/auth";
 import { persistentStorage } from "../../services/persistentStorage";
 import { AppTheme, useTheme } from "../../theme";
+
+const PENDING_REGISTRATION_KEY = "pendingRegistration";
 
 const RegisterScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { t } = useI18n();
   const navigate = useNavigate();
-  const { refreshAuth } = useAuth();
   const [form, setForm] = useState({ name: "", email: "", password: "", country: "" });
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeHealthProcessing, setAgreeHealthProcessing] = useState(false);
@@ -30,11 +30,16 @@ const RegisterScreen = () => {
     try {
       const consentVersion = "2026-03";
       const consentAcceptedAt = new Date().toISOString();
-      const response = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...form,
+
+      const profileDraft = {
+        name: form.name,
+        email: form.email,
+        country: form.country
+      };
+      sessionStorage.setItem(
+        PENDING_REGISTRATION_KEY,
+        JSON.stringify({
+          form,
           consents: {
             termsPrivacyAccepted: agreeTerms,
             healthDataProcessingAccepted: agreeHealthProcessing,
@@ -42,30 +47,7 @@ const RegisterScreen = () => {
             acceptedAt: consentAcceptedAt
           }
         })
-      });
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        if (payload?.error === "email_already_registered") {
-          throw new Error("This email is already registered.");
-        }
-        if (payload?.error === "too_many_attempts") {
-          throw new Error("Too many signup attempts. Please wait and try again.");
-        }
-        if (payload?.error === "invalid_registration_payload") {
-          throw new Error("Please complete all fields and use a stronger password.");
-        }
-        if (payload?.error === "consent_required") {
-          throw new Error("Please accept Terms, Privacy Policy, and Health Data Processing Consent.");
-        }
-        throw new Error("Unable to create account right now.");
-      }
-
-      const profileDraft = {
-        name: form.name,
-        email: form.email,
-        country: form.country
-      };
+      );
       localStorage.setItem("userProfile", JSON.stringify(profileDraft));
       persistentStorage.setJSON("userConsents", {
         termsPrivacyAccepted: true,
@@ -75,7 +57,6 @@ const RegisterScreen = () => {
         policyVersion: consentVersion,
         acceptedAt: consentAcceptedAt
       });
-      await refreshAuth();
       setLoading(false);
       navigate("/intake");
     } catch (err) {
