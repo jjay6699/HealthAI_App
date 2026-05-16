@@ -9,6 +9,7 @@ import { useAuth } from "../../services/auth";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
 import { fetchUserProfile, saveUserProfile } from "../../services/profileApi";
+import { redeemAgentCode } from "../../services/subscriptionApi";
 
 const PENDING_REGISTRATION_KEY = "pendingRegistration";
 
@@ -74,6 +75,7 @@ type PendingRegistration = {
     email: string;
     password: string;
     country: string;
+    agentCode?: string;
   };
   consents: {
     termsPrivacyAccepted: boolean;
@@ -380,6 +382,11 @@ const ProfileIntakeScreen = () => {
 
     sessionStorage.removeItem(PENDING_REGISTRATION_KEY);
     await refreshAuth();
+    if (pending.form.agentCode?.trim()) {
+      await redeemAgentCode(pending.form.agentCode.trim()).catch((error) => {
+        console.error("Failed to redeem registration agent code:", error);
+      });
+    }
     await saveUserProfile<IntakeProfile>(profile).catch((error) => {
       console.error("Failed to save intake profile after registration:", error);
     });

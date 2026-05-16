@@ -72,6 +72,16 @@ export const confirmSubscriptionCheckout = async (sessionId: string): Promise<Su
   return parsePayload(response) as Promise<SubscriptionPayload>;
 };
 
+export const redeemAgentCode = async (code: string): Promise<SubscriptionPayload & { code: string }> => {
+  const response = await fetch("/api/agent-codes/redeem", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code })
+  });
+  return parsePayload(response) as Promise<SubscriptionPayload & { code: string }>;
+};
+
 export const reserveReportAnalysis = async () => {
   const response = await fetch("/api/report-analysis/reserve", {
     method: "POST",

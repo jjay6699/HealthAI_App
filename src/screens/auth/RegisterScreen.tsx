@@ -13,7 +13,7 @@ const RegisterScreen = () => {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const { t } = useI18n();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", password: "", country: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", country: "", agentCode: "" });
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeHealthProcessing, setAgreeHealthProcessing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -176,6 +176,20 @@ const RegisterScreen = () => {
           ) : null}
         </div>
 
+        <label style={styles.label} htmlFor="register-agent-code">
+          Agent code <span style={styles.optionalLabel}>(optional)</span>
+        </label>
+        <input
+          id="register-agent-code"
+          placeholder="Enter code for 1 month free Plus"
+          value={form.agentCode}
+          onChange={(event) =>
+            setForm((prev) => ({ ...prev, agentCode: event.target.value.toUpperCase() }))
+          }
+          style={styles.input}
+          autoCapitalize="characters"
+        />
+
         <label style={styles.checkboxRow}>
           <input
             type="checkbox"
@@ -241,6 +255,10 @@ const createStyles = (theme: AppTheme) => ({
     fontSize: 14,
     fontWeight: 600,
     color: theme.colors.text
+  },
+  optionalLabel: {
+    color: theme.colors.textSecondary,
+    fontWeight: 500
   },
   input: {
     width: "100%",

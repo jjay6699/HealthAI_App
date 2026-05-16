@@ -16,7 +16,8 @@ import { fetchShippingAddresses, saveShippingAddresses, ShippingAddressRecord } 
 import {
   SubscriptionPayload,
   createSubscriptionPortalSession,
-  fetchSubscriptionStatus
+  fetchSubscriptionStatus,
+  redeemAgentCode
 } from "../../services/subscriptionApi";
 import {
   BloodPressureEntry,
@@ -210,6 +211,9 @@ const ProfileScreen = () => {
   const [subscriptionLoading, setSubscriptionLoading] = useState(true);
   const [subscriptionActionLoading, setSubscriptionActionLoading] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [agentCode, setAgentCode] = useState("");
+  const [agentCodeLoading, setAgentCodeLoading] = useState(false);
+  const [agentCodeMessage, setAgentCodeMessage] = useState("");
   const hasHydratedShippingRef = React.useRef(false);
 
   const [editState, setEditState] = useState<null | {
@@ -1143,6 +1147,7 @@ const ProfileScreen = () => {
   const subscriptionUsed = Math.max(0, subscriptionLimit - subscriptionRemaining);
   const subscriptionProgress = subscriptionLimit > 0 ? Math.min(100, (subscriptionUsed / subscriptionLimit) * 100) : 0;
   const reportNoun = subscriptionRemaining === 1 ? "report credit" : "report credits";
+  const canManageStripeSubscription = Boolean(subscription?.stripeCustomerId);
   const subscriptionReportsText = subscriptionLoading
     ? "Loading report allowance..."
     : subscription
@@ -1154,7 +1159,7 @@ const ProfileScreen = () => {
       : "Unlimited AI chat is included with every plan.";
 
   const handleManageSubscription = async () => {
-    if (subscription?.tier === "free") {
+    if (subscription?.tier === "free" || !canManageStripeSubscription) {
       if (!subscriptionPayload) {
         setSubscriptionLoading(true);
         try {
@@ -1177,6 +1182,34 @@ const ProfileScreen = () => {
       console.error("Failed to open billing portal:", error);
       alert("Unable to open subscription management right now.");
       setSubscriptionActionLoading(false);
+    }
+  };
+
+  const handleRedeemAgentCode = async () => {
+    const code = agentCode.trim().toUpperCase();
+    if (!code || agentCodeLoading) return;
+    setAgentCodeLoading(true);
+    setAgentCodeMessage("");
+    try {
+      const payload = await redeemAgentCode(code);
+      setSubscriptionPayload(payload);
+      setAgentCode("");
+      setAgentCodeMessage("Code applied. Plus is active for 1 month.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      const readable =
+        message === "agent_code_not_found"
+          ? "That code was not found."
+          : message === "agent_code_already_redeemed"
+          ? "This account has already used an agent code."
+          : message === "paid_plan_already_active"
+          ? "You already have an active paid plan."
+          : message === "invalid_agent_code"
+          ? "Enter a valid agent code."
+          : "Unable to apply this code right now.";
+      setAgentCodeMessage(readable);
+    } finally {
+      setAgentCodeLoading(false);
     }
   };
 
@@ -1227,7 +1260,7 @@ const ProfileScreen = () => {
           >
             {subscriptionActionLoading
               ? "Opening..."
-              : subscription?.tier === "free" || !subscription
+              : subscription?.tier === "free" || !subscription || !canManageStripeSubscription
               ? "View plans"
               : "Manage"}
           </button>
@@ -1237,6 +1270,30 @@ const ProfileScreen = () => {
         </div>
         <p style={styles.subscriptionBody}>{subscriptionReportsText}</p>
         <p style={styles.subscriptionMeta}>{subscriptionRenewsText}</p>
+        <div style={styles.agentCodeBox}>
+          <label style={styles.agentCodeLabel} htmlFor="profile-agent-code">
+            Have an agent code?
+          </label>
+          <div style={styles.agentCodeRow}>
+            <input
+              id="profile-agent-code"
+              placeholder="Enter code"
+              value={agentCode}
+              onChange={(event) => setAgentCode(event.target.value.toUpperCase())}
+              style={styles.agentCodeInput}
+              autoCapitalize="characters"
+            />
+            <button
+              type="button"
+              style={styles.agentCodeButton}
+              onClick={handleRedeemAgentCode}
+              disabled={agentCodeLoading || !agentCode.trim()}
+            >
+              {agentCodeLoading ? "Applying..." : "Apply"}
+            </button>
+          </div>
+          {agentCodeMessage ? <p style={styles.agentCodeMessage}>{agentCodeMessage}</p> : null}
+        </div>
       </Card>
       <Card style={styles.card}>
         <div style={styles.aiSummaryHeader}>
@@ -2185,6 +2242,51 @@ const createStyles = (theme: AppTheme) => ({
   subscriptionMeta: {
     margin: 0,
     fontSize: 13,
+    color: theme.colors.textSecondary
+  },
+  agentCodeBox: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+    paddingTop: theme.spacing.sm,
+    borderTop: `1px solid ${theme.colors.divider}`
+  },
+  agentCodeLabel: {
+    fontSize: 13,
+    fontWeight: 800,
+    color: theme.colors.text
+  },
+  agentCodeRow: {
+    display: "flex",
+    gap: theme.spacing.sm
+  },
+  agentCodeInput: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: theme.radii.md,
+    border: `1px solid ${theme.colors.divider}`,
+    background: theme.colors.background,
+    color: theme.colors.text,
+    fontFamily: "inherit",
+    fontSize: 14,
+    padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+    outline: "none"
+  },
+  agentCodeButton: {
+    border: "none",
+    borderRadius: theme.radii.md,
+    background: theme.colors.primary,
+    color: theme.colors.background,
+    fontFamily: "inherit",
+    fontSize: 13,
+    fontWeight: 800,
+    padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+    cursor: "pointer"
+  },
+  agentCodeMessage: {
+    margin: 0,
+    fontSize: 12,
     color: theme.colors.textSecondary
   },
   aiSummaryHeader: {

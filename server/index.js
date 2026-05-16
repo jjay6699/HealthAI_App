@@ -160,6 +160,21 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_referral_agents_code ON referral_agents(code);
 
+  CREATE TABLE IF NOT EXISTS agent_code_redemptions (
+    id TEXT PRIMARY KEY,
+    agentId TEXT,
+    code TEXT NOT NULL,
+    userId TEXT NOT NULL UNIQUE,
+    redeemedAt INTEGER NOT NULL,
+    periodStart INTEGER NOT NULL,
+    periodEnd INTEGER NOT NULL,
+    FOREIGN KEY(agentId) REFERENCES referral_agents(id),
+    FOREIGN KEY(userId) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_agent_code_redemptions_code
+    ON agent_code_redemptions(code, redeemedAt DESC);
+
   CREATE TABLE IF NOT EXISTS discount_coupons (
     id TEXT PRIMARY KEY,
     code TEXT NOT NULL UNIQUE,
@@ -654,9 +669,20 @@ const stmtExpireProcessingOrders = db.prepare(
   "UPDATE orders SET status = ?, updatedAt = ? WHERE lower(status) = 'processing' AND createdAt <= ?"
 );
 const stmtListReferralAgents = db.prepare(`
-  SELECT id, code, name, email, createdAt, updatedAt
-  FROM referral_agents
-  ORDER BY createdAt DESC
+  SELECT
+    agent.id,
+    agent.code,
+    agent.name,
+    agent.email,
+    agent.createdAt,
+    agent.updatedAt,
+    COUNT(redemption.id) AS redemptionCount,
+    MAX(redemption.redeemedAt) AS latestRedeemedAt
+  FROM referral_agents agent
+  LEFT JOIN agent_code_redemptions redemption
+    ON redemption.code = agent.code
+  GROUP BY agent.id
+  ORDER BY agent.createdAt DESC
 `);
 const stmtAdminUserCount = db.prepare("SELECT COUNT(*) AS count, MAX(createdAt) AS latestCreatedAt FROM users");
 const stmtAdminOrderStats = db.prepare(
@@ -672,6 +698,12 @@ const stmtInsertReferralAgent = db.prepare(
   "INSERT INTO referral_agents (id, code, name, email, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)"
 );
 const stmtDeleteReferralAgentById = db.prepare("DELETE FROM referral_agents WHERE id = ?");
+const stmtGetAgentCodeRedemptionByUser = db.prepare(
+  "SELECT id, agentId, code, userId, redeemedAt, periodStart, periodEnd FROM agent_code_redemptions WHERE userId = ? LIMIT 1"
+);
+const stmtInsertAgentCodeRedemption = db.prepare(
+  "INSERT INTO agent_code_redemptions (id, agentId, code, userId, redeemedAt, periodStart, periodEnd) VALUES (?, ?, ?, ?, ?, ?, ?)"
+);
 
 const stmtListDiscountCoupons = db.prepare(`
   SELECT
@@ -1374,9 +1406,14 @@ const normalizeSubscriptionTier = (tier) =>
 const getEffectiveSubscription = (userId) => {
   const record = stmtGetSubscriptionByUser.get(userId);
   const tier = normalizeSubscriptionTier(record?.tier);
-  const isPaidActive = tier !== "free" && ACTIVE_SUBSCRIPTION_STATUSES.has(record?.status || "");
-  const effectiveTier = isPaidActive ? tier : "free";
   const now = Date.now();
+  const isStripeBacked = Boolean(record?.stripeSubscriptionId);
+  const isWithinManualPeriod = !record?.currentPeriodEnd || Number(record.currentPeriodEnd) > now;
+  const isPaidActive =
+    tier !== "free" &&
+    ACTIVE_SUBSCRIPTION_STATUSES.has(record?.status || "") &&
+    (isStripeBacked || isWithinManualPeriod);
+  const effectiveTier = isPaidActive ? tier : "free";
   const fallbackPeriodStart = record?.currentPeriodStart || now;
   const fallbackPeriodEnd = record?.currentPeriodEnd || now + 30 * 24 * 60 * 60 * 1000;
 
@@ -1467,6 +1504,34 @@ const upsertSubscriptionFromStripeSubscription = (subscription) => {
     now
   );
 
+  return stmtGetSubscriptionByUser.get(userId);
+};
+
+const grantPlusTrialForAgentCode = ({ userId, code, agentId }) => {
+  const now = Date.now();
+  const periodEnd = now + 30 * 24 * 60 * 60 * 1000;
+  stmtUpsertSubscription.run(
+    userId,
+    "plus",
+    null,
+    null,
+    null,
+    "active",
+    now,
+    periodEnd,
+    0,
+    now,
+    now
+  );
+  stmtInsertAgentCodeRedemption.run(
+    crypto.randomUUID(),
+    agentId || null,
+    code,
+    userId,
+    now,
+    now,
+    periodEnd
+  );
   return stmtGetSubscriptionByUser.get(userId);
 };
 
@@ -2751,6 +2816,62 @@ app.put(
         createdAt: updatedUser.createdAt,
         lastLoginAt: updatedUser.lastLoginAt
       }
+    });
+  })
+);
+
+app.delete(
+  "/api/admin/referral-agents/:agentId",
+  adminRateLimiter,
+  requireAdminAuth,
+  asyncHandler(async (req, res) => {
+    const agentId = typeof req.params.agentId === "string" ? req.params.agentId.trim() : "";
+    const existing = agentId
+      ? stmtListReferralAgents.all().find((agent) => agent.id === agentId)
+      : null;
+    if (!existing) {
+      return res.status(404).json({ error: "agent_not_found" });
+    }
+    stmtDeleteReferralAgentById.run(agentId);
+    return res.json({ ok: true });
+  })
+);
+
+app.post(
+  "/api/agent-codes/redeem",
+  asyncHandler(async (req, res) => {
+    const user = getAuthedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "auth_required" });
+    }
+
+    const code = normalizeReferralCode(req.body?.code);
+    if (!code || code === "__INVALID__") {
+      return res.status(400).json({ error: "invalid_agent_code" });
+    }
+
+    const agent = stmtGetReferralAgentByCode.get(code);
+    if (!agent) {
+      return res.status(404).json({ error: "agent_code_not_found" });
+    }
+
+    const existingRedemption = stmtGetAgentCodeRedemptionByUser.get(user.id);
+    if (existingRedemption) {
+      return res.status(409).json({ error: "agent_code_already_redeemed" });
+    }
+
+    const current = getEffectiveSubscription(user.id);
+    if (current.tier === "pro" || current.tier === "plus") {
+      return res.status(409).json({ error: "paid_plan_already_active" });
+    }
+
+    grantPlusTrialForAgentCode({ userId: user.id, code, agentId: agent.id });
+
+    return res.json({
+      ok: true,
+      code,
+      subscription: getReportAllowanceStatus(user.id),
+      plans: getAvailableSubscriptionPlans()
     });
   })
 );
