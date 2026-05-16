@@ -16,6 +16,15 @@ import {
 } from "../services/openai";
 import type { Language } from "../i18n";
 import { persistentStorage } from "../services/persistentStorage";
+import { saveBloodworkRecord } from "../services/bloodworkApi";
+import {
+  SubscriptionPayload,
+  consumeReportAnalysis,
+  fetchSubscriptionStatus,
+  releaseReportAnalysis,
+  reserveReportAnalysis
+} from "../services/subscriptionApi";
+import SubscriptionUpgradeModal from "./SubscriptionUpgradeModal";
 
 interface Message {
   role: "user" | "assistant";
@@ -877,6 +886,8 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
     : `${pendingUploads.length} file(s) selected. If your phone does not support multi-select, tap below to add more images one by one.`;
   const addMoreImagesLabel = isChinese ? "\u7ee7\u7eed\u6dfb\u52a0\u56fe\u7247" : isMalay ? "Tambah lagi imej" : "Add more images";
   const [showUploadPrompt, setShowUploadPrompt] = useState(false);
+  const [subscriptionPayload, setSubscriptionPayload] = useState<SubscriptionPayload | null>(null);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showSupplementPrompt, setShowSupplementPrompt] = useState(false);
   const [showQuestionnairePrompt, setShowQuestionnairePrompt] = useState(false);
   const [questionnaireActive, setQuestionnaireActive] = useState(false);
@@ -1059,6 +1070,38 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
     }>;
   };
 
+  const showUpgradeModal = async (payload?: SubscriptionPayload | null) => {
+    if (payload) {
+      setSubscriptionPayload(payload);
+    } else {
+      try {
+        setSubscriptionPayload(await fetchSubscriptionStatus());
+      } catch (error) {
+        console.error("Failed to load subscription status:", error);
+      }
+    }
+    setShowSubscriptionModal(true);
+  };
+
+  const extractSubscriptionPayload = (error: unknown) => {
+    const payload = (error as Error & { payload?: unknown })?.payload as SubscriptionPayload | undefined;
+    return payload?.subscription && Array.isArray(payload.plans) ? payload : null;
+  };
+
+  const persistBloodworkAnalysisRecord = async (
+    analysis: BloodworkAnalysis,
+    meta: { uploadedAt: string; fileName: string; fileType: string; fileSize: number }
+  ) => {
+    persistentStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
+    persistentStorage.setItem("bloodworkAnalysisMeta", JSON.stringify(meta));
+    await saveBloodworkRecord({
+      id: `${meta.uploadedAt}:${meta.fileName}:${meta.fileSize}`,
+      uploadedAt: meta.uploadedAt,
+      analysis,
+      meta
+    });
+  };
+
   const persistChatImageAnalysis = (summary: string, files: File[]) => {
     const analysis = {
       summary,
@@ -1150,7 +1193,7 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
     }
   };
 
-  const analyzeUploadedFile = async (file: File) => {
+  const analyzeUploadedFile = async (file: File, reservationId: string) => {
     setIsLoading(true);
     setShowSupplementPrompt(false);
 
@@ -1163,20 +1206,20 @@ const AIChat: React.FC<AIChatProps> = ({ onClose }) => {
         analysis = await analyzeBloodworkFile(base64, file.type);
       }
 
-      persistentStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
-      persistentStorage.setItem(
-        "bloodworkAnalysisMeta",
-        JSON.stringify({
-          uploadedAt: new Date().toISOString(),
-          fileName: file.name,
-          fileType: file.type || "unknown",
-          fileSize: file.size
-        })
-      );
+      await persistBloodworkAnalysisRecord(analysis, {
+        uploadedAt: new Date().toISOString(),
+        fileName: file.name,
+        fileType: file.type || "unknown",
+        fileSize: file.size
+      });
+      await consumeReportAnalysis(reservationId);
 
       navigate("/insights");
     } catch (error) {
       console.error("Error analyzing file:", error);
+      await releaseReportAnalysis(reservationId).catch((releaseError) => {
+        console.error("Failed to release report reservation:", releaseError);
+      });
       const errorMessage: Message = {
         role: "assistant",
         content: text.fileProcessError
@@ -1853,7 +1896,7 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
     ]);
   };
 
-  const handleUploadYes = () => {
+  const handleUploadYes = async () => {
     setShowUploadPrompt(false);
     if (pendingUploads.length === 0) return;
     const hasPdf = pendingUploads.some((file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
@@ -1865,15 +1908,29 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
       setPendingUploads([]);
       return;
     }
+    let reservationId: string | null = null;
+    try {
+      const reservation = await reserveReportAnalysis();
+      reservationId = reservation.reservationId;
+    } catch (error) {
+      const payload = extractSubscriptionPayload(error);
+      if (payload) {
+        await showUpgradeModal(payload);
+        return;
+      }
+      setMessages(prev => [...prev, { role: "assistant", content: text.fileProcessError }]);
+      return;
+    }
+
     if (hasPdf) {
-      analyzeUploadedFile(pendingUploads[0]);
+      await analyzeUploadedFile(pendingUploads[0], reservationId);
       return;
     }
     if (pendingUploads.length === 1) {
-      analyzeUploadedFile(pendingUploads[0]);
+      await analyzeUploadedFile(pendingUploads[0], reservationId);
       return;
     }
-    analyzeUploadedImages(pendingUploads);
+    await analyzeUploadedImages(pendingUploads, reservationId);
   };
 
   const handleUploadNo = () => {
@@ -1896,7 +1953,7 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
     analyzeImagesInChat(pendingUploads);
   };
 
-  const analyzeUploadedImages = async (files: File[]) => {
+  const analyzeUploadedImages = async (files: File[], reservationId: string) => {
     setIsLoading(true);
     setShowSupplementPrompt(false);
     try {
@@ -1907,19 +1964,19 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
         }))
       );
       const analysis = await analyzeBloodworkImages(images);
-      persistentStorage.setItem("bloodworkAnalysis", JSON.stringify(analysis));
-      persistentStorage.setItem(
-        "bloodworkAnalysisMeta",
-        JSON.stringify({
-          uploadedAt: new Date().toISOString(),
-          fileName: files.map((file) => file.name).join(", "),
-          fileType: "images",
-          fileSize: files.reduce((sum, file) => sum + file.size, 0)
-        })
-      );
+      await persistBloodworkAnalysisRecord(analysis, {
+        uploadedAt: new Date().toISOString(),
+        fileName: files.map((file) => file.name).join(", "),
+        fileType: "images",
+        fileSize: files.reduce((sum, file) => sum + file.size, 0)
+      });
+      await consumeReportAnalysis(reservationId);
       navigate("/insights");
     } catch (error) {
       console.error("Error analyzing images:", error);
+      await releaseReportAnalysis(reservationId).catch((releaseError) => {
+        console.error("Failed to release report reservation:", releaseError);
+      });
       setMessages(prev => [
         ...prev,
         { role: "assistant", content: text.imagesProcessError }
@@ -2321,6 +2378,12 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
           </div>
         </div>
       </div>
+      {showSubscriptionModal ? (
+        <SubscriptionUpgradeModal
+          payload={subscriptionPayload}
+          onClose={() => setShowSubscriptionModal(false)}
+        />
+      ) : null}
     </div>
   );
 };

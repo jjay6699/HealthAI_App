@@ -5,6 +5,7 @@ import SectionHeader from "../../components/SectionHeader";
 import Button from "../../components/Button";
 import AIChat from "../../components/AIChat";
 import Dialog from "../../components/Dialog";
+import SubscriptionUpgradeModal from "../../components/SubscriptionUpgradeModal";
 import { AppTheme, useTheme } from "../../theme";
 import {
   analyzeBloodworkFile,
@@ -22,6 +23,13 @@ import {
   replaceBloodworkHistory,
   saveBloodworkRecord
 } from "../../services/bloodworkApi";
+import {
+  SubscriptionPayload,
+  consumeReportAnalysis,
+  fetchSubscriptionStatus,
+  releaseReportAnalysis,
+  reserveReportAnalysis
+} from "../../services/subscriptionApi";
 
 type IntegrationTab = "wearables" | "apps";
 type PastUploadEntry = {
@@ -55,6 +63,8 @@ const UploadScreen = () => {
   const [showHealthConsentDialog, setShowHealthConsentDialog] = useState(false);
   const [pendingAnalyzeFiles, setPendingAnalyzeFiles] = useState<File[] | null>(null);
   const [healthConsentChecked, setHealthConsentChecked] = useState(false);
+  const [subscriptionPayload, setSubscriptionPayload] = useState<SubscriptionPayload | null>(null);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const wearableIntegrations = [
     { id: "apple-watch", name: "Apple Watch", description: t("upload.modal.integration.appleWatch") },
     { id: "garmin-watch", name: "Garmin Watch", description: t("upload.modal.integration.garminWatch") },
@@ -209,7 +219,25 @@ const UploadScreen = () => {
     return () => clearInterval(interval);
   }, [isAnalyzing, analysisSteps.length]);
 
-  const analyzeFiles = async (files: File[]) => {
+  const showUpgradeModal = async (payload?: SubscriptionPayload | null) => {
+    if (payload) {
+      setSubscriptionPayload(payload);
+    } else {
+      try {
+        setSubscriptionPayload(await fetchSubscriptionStatus());
+      } catch (error) {
+        console.error("Failed to load subscription status:", error);
+      }
+    }
+    setShowSubscriptionModal(true);
+  };
+
+  const extractSubscriptionPayload = (error: unknown) => {
+    const payload = (error as Error & { payload?: unknown })?.payload as SubscriptionPayload | undefined;
+    return payload?.subscription && Array.isArray(payload.plans) ? payload : null;
+  };
+
+  const analyzeFiles = async (files: File[], reservationId: string) => {
     if (files.length === 0) return;
 
     setIsAnalyzing(true);
@@ -311,14 +339,16 @@ const UploadScreen = () => {
       persistentStorage.setItem(scopedKey("bloodworkHistory"), JSON.stringify(nextHistory));
       setPastUploads(nextHistory);
 
-      void saveBloodworkRecord(nextRecord).catch((saveError) => {
-        console.error("Failed to save bloodwork record:", saveError);
-      });
+      await saveBloodworkRecord(nextRecord);
+      await consumeReportAnalysis(reservationId);
 
       // Navigate to insights
       navigate("/insights");
     } catch (err) {
       console.error("Error analyzing file:", err);
+      await releaseReportAnalysis(reservationId).catch((releaseError) => {
+        console.error("Failed to release report reservation:", releaseError);
+      });
       setError(err instanceof Error ? err.message : "Failed to analyze file. Please try again.");
       setIsAnalyzing(false);
     }
@@ -341,7 +371,17 @@ const UploadScreen = () => {
       setShowHealthConsentDialog(true);
       return;
     }
-    await analyzeFiles(queuedFiles);
+    try {
+      const reservation = await reserveReportAnalysis();
+      await analyzeFiles(queuedFiles, reservation.reservationId);
+    } catch (error) {
+      const payload = extractSubscriptionPayload(error);
+      if (payload) {
+        await showUpgradeModal(payload);
+        return;
+      }
+      setError(error instanceof Error ? error.message : "Unable to start report analysis.");
+    }
   };
 
   const handleConfirmHealthConsent = async () => {
@@ -357,7 +397,17 @@ const UploadScreen = () => {
     const filesToAnalyze = pendingAnalyzeFiles ?? queuedFiles;
     setPendingAnalyzeFiles(null);
     if (filesToAnalyze.length > 0) {
-      await analyzeFiles(filesToAnalyze);
+      try {
+        const reservation = await reserveReportAnalysis();
+        await analyzeFiles(filesToAnalyze, reservation.reservationId);
+      } catch (error) {
+        const payload = extractSubscriptionPayload(error);
+        if (payload) {
+          await showUpgradeModal(payload);
+          return;
+        }
+        setError(error instanceof Error ? error.message : "Unable to start report analysis.");
+      }
     }
   };
 
@@ -573,6 +623,12 @@ const UploadScreen = () => {
       </Card>
 
       {showAIChat && <AIChat onClose={() => setShowAIChat(false)} />}
+      {showSubscriptionModal ? (
+        <SubscriptionUpgradeModal
+          payload={subscriptionPayload}
+          onClose={() => setShowSubscriptionModal(false)}
+        />
+      ) : null}
       {showHealthConsentDialog ? (
         <Dialog
           title={t("upload.consent.title")}

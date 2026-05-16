@@ -26,6 +26,35 @@ const RESEND_FROM_EMAIL =
 const ORDER_NOTIFICATION_EMAIL =
   process.env.ORDER_NOTIFICATION_EMAIL || "jjaytech2019@gmail.com";
 
+const SUBSCRIPTION_PLANS = {
+  free: {
+    tier: "free",
+    label: "Free",
+    price: 0,
+    reportLimit: 1,
+    lifetimeLimit: true,
+    stripePriceId: null
+  },
+  plus: {
+    tier: "plus",
+    label: "Plus",
+    price: 9.9,
+    reportLimit: 3,
+    lifetimeLimit: false,
+    stripePriceId: process.env.STRIPE_PLUS_PRICE_ID || null
+  },
+  pro: {
+    tier: "pro",
+    label: "Pro",
+    price: 29.9,
+    reportLimit: 15,
+    lifetimeLimit: false,
+    stripePriceId: process.env.STRIPE_PRO_PRICE_ID || null
+  }
+};
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "past_due"]);
+const REPORT_RESERVATION_TTL_MS = 60 * 60 * 1000;
+
 // Railway volume recommendation: mount a persistent volume at /data
 // and set DATABASE_PATH=/data/app.sqlite
 const DATABASE_PATH =
@@ -228,6 +257,45 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_user_bloodwork_records_userId
     ON user_bloodwork_records(userId, createdAt DESC);
+
+  CREATE TABLE IF NOT EXISTS user_subscriptions (
+    userId TEXT PRIMARY KEY,
+    tier TEXT NOT NULL DEFAULT 'free',
+    stripeCustomerId TEXT,
+    stripeSubscriptionId TEXT,
+    stripePriceId TEXT,
+    status TEXT,
+    currentPeriodStart INTEGER,
+    currentPeriodEnd INTEGER,
+    cancelAtPeriodEnd INTEGER NOT NULL DEFAULT 0,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    FOREIGN KEY(userId) REFERENCES users(id)
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_user_subscriptions_stripeSubscriptionId
+    ON user_subscriptions(stripeSubscriptionId)
+    WHERE stripeSubscriptionId IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_user_subscriptions_stripeCustomerId
+    ON user_subscriptions(stripeCustomerId);
+
+  CREATE TABLE IF NOT EXISTS report_analysis_usage (
+    id TEXT PRIMARY KEY,
+    userId TEXT NOT NULL,
+    reservationId TEXT NOT NULL UNIQUE,
+    tierAtUse TEXT NOT NULL,
+    status TEXT NOT NULL,
+    periodStart INTEGER,
+    periodEnd INTEGER,
+    createdAt INTEGER NOT NULL,
+    expiresAt INTEGER,
+    consumedAt INTEGER,
+    releasedAt INTEGER,
+    FOREIGN KEY(userId) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_report_analysis_usage_user_status
+    ON report_analysis_usage(userId, status, createdAt);
 `);
 
 const hasShippingAddressColumn = (columnName) =>
@@ -365,6 +433,83 @@ const stmtInsertBloodworkRecord = db.prepare(`
     metaJson,
     createdAt
   ) VALUES (?, ?, ?, ?, ?)
+`);
+const stmtGetSubscriptionByUser = db.prepare(
+  "SELECT userId, tier, stripeCustomerId, stripeSubscriptionId, stripePriceId, status, currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd, createdAt, updatedAt FROM user_subscriptions WHERE userId = ?"
+);
+const stmtGetSubscriptionByStripeSubscriptionId = db.prepare(
+  "SELECT userId, tier, stripeCustomerId, stripeSubscriptionId, stripePriceId, status, currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd, createdAt, updatedAt FROM user_subscriptions WHERE stripeSubscriptionId = ?"
+);
+const stmtGetSubscriptionByStripeCustomerId = db.prepare(
+  "SELECT userId, tier, stripeCustomerId, stripeSubscriptionId, stripePriceId, status, currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd, createdAt, updatedAt FROM user_subscriptions WHERE stripeCustomerId = ?"
+);
+const stmtUpsertSubscription = db.prepare(`
+  INSERT INTO user_subscriptions (
+    userId,
+    tier,
+    stripeCustomerId,
+    stripeSubscriptionId,
+    stripePriceId,
+    status,
+    currentPeriodStart,
+    currentPeriodEnd,
+    cancelAtPeriodEnd,
+    createdAt,
+    updatedAt
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(userId) DO UPDATE SET
+    tier = excluded.tier,
+    stripeCustomerId = excluded.stripeCustomerId,
+    stripeSubscriptionId = excluded.stripeSubscriptionId,
+    stripePriceId = excluded.stripePriceId,
+    status = excluded.status,
+    currentPeriodStart = excluded.currentPeriodStart,
+    currentPeriodEnd = excluded.currentPeriodEnd,
+    cancelAtPeriodEnd = excluded.cancelAtPeriodEnd,
+    updatedAt = excluded.updatedAt
+`);
+const stmtCreateReportReservation = db.prepare(`
+  INSERT INTO report_analysis_usage (
+    id,
+    userId,
+    reservationId,
+    tierAtUse,
+    status,
+    periodStart,
+    periodEnd,
+    createdAt,
+    expiresAt
+  ) VALUES (?, ?, ?, ?, 'reserved', ?, ?, ?, ?)
+`);
+const stmtGetReportReservation = db.prepare(
+  "SELECT id, userId, reservationId, tierAtUse, status, periodStart, periodEnd, createdAt, expiresAt, consumedAt, releasedAt FROM report_analysis_usage WHERE reservationId = ? AND userId = ? LIMIT 1"
+);
+const stmtConsumeReportReservation = db.prepare(
+  "UPDATE report_analysis_usage SET status = 'consumed', consumedAt = ?, expiresAt = NULL WHERE reservationId = ? AND userId = ? AND status = 'reserved'"
+);
+const stmtReleaseReportReservation = db.prepare(
+  "UPDATE report_analysis_usage SET status = 'released', releasedAt = ? WHERE reservationId = ? AND userId = ? AND status = 'reserved'"
+);
+const stmtCountLifetimeReportUsage = db.prepare(`
+  SELECT COUNT(*) AS count
+  FROM report_analysis_usage
+  WHERE userId = ?
+    AND tierAtUse = 'free'
+    AND (
+      status = 'consumed'
+      OR (status = 'reserved' AND expiresAt > ?)
+    )
+`);
+const stmtCountPeriodReportUsage = db.prepare(`
+  SELECT COUNT(*) AS count
+  FROM report_analysis_usage
+  WHERE userId = ?
+    AND createdAt >= ?
+    AND createdAt < ?
+    AND (
+      status = 'consumed'
+      OR (status = 'reserved' AND expiresAt > ?)
+    )
 `);
 
 const stmtInsertSession = db.prepare(
@@ -674,7 +819,14 @@ app.use((req, res, next) => {
 
   return next();
 });
-app.use(express.json({ limit: "25mb" }));
+app.use(express.json({
+  limit: "25mb",
+  verify: (req, _res, buffer) => {
+    if (req.originalUrl === "/api/stripe/webhook") {
+      req.rawBody = buffer;
+    }
+  }
+}));
 
 const SESSION_COOKIE = "ng_session";
 const OAUTH_STATE_COOKIE = "ng_oauth_state";
@@ -1208,6 +1360,113 @@ const getBottleCountForPlan = (plan) => {
 const calculateDeliveryFee = ({ country, plan }) => {
   if (normalizeDeliveryCountry(country) !== "Singapore") return 0;
   return getBottleCountForPlan(plan) <= 1 ? 25 : 50;
+};
+
+const getTierForStripePriceId = (priceId) => {
+  if (priceId && priceId === SUBSCRIPTION_PLANS.pro.stripePriceId) return "pro";
+  if (priceId && priceId === SUBSCRIPTION_PLANS.plus.stripePriceId) return "plus";
+  return "free";
+};
+
+const normalizeSubscriptionTier = (tier) =>
+  tier === "pro" || tier === "plus" ? tier : "free";
+
+const getEffectiveSubscription = (userId) => {
+  const record = stmtGetSubscriptionByUser.get(userId);
+  const tier = normalizeSubscriptionTier(record?.tier);
+  const isPaidActive = tier !== "free" && ACTIVE_SUBSCRIPTION_STATUSES.has(record?.status || "");
+  const effectiveTier = isPaidActive ? tier : "free";
+  const now = Date.now();
+  const fallbackPeriodStart = record?.currentPeriodStart || now;
+  const fallbackPeriodEnd = record?.currentPeriodEnd || now + 30 * 24 * 60 * 60 * 1000;
+
+  return {
+    record,
+    tier: effectiveTier,
+    status: record?.status || null,
+    stripeCustomerId: record?.stripeCustomerId || null,
+    stripeSubscriptionId: record?.stripeSubscriptionId || null,
+    currentPeriodStart: effectiveTier === "free" ? null : fallbackPeriodStart,
+    currentPeriodEnd: effectiveTier === "free" ? null : fallbackPeriodEnd,
+    cancelAtPeriodEnd: Boolean(record?.cancelAtPeriodEnd)
+  };
+};
+
+const getReportAllowanceStatus = (userId) => {
+  const subscription = getEffectiveSubscription(userId);
+  const plan = SUBSCRIPTION_PLANS[subscription.tier] || SUBSCRIPTION_PLANS.free;
+  const now = Date.now();
+  const used = plan.lifetimeLimit
+    ? Number(stmtCountLifetimeReportUsage.get(userId, now)?.count || 0)
+    : Number(
+        stmtCountPeriodReportUsage.get(
+          userId,
+          subscription.currentPeriodStart,
+          subscription.currentPeriodEnd,
+          now
+        )?.count || 0
+      );
+  const limit = plan.reportLimit;
+  const remaining = Math.max(limit - used, 0);
+
+  return {
+    tier: subscription.tier,
+    label: plan.label,
+    status: subscription.status,
+    stripeCustomerId: subscription.stripeCustomerId,
+    stripeSubscriptionId: subscription.stripeSubscriptionId,
+    currentPeriodStart: subscription.currentPeriodStart,
+    currentPeriodEnd: subscription.currentPeriodEnd,
+    cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+    reportLimit: limit,
+    reportUsed: used,
+    reportRemaining: remaining,
+    lifetimeLimit: plan.lifetimeLimit
+  };
+};
+
+const getAvailableSubscriptionPlans = () =>
+  Object.values(SUBSCRIPTION_PLANS).map((plan) => ({
+    tier: plan.tier,
+    label: plan.label,
+    price: plan.price,
+    reportLimit: plan.reportLimit,
+    lifetimeLimit: plan.lifetimeLimit,
+    isConfigured: plan.tier === "free" || Boolean(plan.stripePriceId)
+  }));
+
+const upsertSubscriptionFromStripeSubscription = (subscription) => {
+  const stripeCustomerId =
+    typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id;
+  const stripeSubscriptionId = subscription.id;
+  const userId =
+    subscription.metadata?.userId ||
+    stmtGetSubscriptionByStripeSubscriptionId.get(stripeSubscriptionId)?.userId ||
+    (stripeCustomerId ? stmtGetSubscriptionByStripeCustomerId.get(stripeCustomerId)?.userId : null);
+
+  if (!userId) {
+    console.warn("[stripe] subscription webhook missing userId", { stripeSubscriptionId, stripeCustomerId });
+    return null;
+  }
+
+  const priceId = subscription.items?.data?.[0]?.price?.id || null;
+  const tier = getTierForStripePriceId(priceId);
+  const now = Date.now();
+  stmtUpsertSubscription.run(
+    userId,
+    tier,
+    stripeCustomerId || null,
+    stripeSubscriptionId,
+    priceId,
+    subscription.status || null,
+    subscription.current_period_start ? subscription.current_period_start * 1000 : null,
+    subscription.current_period_end ? subscription.current_period_end * 1000 : null,
+    subscription.cancel_at_period_end ? 1 : 0,
+    now,
+    now
+  );
+
+  return stmtGetSubscriptionByUser.get(userId);
 };
 
 const normalizeShippingAddressList = (value) => {
@@ -2828,6 +3087,256 @@ app.post(
         currency: baseResult.currency
       }
     });
+  })
+);
+
+app.get("/api/subscription/status", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  return res.json({
+    subscription: getReportAllowanceStatus(user.id),
+    plans: getAvailableSubscriptionPlans()
+  });
+});
+
+app.post(
+  "/api/subscription/checkout-session",
+  asyncHandler(async (req, res) => {
+    if (!stripe) {
+      return res.status(503).json({ error: "stripe_not_configured" });
+    }
+
+    const user = getAuthedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "auth_required" });
+    }
+
+    const tier = normalizeSubscriptionTier(req.body?.tier);
+    const plan = SUBSCRIPTION_PLANS[tier];
+    if (!plan || tier === "free") {
+      return res.status(400).json({ error: "invalid_subscription_tier" });
+    }
+    if (!plan.stripePriceId) {
+      return res.status(503).json({ error: "subscription_price_not_configured" });
+    }
+
+    const normalizeOrigin = (value) => {
+      if (!value || typeof value !== "string") return null;
+      try {
+        const url = new URL(value);
+        if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+        return `${url.protocol}//${url.host}`;
+      } catch {
+        return null;
+      }
+    };
+    const forwardedProtoRaw =
+      typeof req.headers["x-forwarded-proto"] === "string"
+        ? req.headers["x-forwarded-proto"].split(",")[0].trim()
+        : "";
+    const forwardedHostRaw =
+      typeof req.headers["x-forwarded-host"] === "string"
+        ? req.headers["x-forwarded-host"].split(",")[0].trim()
+        : "";
+    const inferredHost = forwardedHostRaw || req.get("host");
+    let inferredProto = forwardedProtoRaw || req.protocol || "http";
+    if (inferredProto.includes("https")) inferredProto = "https";
+    if (isProd) inferredProto = "https";
+    const baseOrigin =
+      normalizeOrigin(process.env.APP_ORIGIN) ||
+      (!isProd ? normalizeOrigin(req.headers.origin) : null) ||
+      (inferredHost ? `${inferredProto}://${inferredHost}` : null);
+
+    if (!baseOrigin) {
+      return res.status(400).json({ error: "invalid_app_origin" });
+    }
+
+    const existingSubscription = stmtGetSubscriptionByUser.get(user.id);
+    let stripeCustomerId = existingSubscription?.stripeCustomerId || null;
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        email: user.email || undefined,
+        name: user.name || undefined,
+        metadata: { userId: user.id }
+      });
+      stripeCustomerId = customer.id;
+      const now = Date.now();
+      stmtUpsertSubscription.run(
+        user.id,
+        "free",
+        stripeCustomerId,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        existingSubscription?.createdAt || now,
+        now
+      );
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: stripeCustomerId,
+      client_reference_id: user.id,
+      line_items: [{ price: plan.stripePriceId, quantity: 1 }],
+      success_url: `${baseOrigin}/upload?subscription=success`,
+      cancel_url: `${baseOrigin}/upload?subscription=cancelled`,
+      metadata: {
+        userId: user.id,
+        tier
+      },
+      subscription_data: {
+        metadata: {
+          userId: user.id,
+          tier
+        }
+      }
+    });
+
+    return res.json({ url: session.url, sessionId: session.id });
+  })
+);
+
+app.post(
+  "/api/subscription/portal-session",
+  asyncHandler(async (req, res) => {
+    if (!stripe) {
+      return res.status(503).json({ error: "stripe_not_configured" });
+    }
+
+    const user = getAuthedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "auth_required" });
+    }
+
+    const subscription = stmtGetSubscriptionByUser.get(user.id);
+    if (!subscription?.stripeCustomerId) {
+      return res.status(404).json({ error: "stripe_customer_not_found" });
+    }
+
+    const origin = process.env.APP_ORIGIN || (typeof req.headers.origin === "string" ? req.headers.origin : "");
+    if (!origin) {
+      return res.status(400).json({ error: "invalid_app_origin" });
+    }
+    const session = await stripe.billingPortal.sessions.create({
+      customer: subscription.stripeCustomerId,
+      return_url: `${origin}/upload`
+    });
+
+    return res.json({ url: session.url });
+  })
+);
+
+app.post("/api/report-analysis/reserve", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  const allowance = getReportAllowanceStatus(user.id);
+  if (allowance.reportRemaining <= 0) {
+    return res.status(402).json({
+      error: "report_limit_reached",
+      subscription: allowance,
+      plans: getAvailableSubscriptionPlans()
+    });
+  }
+
+  const now = Date.now();
+  const reservationId = crypto.randomUUID();
+  stmtCreateReportReservation.run(
+    crypto.randomUUID(),
+    user.id,
+    reservationId,
+    allowance.tier,
+    allowance.currentPeriodStart,
+    allowance.currentPeriodEnd,
+    now,
+    now + REPORT_RESERVATION_TTL_MS
+  );
+
+  return res.json({
+    reservationId,
+    subscription: getReportAllowanceStatus(user.id)
+  });
+});
+
+app.post("/api/report-analysis/consume", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  const reservationId = typeof req.body?.reservationId === "string" ? req.body.reservationId.trim() : "";
+  const reservation = reservationId ? stmtGetReportReservation.get(reservationId, user.id) : null;
+  if (!reservation || reservation.status !== "reserved") {
+    return res.status(404).json({ error: "report_reservation_not_found" });
+  }
+
+  stmtConsumeReportReservation.run(Date.now(), reservationId, user.id);
+  return res.json({ subscription: getReportAllowanceStatus(user.id) });
+});
+
+app.post("/api/report-analysis/release", (req, res) => {
+  const user = getAuthedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "auth_required" });
+  }
+
+  const reservationId = typeof req.body?.reservationId === "string" ? req.body.reservationId.trim() : "";
+  if (reservationId) {
+    stmtReleaseReportReservation.run(Date.now(), reservationId, user.id);
+  }
+
+  return res.json({ subscription: getReportAllowanceStatus(user.id) });
+});
+
+app.post(
+  "/api/stripe/webhook",
+  asyncHandler(async (req, res) => {
+    if (!stripe) {
+      return res.status(503).json({ error: "stripe_not_configured" });
+    }
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      return res.status(503).json({ error: "stripe_webhook_not_configured" });
+    }
+
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.rawBody,
+        req.headers["stripe-signature"],
+        webhookSecret
+      );
+    } catch (error) {
+      return res.status(400).json({ error: "invalid_stripe_webhook_signature" });
+    }
+
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object;
+      if (session.mode === "subscription" && session.subscription) {
+        const subscription = await stripe.subscriptions.retrieve(
+          typeof session.subscription === "string" ? session.subscription : session.subscription.id
+        );
+        upsertSubscriptionFromStripeSubscription(subscription);
+      }
+    }
+
+    if (
+      event.type === "customer.subscription.created" ||
+      event.type === "customer.subscription.updated" ||
+      event.type === "customer.subscription.deleted"
+    ) {
+      upsertSubscriptionFromStripeSubscription(event.data.object);
+    }
+
+    return res.json({ received: true });
   })
 );
 
