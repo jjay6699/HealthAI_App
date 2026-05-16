@@ -6,101 +6,124 @@ import Modal from "../../components/Modal";
 import ProgressBar from "../../components/ProgressBar";
 import SectionHeader from "../../components/SectionHeader";
 import { useI18n } from "../../i18n";
+import type { TranslationKey } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 
 const sections = [
   {
     title: "How have you been feeling?",
+    titleKey: "questionnaire.section.feeling.title",
     description: "Past 30 days-rate or note what applies.",
+    descriptionKey: "questionnaire.section.feeling.description",
     items: [
-      "Fatigue levels (0-10)",
-      "Brain fog or difficulty concentrating (0-10)",
-      "Mood: low mood, anxiety, irritability (0-10 each)",
-      "Headaches or migraines (days per week)",
-      "Dizziness or lightheadedness (Y/N)",
-      "Temperature sensitivity (Y/N)",
-      "Hair, nails, or skin changes",
-      "Digestive changes (frequency scale)",
-      "Joint or muscle discomfort (0-10)",
-      "Menstrual symptoms (if applicable)"
+      "questionnaire.item.fatigue",
+      "questionnaire.item.brainFog",
+      "questionnaire.item.mood",
+      "questionnaire.item.headaches",
+      "questionnaire.item.dizziness",
+      "questionnaire.item.temperature",
+      "questionnaire.item.hairSkin",
+      "questionnaire.item.digestive",
+      "questionnaire.item.jointMuscle",
+      "questionnaire.item.menstrual"
     ]
   },
   {
     title: "Your sleep",
+    titleKey: "questionnaire.section.sleep.title",
     description: "Tell us about your typical week.",
+    descriptionKey: "questionnaire.section.sleep.description",
     items: [
-      "Average sleep duration (hours)",
-      "Sleep quality (0-10)",
-      "Sleep latency (>30 min? Y/N)",
-      "Night awakenings (nights/week)",
-      "Snoring or suspected apnea (Y/N)",
-      "Chronotype (early/intermediate/late)"
+      "questionnaire.item.sleepDuration",
+      "questionnaire.item.sleepQuality",
+      "questionnaire.item.sleepLatency",
+      "questionnaire.item.nightAwakenings",
+      "questionnaire.item.snoring",
+      "questionnaire.item.chronotype"
     ]
   },
   {
     title: "Daily stress",
+    titleKey: "questionnaire.section.stress.title",
     description: "How does stress show up for you?",
+    descriptionKey: "questionnaire.section.stress.description",
     items: [
-      "Perceived stress (0-10)",
-      "Major stressors",
-      "Relaxation practices (minutes per week)"
+      "questionnaire.item.perceivedStress",
+      "questionnaire.item.majorStressors",
+      "questionnaire.item.relaxation"
     ]
   },
   {
     title: "Eating patterns",
+    titleKey: "questionnaire.section.eating.title",
     description: "Share a snapshot of your nutrition.",
+    descriptionKey: "questionnaire.section.eating.description",
     items: [
-      "Fruit and veg servings per day",
-      "Protein per meal (rough grams)",
-      "Omega-3 sources 2x per week (Y/N)",
-      "Ultra-processed foods (frequency)",
-      "Water intake (cups per day)",
-      "Added sugar intake",
-      "Fiber (g per day)"
+      "questionnaire.item.fruitVeg",
+      "questionnaire.item.protein",
+      "questionnaire.item.omega3",
+      "questionnaire.item.ultraProcessed",
+      "questionnaire.item.water",
+      "questionnaire.item.addedSugar",
+      "questionnaire.item.fiber"
     ]
   },
   {
     title: "Movement",
+    titleKey: "questionnaire.section.movement.title",
     description: "Capture your weekly activity mix.",
+    descriptionKey: "questionnaire.section.movement.description",
     items: [
-      "Moderate cardio minutes",
-      "Vigorous cardio minutes",
-      "Strength training minutes",
-      "Mobility or recovery minutes",
-      "Step count (if known)",
-      "Recent changes (increasing/stable/decreasing)"
+      "questionnaire.item.moderateCardio",
+      "questionnaire.item.vigorousCardio",
+      "questionnaire.item.strengthTraining",
+      "questionnaire.item.mobility",
+      "questionnaire.item.steps",
+      "questionnaire.item.recentChanges"
     ]
   },
   {
     title: "Your environment",
+    titleKey: "questionnaire.section.environment.title",
     description: "Track context that influences recovery.",
+    descriptionKey: "questionnaire.section.environment.description",
     items: [
-      "Sunlight exposure (minutes per day)",
-      "Indoor time (hours per day)",
-      "Smoking or vaping",
-      "Shift work or frequent jet lag (Y/N)"
+      "questionnaire.item.sunlight",
+      "questionnaire.item.indoorTime",
+      "questionnaire.item.smoking",
+      "questionnaire.item.shiftWork"
     ]
   },
   {
     title: "Safety checks",
+    titleKey: "questionnaire.section.safety.title",
     description: "We use this to keep nutrition suggestions safe.",
+    descriptionKey: "questionnaire.section.safety.description",
     items: [
-      "Known allergies (medications or nutrition products)",
-      "Kidney or liver conditions",
-      "Bleeding disorders or anticoagulants",
-      "Pregnancy or trying to conceive"
+      "questionnaire.item.knownAllergies",
+      "questionnaire.item.kidneyLiver",
+      "questionnaire.item.bleeding",
+      "questionnaire.item.pregnancy"
     ]
   },
   {
     title: "Your goals",
+    titleKey: "questionnaire.section.goals.title",
     description: "Select priorities and what success looks like.",
+    descriptionKey: "questionnaire.section.goals.description",
     items: [
-      "Top goals (select all that apply)",
-      "Priority order",
-      "Notes for your coach (optional)"
+      "questionnaire.item.topGoals",
+      "questionnaire.item.priorityOrder",
+      "questionnaire.item.coachNotes"
     ]
   }
-];
+] satisfies Array<{
+  title: string;
+  titleKey: TranslationKey;
+  description: string;
+  descriptionKey: TranslationKey;
+  items: TranslationKey[];
+}>;
 
 const QuestionnaireScreen = () => {
   const theme = useTheme();
@@ -143,11 +166,11 @@ const QuestionnaireScreen = () => {
       </header>
 
       <Card style={styles.card} shadow>
-        <SectionHeader title={current.title} subtitle={current.description} />
+        <SectionHeader title={t(current.titleKey)} subtitle={t(current.descriptionKey)} />
         <div style={styles.fieldGrid}>
           {current.items.map((item) => (
             <label key={item} style={styles.field}>
-              <span style={styles.label}>{item}</span>
+              <span style={styles.label}>{t(item)}</span>
               <input placeholder={t("questionnaire.typeResponse")} style={styles.input} />
             </label>
           ))}

@@ -202,9 +202,9 @@ const HistoryScreen = () => {
   };
 
   const metricCards = (concernCount: number, strengthCount: number, recommendationCount: number) => [
-    { key: "concerns", label: "Concerns", value: concernCount },
-    { key: "strengths", label: "Strengths", value: strengthCount },
-    { key: "recommendations", label: "Recs", value: recommendationCount }
+    { key: "concerns", label: t("history.concerns"), value: concernCount },
+    { key: "strengths", label: t("history.strengths"), value: strengthCount },
+    { key: "recommendations", label: t("history.recommendations"), value: recommendationCount }
   ];
 
   if (selectedEntry) {

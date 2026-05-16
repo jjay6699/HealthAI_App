@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Card from "../../components/Card";
 import Button from "../../components/Button";
+import Card from "../../components/Card";
 import SectionHeader from "../../components/SectionHeader";
 import { useI18n } from "../../i18n";
-import { AppTheme, useTheme } from "../../theme";
 import { useAuth } from "../../services/auth";
+import { AppTheme, useTheme } from "../../theme";
 
 type OrderRecommendation = {
   supplementName?: string;
@@ -38,7 +38,7 @@ type OrderRecord = {
 const OrdersScreen = () => {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { language } = useI18n();
+  const { language, t } = useI18n();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [orders, setOrders] = useState<OrderRecord[]>([]);
@@ -90,7 +90,7 @@ const OrdersScreen = () => {
         if (cancelled) return;
         setOrders([]);
         setSelectedOrderNumber(null);
-        setLoadError("We couldn't load your order history right now. Please try again.");
+        setLoadError(t("orders.loadError"));
       } finally {
         if (!cancelled) {
           setIsLoading(false);
@@ -103,7 +103,7 @@ const OrdersScreen = () => {
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [t, user?.id]);
 
   const selectedOrder = useMemo(
     () => orders.find((order) => order.orderNumber === selectedOrderNumber) || orders[0] || null,
@@ -111,9 +111,9 @@ const OrdersScreen = () => {
   );
 
   const formatDate = (value?: string) => {
-    if (!value) return "Unknown date";
+    if (!value) return t("orders.unknownDate");
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "Unknown date";
+    if (Number.isNaN(date.getTime())) return t("orders.unknownDate");
     return date.toLocaleDateString(locale, {
       day: "numeric",
       month: "short",
@@ -124,17 +124,17 @@ const OrdersScreen = () => {
   const formatStatus = (status?: string) => {
     switch (status) {
       case "paid":
-        return "Paid";
+        return t("orders.status.paid");
       case "processing":
-        return "Processing";
+        return t("orders.status.processing");
       case "shipped":
-        return "Shipped";
+        return t("orders.status.shipped");
       case "delivered":
-        return "Delivered";
+        return t("orders.status.delivered");
       case "cancelled":
-        return "Cancelled";
+        return t("orders.status.cancelled");
       default:
-        return "In progress";
+        return t("orders.status.inProgress");
     }
   };
 
@@ -153,20 +153,24 @@ const OrdersScreen = () => {
     }
   };
 
+  const renderHeader = () => (
+    <>
+      <button onClick={() => navigate("/profile")} style={styles.backButton}>
+        <span style={styles.backArrow}>{"<"}</span>
+        <span>{t("orders.backToProfile")}</span>
+      </button>
+      <h1 style={styles.heading}>{t("orders.heading")}</h1>
+      <p style={styles.subheading}>{t("orders.subheading")}</p>
+    </>
+  );
+
   if (isLoading) {
     return (
       <div style={styles.page}>
-        <button onClick={() => navigate("/profile")} style={styles.backButton}>
-          <span style={styles.backArrow}>←</span>
-          <span>Back to profile</span>
-        </button>
-
-        <h1 style={styles.heading}>Your orders</h1>
-        <p style={styles.subheading}>Track confirmed purchases, review delivery details, and revisit your blend summary.</p>
-
+        {renderHeader()}
         <Card style={styles.emptyCard}>
-          <h3 style={styles.emptyTitle}>Loading orders</h3>
-          <p style={styles.emptyBody}>We’re fetching your latest order history from your account.</p>
+          <h3 style={styles.emptyTitle}>{t("orders.loadingTitle")}</h3>
+          <p style={styles.emptyBody}>{t("orders.loadingBody")}</p>
         </Card>
       </div>
     );
@@ -175,21 +179,11 @@ const OrdersScreen = () => {
   if (orders.length === 0) {
     return (
       <div style={styles.page}>
-        <button onClick={() => navigate("/profile")} style={styles.backButton}>
-          <span style={styles.backArrow}>←</span>
-          <span>Back to profile</span>
-        </button>
-
-        <h1 style={styles.heading}>Your orders</h1>
-        <p style={styles.subheading}>Track confirmed purchases, review delivery details, and revisit your blend summary.</p>
-
+        {renderHeader()}
         <Card style={styles.emptyCard}>
-          <h3 style={styles.emptyTitle}>{loadError ? "Orders unavailable" : "No orders yet"}</h3>
-          <p style={styles.emptyBody}>
-            {loadError ||
-              "Once you place an order, it will appear here with the status, total, and blend details."}
-          </p>
-          <Button title="Start a new order" onClick={() => navigate("/supplements")} fullWidth />
+          <h3 style={styles.emptyTitle}>{loadError ? t("orders.unavailable") : t("orders.emptyTitle")}</h3>
+          <p style={styles.emptyBody}>{loadError || t("orders.emptyBody")}</p>
+          <Button title={t("orders.startNew")} onClick={() => navigate("/supplements")} fullWidth />
         </Card>
       </div>
     );
@@ -197,27 +191,21 @@ const OrdersScreen = () => {
 
   return (
     <div style={styles.page}>
-      <button onClick={() => navigate("/profile")} style={styles.backButton}>
-        <span style={styles.backArrow}>←</span>
-        <span>Back to profile</span>
-      </button>
-
-      <h1 style={styles.heading}>Your orders</h1>
-      <p style={styles.subheading}>Track confirmed purchases, review delivery details, and revisit your blend summary.</p>
+      {renderHeader()}
 
       <Card style={styles.summaryCard}>
         <div style={styles.summaryMetric}>
-          <span style={styles.metricLabel}>Total orders</span>
+          <span style={styles.metricLabel}>{t("orders.totalOrders")}</span>
           <strong style={styles.metricValue}>{orders.length}</strong>
         </div>
         <div style={styles.summaryMetric}>
-          <span style={styles.metricLabel}>Latest order</span>
+          <span style={styles.metricLabel}>{t("orders.latestOrder")}</span>
           <strong style={styles.metricValue}>{selectedOrder ? `#${selectedOrder.orderNumber}` : "-"}</strong>
         </div>
       </Card>
 
       <Card style={styles.card}>
-        <SectionHeader title="Order history" />
+        <SectionHeader title={t("orders.history")} />
         <div style={styles.orderList}>
           {orders.map((order) => {
             const isSelected = order.orderNumber === selectedOrder?.orderNumber;
@@ -233,11 +221,13 @@ const OrdersScreen = () => {
               >
                 <div style={styles.orderRowMain}>
                   <strong style={styles.orderNumber}>#{order.orderNumber}</strong>
-                  <span style={styles.orderMeta}>{formatDate(order.date)} • {order.planLabel || order.plan}</span>
+                  <span style={styles.orderMeta}>{formatDate(order.date)} - {order.planLabel || order.plan}</span>
                 </div>
                 <div style={styles.orderRowAside}>
                   <strong style={styles.orderPrice}>RM{Number(order.price).toFixed(2)}</strong>
-                  <span style={{ ...styles.orderStatus, ...getStatusStyle(order.status) }}>{formatStatus(order.status)}</span>
+                  <span style={{ ...styles.orderStatus, ...getStatusStyle(order.status) }}>
+                    {formatStatus(order.status)}
+                  </span>
                 </div>
               </button>
             );
@@ -247,44 +237,44 @@ const OrdersScreen = () => {
 
       {selectedOrder ? (
         <Card style={styles.card}>
-          <SectionHeader title="Order details" />
+          <SectionHeader title={t("orders.details")} />
           <div style={styles.detailsGrid}>
             <div>
-              <span style={styles.detailLabel}>Order number</span>
+              <span style={styles.detailLabel}>{t("orders.orderNumber")}</span>
               <p style={styles.detailValue}>#{selectedOrder.orderNumber}</p>
             </div>
             <div>
-              <span style={styles.detailLabel}>Placed on</span>
+              <span style={styles.detailLabel}>{t("orders.placedOn")}</span>
               <p style={styles.detailValue}>{formatDate(selectedOrder.date)}</p>
             </div>
             <div>
-              <span style={styles.detailLabel}>Plan</span>
+              <span style={styles.detailLabel}>{t("orders.plan")}</span>
               <p style={styles.detailValue}>{selectedOrder.planLabel || selectedOrder.plan}</p>
             </div>
             <div>
-              <span style={styles.detailLabel}>Payment</span>
-              <p style={styles.detailValue}>{selectedOrder.paymentMethod || "Not recorded"}</p>
+              <span style={styles.detailLabel}>{t("orders.payment")}</span>
+              <p style={styles.detailValue}>{selectedOrder.paymentMethod || t("orders.notRecorded")}</p>
             </div>
             <div>
-              <span style={styles.detailLabel}>Status</span>
+              <span style={styles.detailLabel}>{t("orders.status")}</span>
               <p style={styles.detailValue}>{formatStatus(selectedOrder.status)}</p>
             </div>
             <div>
-              <span style={styles.detailLabel}>Total</span>
+              <span style={styles.detailLabel}>{t("orders.total")}</span>
               <p style={styles.detailValue}>RM{Number(selectedOrder.price).toFixed(2)}</p>
             </div>
           </div>
 
           {selectedOrder.couponCode ? (
             <div style={styles.detailSection}>
-              <span style={styles.detailLabel}>Referral or coupon code</span>
+              <span style={styles.detailLabel}>{t("orders.referralCoupon")}</span>
               <p style={styles.detailValue}>{selectedOrder.couponCode}</p>
             </div>
           ) : null}
 
           {selectedOrder.deliveryAddress ? (
             <div style={styles.detailSection}>
-              <span style={styles.detailLabel}>Delivery address</span>
+              <span style={styles.detailLabel}>{t("orders.deliveryAddress")}</span>
               <p style={styles.addressText}>
                 {selectedOrder.deliveryAddress.fullName || ""}
                 <br />
@@ -301,23 +291,23 @@ const OrdersScreen = () => {
           ) : null}
 
           <div style={styles.detailSection}>
-            <span style={styles.detailLabel}>Blend items</span>
+            <span style={styles.detailLabel}>{t("orders.blendItems")}</span>
             {selectedOrder.recommendations && selectedOrder.recommendations.length > 0 ? (
               <div style={styles.recommendationList}>
                 {selectedOrder.recommendations.map((item, index) => (
                   <div key={`${selectedOrder.orderNumber}-item-${index}`} style={styles.recommendationItem}>
-                    <strong style={styles.recommendationName}>{item.supplementName || "Supplement"}</strong>
+                    <strong style={styles.recommendationName}>{item.supplementName || t("orders.supplement")}</strong>
                     {item.dosage ? <span style={styles.recommendationDose}>{item.dosage}</span> : null}
                   </div>
                 ))}
               </div>
             ) : (
-              <p style={styles.mutedText}>No blend details were stored for this order.</p>
+              <p style={styles.mutedText}>{t("orders.noBlendDetails")}</p>
             )}
           </div>
 
           <div style={styles.actions}>
-            <Button title="Order again" onClick={() => navigate("/supplements")} fullWidth />
+            <Button title={t("orders.orderAgain")} onClick={() => navigate("/supplements")} fullWidth />
           </div>
         </Card>
       ) : null}
@@ -344,7 +334,7 @@ const createStyles = (theme: AppTheme) => ({
     fontFamily: "inherit"
   },
   backArrow: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 700
   },
   heading: {

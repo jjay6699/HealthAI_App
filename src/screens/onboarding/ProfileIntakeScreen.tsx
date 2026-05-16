@@ -4,6 +4,7 @@ import Button from "../../components/Button";
 import Card from "../../components/Card";
 import ProgressBar from "../../components/ProgressBar";
 import { useI18n } from "../../i18n";
+import type { TranslationKey } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
 import { fetchUserProfile, saveUserProfile } from "../../services/profileApi";
@@ -11,7 +12,9 @@ import { fetchUserProfile, saveUserProfile } from "../../services/profileApi";
 type FieldSpec = {
   key: string;
   label: string;
+  labelKey?: TranslationKey;
   placeholder?: string;
+  placeholderKey?: TranslationKey;
   type?: React.HTMLInputTypeAttribute;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   step?: number | "any";
@@ -20,7 +23,9 @@ type FieldSpec = {
   kind?: "text" | "select" | "multiselect" | "checkbox";
   maxSelected?: number;
   helper?: string;
+  helperKey?: TranslationKey;
   checkboxLabel?: string;
+  checkboxLabelKey?: TranslationKey;
 };
 
 type IntakeProfile = {
@@ -63,56 +68,67 @@ type RequiredRule = {
 const steps: {
   key: string;
   title: string;
+  titleKey: TranslationKey;
   description: string;
+  descriptionKey: TranslationKey;
   fields: FieldSpec[];
 }[] = [
   {
     key: "basics",
     title: "Basics",
+    titleKey: "intake.basics.title",
     description: "Tell us about you to personalise ranges.",
+    descriptionKey: "intake.basics.description",
     fields: [
-      { key: "firstName", label: "First name", placeholder: "e.g., Maya" },
-      { key: "gender", label: "Gender", placeholder: "Select", options: ["Female", "Male"] },
-      { key: "dob", label: "Date of birth", placeholder: "YYYY-MM-DD", inputMode: "numeric", format: "date" },
-      { key: "heightCm", label: "Height", placeholder: "cm", type: "number", inputMode: "numeric" },
-      { key: "weightKg", label: "Weight", placeholder: "kg", type: "number", inputMode: "numeric" }
+      { key: "firstName", label: "First name", labelKey: "intake.firstName", placeholder: "e.g., Maya", placeholderKey: "intake.firstName.placeholder" },
+      { key: "gender", label: "Gender", labelKey: "intake.gender", placeholder: "Select", options: ["Female", "Male"] },
+      { key: "dob", label: "Date of birth", labelKey: "intake.dob", placeholder: "YYYY-MM-DD", inputMode: "numeric", format: "date" },
+      { key: "heightCm", label: "Height", labelKey: "intake.height", placeholder: "cm", type: "number", inputMode: "numeric" },
+      { key: "weightKg", label: "Weight", labelKey: "intake.weight", placeholder: "kg", type: "number", inputMode: "numeric" }
     ]
   },
   {
     key: "vitals",
     title: "Vitals",
+    titleKey: "intake.vitals.title",
     description: "Optional vitals add context to your trends.",
+    descriptionKey: "intake.vitals.description",
     fields: [
-      { key: "bloodPressure", label: "Blood pressure", placeholder: "120/80" },
-      { key: "fastingGlucose", label: "Fasting glucose", placeholder: "mmol/L", type: "number", inputMode: "decimal", step: 0.1 },
+      { key: "bloodPressure", label: "Blood pressure", labelKey: "intake.bloodPressure", placeholder: "120/80" },
+      { key: "fastingGlucose", label: "Fasting glucose", labelKey: "intake.fastingGlucose", placeholder: "mmol/L", type: "number", inputMode: "decimal", step: 0.1 },
       { key: "hba1c", label: "HbA1c", placeholder: "%", type: "number", inputMode: "decimal" },
-      { key: "restingHeartRate", label: "Resting heart rate", placeholder: "bpm", type: "number", inputMode: "numeric" },
-      { key: "waistCircumference", label: "Waist circumference", placeholder: "cm", type: "number", inputMode: "numeric" },
-      { key: "bodyFat", label: "Body fat %", placeholder: "%", type: "number", inputMode: "decimal" }
+      { key: "restingHeartRate", label: "Resting heart rate", labelKey: "intake.restingHeartRate", placeholder: "bpm", type: "number", inputMode: "numeric" },
+      { key: "waistCircumference", label: "Waist circumference", labelKey: "intake.waistCircumference", placeholder: "cm", type: "number", inputMode: "numeric" },
+      { key: "bodyFat", label: "Body fat %", labelKey: "intake.bodyFat", placeholder: "%", type: "number", inputMode: "decimal" }
     ]
   },
   {
     key: "activity",
     title: "Activity",
+    titleKey: "intake.activity.title",
     description: "How you move informs goal setting.",
+    descriptionKey: "intake.activity.description",
     fields: [
       {
         key: "activityLevel",
         label: "Activity level",
+        labelKey: "intake.activityLevel",
         placeholder: "Select",
         options: ["Sedentary", "Lightly active", "Moderately active", "Very active"]
       },
-      { key: "exerciseDays", label: "Exercise days per week", placeholder: "e.g., 3", type: "number", inputMode: "numeric" },
-      { key: "minutesPerSession", label: "Minutes per session", placeholder: "e.g., 45", type: "number", inputMode: "numeric" },
+      { key: "exerciseDays", label: "Exercise days per week", labelKey: "intake.exerciseDays", placeholder: "e.g., 3", type: "number", inputMode: "numeric" },
+      { key: "minutesPerSession", label: "Minutes per session", labelKey: "intake.minutesPerSession", placeholder: "e.g., 45", type: "number", inputMode: "numeric" },
       {
         key: "sleepDuration",
         label: "Sleep duration",
+        labelKey: "intake.sleepDuration",
         placeholder: "Select",
         options: ["Under 5 hrs", "5-6 hrs", "6-7 hrs", "7-8 hrs", "8+ hrs"]
       },
       {
         key: "stressLevel",
         label: "Stress level",
+        labelKey: "intake.stressLevel",
         placeholder: "Select",
         options: ["Low", "Moderate", "High"]
       }
@@ -121,11 +137,14 @@ const steps: {
   {
     key: "diet",
     title: "Diet",
+    titleKey: "intake.diet.title",
     description: "Your eating pattern guides recommendations.",
+    descriptionKey: "intake.diet.description",
     fields: [
       {
         key: "dietPattern",
         label: "Primary pattern",
+        labelKey: "intake.primaryPattern",
         placeholder: "Select",
         options: [
           "Balanced",
@@ -142,36 +161,42 @@ const steps: {
           "No Specific Pattern"
         ]
       },
-      { key: "mealsPerDay", label: "Meals per day", placeholder: "e.g., 3", type: "number", inputMode: "numeric" },
-      { key: "allergies", label: "Allergies", placeholder: "List" },
+      { key: "mealsPerDay", label: "Meals per day", labelKey: "intake.mealsPerDay", placeholder: "e.g., 3", type: "number", inputMode: "numeric" },
+      { key: "allergies", label: "Allergies", labelKey: "intake.allergies", placeholder: "List", placeholderKey: "intake.placeholder.list" },
       {
         key: "caffeineIntake",
         label: "Caffeine intake",
+        labelKey: "intake.caffeineIntake",
         placeholder: "Select",
         options: ["None", "Low (1 cup)", "Moderate (2-3 cups)", "High (4+ cups)"]
       },
-      { key: "waterIntake", label: "Water intake", placeholder: "cups per day", type: "number", inputMode: "numeric" }
+      { key: "waterIntake", label: "Water intake", labelKey: "intake.waterIntake", placeholder: "cups per day", placeholderKey: "intake.placeholder.cupsPerDay", type: "number", inputMode: "numeric" }
     ]
   },
   {
     key: "medical",
     title: "Medical context",
+    titleKey: "intake.medical.title",
     description: "Anything we should account for?",
+    descriptionKey: "intake.medical.description",
     fields: [
-      { key: "conditions", label: "Conditions", placeholder: "Type to add" },
-      { key: "surgeries", label: "Surgeries or hospitalisations", placeholder: "Optional" },
-      { key: "medications", label: "Current medications", placeholder: "List" },
-      { key: "supplements", label: "Current nutrition", placeholder: "List" }
+      { key: "conditions", label: "Conditions", labelKey: "intake.conditions", placeholder: "Type to add", placeholderKey: "intake.placeholder.typeToAdd" },
+      { key: "surgeries", label: "Surgeries or hospitalisations", labelKey: "intake.surgeries", placeholder: "Optional", placeholderKey: "intake.placeholder.optional" },
+      { key: "medications", label: "Current medications", labelKey: "intake.medications", placeholder: "List", placeholderKey: "intake.placeholder.list" },
+      { key: "supplements", label: "Current nutrition", labelKey: "intake.currentNutrition", placeholder: "List", placeholderKey: "intake.placeholder.list" }
     ]
   },
   {
     key: "goals",
     title: "Goals",
+    titleKey: "intake.goals.title",
     description: "Choose what matters most right now.",
+    descriptionKey: "intake.goals.description",
     fields: [
       {
         key: "topPriorities",
         label: "Top priorities (select up to 3)",
+        labelKey: "intake.topPriorities",
         kind: "multiselect",
         maxSelected: 3,
         options: [
@@ -190,14 +215,19 @@ const steps: {
   {
     key: "consent",
     title: "Consents",
+    titleKey: "intake.consent.title",
     description: "We take privacy seriously.",
+    descriptionKey: "intake.consent.description",
     fields: [
       {
         key: "dataProcessingConsent",
         label: "Data processing consent",
+        labelKey: "intake.dataProcessingConsent",
         kind: "checkbox",
         checkboxLabel: "I agree to data processing for personalized recommendations.",
-        helper: "Required to provide tailored nutrition guidance."
+        checkboxLabelKey: "intake.dataProcessingConsent.checkbox",
+        helper: "Required to provide tailored nutrition guidance.",
+        helperKey: "intake.dataProcessingConsent.helper"
       }
     ]
   }
@@ -214,6 +244,52 @@ const ProfileIntakeScreen = () => {
 
   const currentStep = steps[stepIndex];
   const progress = (stepIndex + 1) / steps.length;
+
+  const optionLabelByValue: Record<string, TranslationKey> = {
+    Female: "profile.gender.female",
+    Male: "profile.gender.male",
+    Sedentary: "profile.activity.sedentary",
+    "Lightly active": "profile.activity.light",
+    "Moderately active": "profile.activity.moderate",
+    "Very active": "profile.activity.very",
+    "Under 5 hrs": "profile.sleep.under5",
+    "5-6 hrs": "profile.sleep.5to6",
+    "6-7 hrs": "profile.sleep.6to7",
+    "7-8 hrs": "profile.sleep.7to8",
+    "8+ hrs": "profile.sleep.8plus",
+    Low: "profile.stress.low",
+    Moderate: "profile.stress.moderate",
+    High: "profile.stress.high",
+    Balanced: "profile.diet.balanced",
+    Mediterranean: "profile.diet.mediterranean",
+    "Plant-based": "profile.diet.plant",
+    Vegetarian: "profile.diet.vegetarian",
+    Vegan: "profile.diet.vegan",
+    "Low-carb": "profile.diet.lowcarb",
+    Keto: "profile.diet.keto",
+    Paleo: "profile.diet.paleo",
+    "Standard American Diet (SAD)": "profile.diet.sad",
+    "Fast Food Heavy": "profile.diet.fastfood",
+    "High-Junk / Junk Food": "profile.diet.junk",
+    "No Specific Pattern": "profile.diet.nopattern",
+    None: "profile.caffeine.none",
+    "Low (1 cup)": "profile.caffeine.low",
+    "Moderate (2-3 cups)": "profile.caffeine.moderate",
+    "High (4+ cups)": "profile.caffeine.high",
+    "More energy": "intake.option.moreEnergy",
+    "Metabolic health": "intake.option.metabolicHealth",
+    "Weight management": "intake.option.weightManagement",
+    "Gut health": "intake.option.gutHealth",
+    "Better sleep": "intake.option.betterSleep",
+    "Stress support": "intake.option.stressSupport",
+    "Muscle & performance": "intake.option.musclePerformance",
+    Longevity: "intake.option.longevity"
+  };
+
+  const getOptionLabel = (option: string) => {
+    const key = optionLabelByValue[option];
+    return key ? t(key) : option;
+  };
 
   const requiredRules: RequiredRule[] = [
     { key: "firstName", label: "First name", validate: (value) => Boolean(String(value || "").trim()) },
@@ -450,14 +526,14 @@ const ProfileIntakeScreen = () => {
       </header>
 
       <Card style={styles.card} shadow>
-        <h3 style={styles.stepTitle}>{currentStep.title}</h3>
-        <p style={styles.stepDescription}>{currentStep.description}</p>
+        <h3 style={styles.stepTitle}>{t(currentStep.titleKey)}</h3>
+        <p style={styles.stepDescription}>{t(currentStep.descriptionKey)}</p>
         <div style={styles.fieldGrid}>
           {currentStep.fields.map((field) => {
             const showError = attemptedNext && !isFieldValid(field.key) && isFieldRequired(field.key);
             return (
             <label key={field.key} style={styles.field}>
-              <span style={styles.label}>{field.label}</span>
+              <span style={styles.label}>{field.labelKey ? t(field.labelKey) : field.label}</span>
               {field.kind === "checkbox" ? (
                 <div style={styles.checkboxRow}>
                   <input
@@ -466,7 +542,7 @@ const ProfileIntakeScreen = () => {
                     onChange={(event) => toggleCheckbox(field, event.target.checked)}
                     style={styles.checkbox}
                   />
-                  <span style={styles.checkboxText}>{field.checkboxLabel || field.label}</span>
+                  <span style={styles.checkboxText}>{field.checkboxLabelKey ? t(field.checkboxLabelKey) : field.checkboxLabel || field.label}</span>
                 </div>
               ) : field.kind === "multiselect" && field.options ? (
                 <div style={styles.optionGrid}>
@@ -484,7 +560,7 @@ const ProfileIntakeScreen = () => {
                           ...(selected ? styles.optionChipActive : {})
                         }}
                       >
-                        {option}
+                        {getOptionLabel(option)}
                       </button>
                     );
                   })}
@@ -496,17 +572,17 @@ const ProfileIntakeScreen = () => {
                   onChange={(event) => handleFieldChange(field, event.target.value)}
                 >
                   <option value="" disabled>
-                    {field.placeholder || t("intake.select")}
+                    {field.placeholderKey ? t(field.placeholderKey) : field.placeholder || t("intake.select")}
                   </option>
                   {field.options.map((option) => (
                     <option key={option} value={option}>
-                      {option}
+                      {getOptionLabel(option)}
                     </option>
                   ))}
                 </select>
               ) : (
                 <input
-                  placeholder={field.placeholder}
+                  placeholder={field.placeholderKey ? t(field.placeholderKey) : field.placeholder}
                   style={{ ...styles.input, ...(showError ? styles.inputError : {}) }}
                   type={field.type || "text"}
                   inputMode={field.inputMode}
@@ -515,7 +591,7 @@ const ProfileIntakeScreen = () => {
                   onChange={(event) => handleFieldChange(field, event.target.value)}
                 />
               )}
-              {field.helper ? <span style={styles.helperText}>{field.helper}</span> : null}
+              {field.helper || field.helperKey ? <span style={styles.helperText}>{field.helperKey ? t(field.helperKey) : field.helper}</span> : null}
               {showError ? <span style={styles.errorText}>{t("intake.required")}</span> : null}
             </label>
           );})}

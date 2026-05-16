@@ -1320,13 +1320,111 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
     return [...list, value];
   };
 
+  const qText = {
+    eligibility: isChinese ? "资格确认" : isMalay ? "Kelayakan" : "Eligibility",
+    eligibilityQuestion: isChinese ? "你是否已年满 18 岁？" : isMalay ? "Adakah anda berumur 18 tahun ke atas?" : "Are you 18 years of age or older?",
+    basic: isChinese ? "基本资料" : isMalay ? "Maklumat asas" : "Basic Information",
+    ageRange: isChinese ? "年龄范围" : isMalay ? "Julat umur" : "Age range",
+    gender: isChinese ? "性别" : isMalay ? "Jantina" : "Gender",
+    height: isChinese ? "身高（厘米）" : isMalay ? "Tinggi (cm)" : "Height (cm)",
+    goals: isChinese ? "主要目标（最多选择 3 项）" : isMalay ? "Matlamat utama (pilih hingga 3)" : "Primary goals (select up to 3)",
+    goalsQuestion: isChinese ? "你的主要目标是什么？" : isMalay ? "Apakah matlamat utama anda?" : "What are your main goals?",
+    body: isChinese ? "身体与活动" : isMalay ? "Badan & aktiviti" : "Body & activity",
+    weight: isChinese ? "体重范围（公斤）" : isMalay ? "Julat berat (kg)" : "Weight range (kg)",
+    activity: isChinese ? "活动水平" : isMalay ? "Tahap aktiviti" : "Activity level",
+    exercise: isChinese ? "运动类型（可多选）" : isMalay ? "Jenis senaman (pilih semua yang berkaitan)" : "Exercise type (select all that apply)",
+    lifestyle: isChinese ? "生活方式" : isMalay ? "Gaya hidup" : "Lifestyle",
+    sleep: isChinese ? "每晚平均睡眠" : isMalay ? "Purata tidur setiap malam" : "Average sleep per night",
+    stress: isChinese ? "你如何评价自己的压力水平？" : isMalay ? "Bagaimana anda menilai tahap stres anda?" : "How would you rate your stress level?",
+    caffeine: isChinese ? "每日咖啡因摄入" : isMalay ? "Pengambilan kafein harian" : "Daily caffeine intake",
+    diet: isChinese ? "饮食与敏感反应" : isMalay ? "Diet & sensitiviti" : "Diet & sensitivities",
+    dietPreference: isChinese ? "饮食偏好" : isMalay ? "Pilihan diet" : "Diet preference",
+    sensitivities: isChinese ? "你对以下哪些项目敏感？（可多选）" : isMalay ? "Adakah anda sensitif kepada mana-mana berikut? (pilih semua yang berkaitan)" : "Are you sensitive to any of the following? (select all that apply)",
+    allergies: isChinese ? "是否有已知过敏？" : isMalay ? "Ada alahan yang diketahui?" : "Any known allergies?",
+    allergiesPlaceholder: isChinese ? "列出任何过敏" : isMalay ? "Senaraikan sebarang alahan" : "List any allergies",
+    safety: isChinese ? "安全" : isMalay ? "Keselamatan" : "Safety",
+    pregnancy: isChinese ? "你目前是否怀孕或哺乳？" : isMalay ? "Adakah anda sedang hamil atau menyusu?" : "Are you currently pregnant or breastfeeding?",
+    medications: isChinese ? "你目前是否正在服用处方药？" : isMalay ? "Adakah anda sedang mengambil ubat preskripsi?" : "Are you currently taking prescription medications?",
+    medicationHelper: isChinese
+      ? "如果是，我们会避免可能不适合的成分组合。"
+      : isMalay
+      ? "Jika ya, kami akan elakkan gabungan bahan yang mungkin tidak sesuai."
+      : "If yes, we will avoid ingredient combinations that may not be suitable.",
+    confirm: isChinese ? "免责声明与确认" : isMalay ? "Penafian & pengesahan" : "Disclaimer & confirmation",
+    disclaimer: isChinese
+      ? "我理解此产品并非用于诊断、治疗、治愈或预防任何疾病。"
+      : isMalay
+      ? "Saya faham produk ini tidak bertujuan untuk mendiagnosis, merawat, menyembuhkan, atau mencegah sebarang penyakit."
+      : "I understand this product is not intended to diagnose, treat, cure, or prevent any disease.",
+    accuracy: isChinese
+      ? "我确认所提供的信息在我所知范围内准确。"
+      : isMalay
+      ? "Saya mengesahkan maklumat yang diberikan adalah tepat setakat pengetahuan saya."
+      : "I confirm the information provided is accurate to the best of my knowledge."
+  };
+
+  const qOptionLabels: Record<string, string> = {
+    Yes: isChinese ? "是" : isMalay ? "Ya" : "Yes",
+    No: isChinese ? "否" : isMalay ? "Tidak" : "No",
+    Male: isChinese ? "男" : isMalay ? "Lelaki" : "Male",
+    Female: isChinese ? "女" : isMalay ? "Perempuan" : "Female",
+    "Prefer not to say": isChinese ? "不愿透露" : isMalay ? "Tidak mahu nyatakan" : "Prefer not to say",
+    "Under 155 cm": isChinese ? "低于 155 厘米" : isMalay ? "Bawah 155 cm" : "Under 155 cm",
+    "181+ cm": isChinese ? "181 厘米以上" : isMalay ? "181+ cm" : "181+ cm",
+    "Energy & stamina": isChinese ? "精力与耐力" : isMalay ? "Tenaga & stamina" : "Energy & stamina",
+    "Focus & mental clarity": isChinese ? "专注与思维清晰" : isMalay ? "Fokus & kejelasan mental" : "Focus & mental clarity",
+    "Stress support & relaxation": isChinese ? "压力支持与放松" : isMalay ? "Sokongan stres & relaksasi" : "Stress support & relaxation",
+    "Sleep quality": isChinese ? "睡眠质量" : isMalay ? "Kualiti tidur" : "Sleep quality",
+    "Muscle building": isChinese ? "增肌" : isMalay ? "Pembinaan otot" : "Muscle building",
+    "Fat management": isChinese ? "脂肪管理" : isMalay ? "Pengurusan lemak" : "Fat management",
+    "Gut & digestion support": isChinese ? "肠道与消化支持" : isMalay ? "Sokongan usus & penghadaman" : "Gut & digestion support",
+    "Immune support": isChinese ? "免疫支持" : isMalay ? "Sokongan imun" : "Immune support",
+    "General wellness": isChinese ? "整体健康" : isMalay ? "Kesejahteraan umum" : "General wellness",
+    "Under 59 kg": isChinese ? "低于 59 公斤" : isMalay ? "Bawah 59 kg" : "Under 59 kg",
+    "96+ kg": isChinese ? "96 公斤以上" : isMalay ? "96+ kg" : "96+ kg",
+    Sedentary: isChinese ? "久坐" : isMalay ? "Tidak aktif" : "Sedentary",
+    "Lightly active": isChinese ? "轻度活跃" : isMalay ? "Aktif ringan" : "Lightly active",
+    "Moderately active": isChinese ? "中度活跃" : isMalay ? "Aktif sederhana" : "Moderately active",
+    "Very active": isChinese ? "高度活跃" : isMalay ? "Sangat aktif" : "Very active",
+    "Strength training": isChinese ? "力量训练" : isMalay ? "Latihan kekuatan" : "Strength training",
+    Cardio: isChinese ? "有氧" : isMalay ? "Kardio" : "Cardio",
+    Sports: isChinese ? "运动项目" : isMalay ? "Sukan" : "Sports",
+    "Yoga / mobility": isChinese ? "瑜伽 / 灵活性" : isMalay ? "Yoga / mobiliti" : "Yoga / mobility",
+    "None currently": isChinese ? "目前没有" : isMalay ? "Tiada buat masa ini" : "None currently",
+    "Under 5 hrs": isChinese ? "少于 5 小时" : isMalay ? "Kurang 5 jam" : "Under 5 hrs",
+    "5-6 hrs": isChinese ? "5-6 小时" : isMalay ? "5-6 jam" : "5-6 hrs",
+    "6-7 hrs": isChinese ? "6-7 小时" : isMalay ? "6-7 jam" : "6-7 hrs",
+    "7-8 hrs": isChinese ? "7-8 小时" : isMalay ? "7-8 jam" : "7-8 hrs",
+    "8+ hrs": isChinese ? "8 小时以上" : isMalay ? "8+ jam" : "8+ hrs",
+    Low: isChinese ? "低" : isMalay ? "Rendah" : "Low",
+    Moderate: isChinese ? "中" : isMalay ? "Sederhana" : "Moderate",
+    High: isChinese ? "高" : isMalay ? "Tinggi" : "High",
+    None: isChinese ? "无" : isMalay ? "Tiada" : "None",
+    "Low (1 cup coffee or less)": isChinese ? "低（1 杯咖啡或更少）" : isMalay ? "Rendah (1 cawan kopi atau kurang)" : "Low (1 cup coffee or less)",
+    "Moderate (2-3 cups)": isChinese ? "中（2-3 杯）" : isMalay ? "Sederhana (2-3 cawan)" : "Moderate (2-3 cups)",
+    "High (4+ cups / energy drinks)": isChinese ? "高（4 杯以上 / 能量饮料）" : isMalay ? "Tinggi (4+ cawan / minuman tenaga)" : "High (4+ cups / energy drinks)",
+    Omnivore: isChinese ? "杂食" : isMalay ? "Omnivor" : "Omnivore",
+    Vegetarian: isChinese ? "素食" : isMalay ? "Vegetarian" : "Vegetarian",
+    Vegan: isChinese ? "纯素" : isMalay ? "Vegan" : "Vegan",
+    "Keto / low-carb": isChinese ? "生酮 / 低碳" : isMalay ? "Keto / rendah karbohidrat" : "Keto / low-carb",
+    Other: isChinese ? "其他" : isMalay ? "Lain-lain" : "Other",
+    Caffeine: isChinese ? "咖啡因" : isMalay ? "Kafein" : "Caffeine",
+    "Artificial sweeteners": isChinese ? "人工甜味剂" : isMalay ? "Pemanis tiruan" : "Artificial sweeteners",
+    Dairy: isChinese ? "乳制品" : isMalay ? "Tenusu" : "Dairy",
+    Soy: isChinese ? "大豆" : isMalay ? "Soya" : "Soy",
+    Shellfish: isChinese ? "贝类海鲜" : isMalay ? "Makanan laut bercengkerang" : "Shellfish",
+    "Not applicable": isChinese ? "不适用" : isMalay ? "Tidak berkaitan" : "Not applicable"
+  };
+
+  const qLabel = (value: string) => qOptionLabels[value] || value;
+
   const questionnaireSteps = [
     {
       id: "eligibility",
-      title: "Eligibility",
+      title: qText.eligibility,
       body: (
         <div style={styles.fieldGroup}>
-          <label style={styles.fieldLabel}>Are you 18 years of age or older?</label>
+          <label style={styles.fieldLabel}>{qText.eligibilityQuestion}</label>
           <div style={styles.optionRow}>
             {["Yes", "No"].map((value) => (
               <label key={value} style={styles.optionLabel}>
@@ -1337,7 +1435,7 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                   checked={questionnaire.eligibility18Plus === value}
                   onChange={(e) => setQuestionnaire(prev => ({ ...prev, eligibility18Plus: e.target.value }))}
                 />
-                <span>{value}</span>
+                <span>{qLabel(value)}</span>
               </label>
             ))}
           </div>
@@ -1346,10 +1444,10 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
     },
     {
       id: "basic",
-      title: "Basic Information",
+      title: qText.basic,
       body: (
         <div style={styles.fieldGroup}>
-          <label style={styles.fieldLabel}>Age range</label>
+          <label style={styles.fieldLabel}>{qText.ageRange}</label>
           <div style={styles.optionGrid}>
             {["18-24", "25-34", "35-44", "45-54", "55+"].map((value) => (
               <label key={value} style={styles.optionLabel}>
@@ -1360,12 +1458,12 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                   checked={questionnaire.ageRange === value}
                   onChange={(e) => setQuestionnaire(prev => ({ ...prev, ageRange: e.target.value }))}
                 />
-                <span>{value}</span>
+                <span>{qLabel(value)}</span>
               </label>
             ))}
           </div>
 
-          <label style={styles.fieldLabel}>Gender</label>
+          <label style={styles.fieldLabel}>{qText.gender}</label>
           <div style={styles.optionGrid}>
             {["Male", "Female", "Prefer not to say"].map((value) => (
               <label key={value} style={styles.optionLabel}>
@@ -1376,12 +1474,12 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                   checked={questionnaire.gender === value}
                   onChange={(e) => setQuestionnaire(prev => ({ ...prev, gender: e.target.value }))}
                 />
-                <span>{value}</span>
+                <span>{qLabel(value)}</span>
               </label>
             ))}
           </div>
 
-          <label style={styles.fieldLabel}>Height (cm)</label>
+          <label style={styles.fieldLabel}>{qText.height}</label>
           <div style={styles.optionGrid}>
             {["Under 155 cm", "155-167 cm", "168-180 cm", "181+ cm"].map((value) => (
               <label key={value} style={styles.optionLabel}>
@@ -1392,7 +1490,7 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                   checked={questionnaire.heightRange === value}
                   onChange={(e) => setQuestionnaire(prev => ({ ...prev, heightRange: e.target.value }))}
                 />
-                <span>{value}</span>
+                <span>{qLabel(value)}</span>
               </label>
             ))}
           </div>
@@ -1401,10 +1499,10 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
     },
     {
       id: "goals",
-      title: "Primary goals (select up to 3)",
+      title: qText.goals,
       body: (
         <div style={styles.fieldGroup}>
-          <label style={styles.fieldLabel}>What are your main goals?</label>
+          <label style={styles.fieldLabel}>{qText.goalsQuestion}</label>
           <div style={styles.optionGrid}>
             {[
               "Energy & stamina",
@@ -1431,7 +1529,7 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                     }))
                   }
                 />
-                <span>{value}</span>
+                <span>{qLabel(value)}</span>
               </label>
             ))}
           </div>
@@ -1440,10 +1538,10 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
     },
     {
       id: "body",
-      title: "Body & activity",
+      title: qText.body,
       body: (
         <div style={styles.fieldGroup}>
-          <label style={styles.fieldLabel}>Weight range (kg)</label>
+          <label style={styles.fieldLabel}>{qText.weight}</label>
           <div style={styles.optionGrid}>
             {["Under 59 kg", "59-77 kg", "78-95 kg", "96+ kg"].map((value) => (
               <label key={value} style={styles.optionLabel}>
@@ -1454,12 +1552,12 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                   checked={questionnaire.weightRange === value}
                   onChange={(e) => setQuestionnaire(prev => ({ ...prev, weightRange: e.target.value }))}
                 />
-                <span>{value}</span>
+                <span>{qLabel(value)}</span>
               </label>
             ))}
           </div>
 
-          <label style={styles.fieldLabel}>Activity level</label>
+          <label style={styles.fieldLabel}>{qText.activity}</label>
           <div style={styles.optionGrid}>
             {["Sedentary", "Lightly active", "Moderately active", "Very active"].map((value) => (
               <label key={value} style={styles.optionLabel}>
@@ -1470,12 +1568,12 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                   checked={questionnaire.activityLevel === value}
                   onChange={(e) => setQuestionnaire(prev => ({ ...prev, activityLevel: e.target.value }))}
                 />
-                <span>{value}</span>
+                <span>{qLabel(value)}</span>
               </label>
             ))}
           </div>
 
-          <label style={styles.fieldLabel}>Exercise type (select all that apply)</label>
+          <label style={styles.fieldLabel}>{qText.exercise}</label>
           <div style={styles.optionGrid}>
             {["Strength training", "Cardio", "Sports", "Yoga / mobility", "None currently"].map((value) => (
               <label key={value} style={styles.optionLabel}>
@@ -1487,7 +1585,7 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                     exerciseTypes: toggleMultiSelect(prev.exerciseTypes, value)
                   }))}
                 />
-                <span>{value}</span>
+                <span>{qLabel(value)}</span>
               </label>
             ))}
           </div>
@@ -1496,10 +1594,10 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
     },
     {
       id: "lifestyle",
-      title: "Lifestyle",
+      title: qText.lifestyle,
       body: (
         <div style={styles.fieldGroup}>
-          <label style={styles.fieldLabel}>Average sleep per night</label>
+          <label style={styles.fieldLabel}>{qText.sleep}</label>
           <div style={styles.optionGrid}>
             {["Under 5 hrs", "5-6 hrs", "6-7 hrs", "7-8 hrs", "8+ hrs"].map((value) => (
               <label key={value} style={styles.optionLabel}>
@@ -1510,12 +1608,12 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                   checked={questionnaire.sleepDuration === value}
                   onChange={(e) => setQuestionnaire(prev => ({ ...prev, sleepDuration: e.target.value }))}
                 />
-                <span>{value}</span>
+                <span>{qLabel(value)}</span>
               </label>
             ))}
           </div>
 
-          <label style={styles.fieldLabel}>How would you rate your stress level?</label>
+          <label style={styles.fieldLabel}>{qText.stress}</label>
           <div style={styles.optionGrid}>
             {["Low", "Moderate", "High"].map((value) => (
               <label key={value} style={styles.optionLabel}>
@@ -1526,12 +1624,12 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                   checked={questionnaire.stressLevel === value}
                   onChange={(e) => setQuestionnaire(prev => ({ ...prev, stressLevel: e.target.value }))}
                 />
-                <span>{value}</span>
+                <span>{qLabel(value)}</span>
               </label>
             ))}
           </div>
 
-          <label style={styles.fieldLabel}>Daily caffeine intake</label>
+          <label style={styles.fieldLabel}>{qText.caffeine}</label>
           <div style={styles.optionGrid}>
             {[
               "None",
@@ -1547,7 +1645,7 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                   checked={questionnaire.caffeineIntake === value}
                   onChange={(e) => setQuestionnaire(prev => ({ ...prev, caffeineIntake: e.target.value }))}
                 />
-                <span>{value}</span>
+                <span>{qLabel(value)}</span>
               </label>
             ))}
           </div>
@@ -1556,10 +1654,10 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
     },
     {
       id: "diet",
-      title: "Diet & sensitivities",
+      title: qText.diet,
       body: (
         <div style={styles.fieldGroup}>
-          <label style={styles.fieldLabel}>Diet preference</label>
+          <label style={styles.fieldLabel}>{qText.dietPreference}</label>
           <div style={styles.optionGrid}>
             {["Omnivore", "Vegetarian", "Vegan", "Keto / low-carb", "Other"].map((value) => (
               <label key={value} style={styles.optionLabel}>
@@ -1570,12 +1668,12 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                   checked={questionnaire.dietPreference === value}
                   onChange={(e) => setQuestionnaire(prev => ({ ...prev, dietPreference: e.target.value }))}
                 />
-                <span>{value}</span>
+                <span>{qLabel(value)}</span>
               </label>
             ))}
           </div>
 
-          <label style={styles.fieldLabel}>Are you sensitive to any of the following? (select all that apply)</label>
+          <label style={styles.fieldLabel}>{qText.sensitivities}</label>
           <div style={styles.optionGrid}>
             {["Caffeine", "Artificial sweeteners", "Dairy", "Soy", "Shellfish", "None"].map((value) => (
               <label key={value} style={styles.optionLabel}>
@@ -1587,17 +1685,17 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                     sensitivities: toggleMultiSelect(prev.sensitivities, value)
                   }))}
                 />
-                <span>{value}</span>
+                <span>{qLabel(value)}</span>
               </label>
             ))}
           </div>
 
-          <label style={styles.fieldLabel}>Any known allergies?</label>
+          <label style={styles.fieldLabel}>{qText.allergies}</label>
           <input
             type="text"
             value={questionnaire.allergies}
             onChange={(e) => setQuestionnaire(prev => ({ ...prev, allergies: e.target.value }))}
-            placeholder="List any allergies"
+            placeholder={qText.allergiesPlaceholder}
             style={styles.textInput}
           />
 
@@ -1606,12 +1704,12 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
     },
     {
       id: "safety",
-      title: "Safety",
+      title: qText.safety,
       body: (
         <div style={styles.fieldGroup}>
           {questionnaire.gender === "Female" && (
             <>
-              <label style={styles.fieldLabel}>Are you currently pregnant or breastfeeding?</label>
+              <label style={styles.fieldLabel}>{qText.pregnancy}</label>
               <div style={styles.optionGrid}>
                 {["Yes", "No", "Not applicable"].map((value) => (
                   <label key={value} style={styles.optionLabel}>
@@ -1622,14 +1720,14 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                       checked={questionnaire.pregnantOrBreastfeeding === value}
                       onChange={(e) => setQuestionnaire(prev => ({ ...prev, pregnantOrBreastfeeding: e.target.value }))}
                     />
-                    <span>{value}</span>
+                    <span>{qLabel(value)}</span>
                   </label>
                 ))}
               </div>
             </>
           )}
 
-          <label style={styles.fieldLabel}>Are you currently taking prescription medications?</label>
+          <label style={styles.fieldLabel}>{qText.medications}</label>
           <div style={styles.optionGrid}>
             {["Yes", "No"].map((value) => (
               <label key={value} style={styles.optionLabel}>
@@ -1640,19 +1738,19 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
                   checked={questionnaire.takingMedications === value}
                   onChange={(e) => setQuestionnaire(prev => ({ ...prev, takingMedications: e.target.value }))}
                 />
-                <span>{value}</span>
+                <span>{qLabel(value)}</span>
               </label>
             ))}
           </div>
           <p style={styles.helperText}>
-            If yes, we will avoid ingredient combinations that may not be suitable.
+            {qText.medicationHelper}
           </p>
         </div>
       )
     },
     {
       id: "confirm",
-      title: "Disclaimer & confirmation",
+      title: qText.confirm,
       body: (
         <div style={styles.fieldGroup}>
           <label style={styles.optionLabel}>
@@ -1661,7 +1759,7 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
               checked={questionnaire.confirmDisclaimer}
               onChange={(e) => setQuestionnaire(prev => ({ ...prev, confirmDisclaimer: e.target.checked }))}
             />
-            <span>I understand this product is not intended to diagnose, treat, cure, or prevent any disease.</span>
+            <span>{qText.disclaimer}</span>
           </label>
           <label style={styles.optionLabel}>
             <input
@@ -1669,7 +1767,7 @@ Do not use markdown or bold formatting (no **, bullets with *, or headings). Use
               checked={questionnaire.confirmAccuracy}
               onChange={(e) => setQuestionnaire(prev => ({ ...prev, confirmAccuracy: e.target.checked }))}
             />
-            <span>I confirm the information provided is accurate to the best of my knowledge.</span>
+            <span>{qText.accuracy}</span>
           </label>
         </div>
       )

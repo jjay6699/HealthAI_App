@@ -238,7 +238,7 @@ const HomeScreen = () => {
             <p style={styles.statusValue}>{concernCount}</p>
           </div>
           <div style={styles.statusMetric}>
-            <span style={styles.statusLabel}>Recs</span>
+            <span style={styles.statusLabel}>{t("home.status.recommendations")}</span>
             <p style={styles.statusValue}>{recommendationCount}</p>
           </div>
         </div>
