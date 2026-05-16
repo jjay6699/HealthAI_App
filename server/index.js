@@ -1432,7 +1432,7 @@ const getAvailableSubscriptionPlans = () =>
     price: plan.price,
     reportLimit: plan.reportLimit,
     lifetimeLimit: plan.lifetimeLimit,
-    isConfigured: plan.tier === "free" || Boolean(plan.stripePriceId)
+    isConfigured: true
   }));
 
 const upsertSubscriptionFromStripeSubscription = (subscription) => {
@@ -1450,7 +1450,8 @@ const upsertSubscriptionFromStripeSubscription = (subscription) => {
   }
 
   const priceId = subscription.items?.data?.[0]?.price?.id || null;
-  const tier = getTierForStripePriceId(priceId);
+  const metadataTier = normalizeSubscriptionTier(subscription.metadata?.tier);
+  const tier = metadataTier !== "free" ? metadataTier : getTierForStripePriceId(priceId);
   const now = Date.now();
   stmtUpsertSubscription.run(
     userId,
@@ -3119,10 +3120,6 @@ app.post(
     if (!plan || tier === "free") {
       return res.status(400).json({ error: "invalid_subscription_tier" });
     }
-    if (!plan.stripePriceId) {
-      return res.status(503).json({ error: "subscription_price_not_configured" });
-    }
-
     const normalizeOrigin = (value) => {
       if (!value || typeof value !== "string") return null;
       try {
@@ -3183,7 +3180,22 @@ app.post(
       mode: "subscription",
       customer: stripeCustomerId,
       client_reference_id: user.id,
-      line_items: [{ price: plan.stripePriceId, quantity: 1 }],
+      line_items: [
+        plan.stripePriceId
+          ? { price: plan.stripePriceId, quantity: 1 }
+          : {
+              quantity: 1,
+              price_data: {
+                currency: "myr",
+                unit_amount: Math.round(plan.price * 100),
+                recurring: { interval: "month" },
+                product_data: {
+                  name: `RicHealth AI ${plan.label}`,
+                  description: `${plan.reportLimit} report analyses per month`
+                }
+              }
+            }
+      ],
       success_url: `${baseOrigin}/upload?subscription=success`,
       cancel_url: `${baseOrigin}/upload?subscription=cancelled`,
       metadata: {
