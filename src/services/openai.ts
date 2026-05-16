@@ -41,7 +41,7 @@ const createChatCompletion = async (
   return response.json();
 };
 
-const ANALYSIS_CACHE_VERSION = "v38";
+const ANALYSIS_CACHE_VERSION = "v39";
 const ANALYSIS_TEMPERATURE = 0;
 const LANGUAGE_STORAGE_KEY = "appLanguage";
 
@@ -534,6 +534,25 @@ const normalizeForMatch = (value: string) =>
 const getMarkerAliases = (marker: string) => {
   const normalized = normalizeForMatch(marker);
   const aliases = new Set<string>([normalized]);
+
+  if (/^nlr$|neutrophil lymphocyte ratio/.test(normalized)) {
+    aliases.add("nlr");
+    aliases.add("neutrophil lymphocyte ratio");
+    aliases.add("neutrophil lymphocyte ratio nlr");
+    return [...aliases];
+  }
+  if (/^lmr$|lymphocyte monocyte ratio/.test(normalized)) {
+    aliases.add("lmr");
+    aliases.add("lymphocyte monocyte ratio");
+    aliases.add("lymphocyte monocyte ratio lmr");
+    return [...aliases];
+  }
+  if (/^plr$|platelet lymphocyte ratio/.test(normalized)) {
+    aliases.add("plr");
+    aliases.add("platelet lymphocyte ratio");
+    aliases.add("platelet lymphocyte ratio plr");
+    return [...aliases];
+  }
 
   if (/\bldl\b|low density lipoprotein/.test(normalized)) {
     aliases.add("ldl");
@@ -1493,6 +1512,103 @@ const finalizeParsedRows = (rows: ExtractedReportRow[]): ParsedReportRow[] => {
   return reconciledRows;
 };
 
+const formatDerivedRatio = (value: number) => {
+  const precision = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return value.toFixed(precision).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+};
+
+const markerNumericValue = (row?: ParsedReportRow | null) => {
+  if (!row?.value) return null;
+  const value = parseNumericValue(row.value);
+  return value !== null && Number.isFinite(value) ? value : null;
+};
+
+const rowLooksLikePercent = (row?: ParsedReportRow | null) => {
+  if (!row) return false;
+  const unit = (row.unit || "").trim();
+  if (unit.includes("%")) return true;
+  if (unit) return false;
+  return row.marker === "Polymorphs" || DIFFERENTIAL_MARKER_SET.has(row.marker as typeof DIFFERENTIAL_MARKERS[number]);
+};
+
+const addDerivedRatioRows = (rows: ParsedReportRow[]): ParsedReportRow[] => {
+  const byMarker = new Map(rows.map((row) => [row.marker, row]));
+  const hasMarker = (marker: string) => byMarker.has(marker);
+  const getMarker = (...markers: string[]) => markers.map((marker) => byMarker.get(marker)).find(Boolean);
+  const derivedRows: ParsedReportRow[] = [];
+
+  const neutrophils = getMarker("Neutrophils", "Polymorphs");
+  const lymphocytes = getMarker("Lymphocytes");
+  const anc = getMarker("Absolute Neutrophil Count (ANC)");
+  const alc = getMarker("Absolute Lymphocyte Count (ALC)");
+  const platelets = getMarker("Platelets Count");
+  const totalWbc = getMarker("Total WBC Count");
+
+  const addRatio = (
+    marker: "Neutrophil-Lymphocyte Ratio (NLR)" | "Platelet-Lymphocyte Ratio (PLR)",
+    value: number,
+    note: string
+  ) => {
+    if (!Number.isFinite(value) || value <= 0 || hasMarker(marker)) return;
+    derivedRows.push({
+      markerId: getCanonicalMarkerId(marker),
+      panel: "Derived ratios",
+      marker,
+      value: formatDerivedRatio(value),
+      unit: "ratio",
+      status: "unknown",
+      note,
+      source: "deterministic"
+    });
+  };
+
+  const ancValue = markerNumericValue(anc);
+  const alcValue = markerNumericValue(alc);
+  const neutrophilValue = markerNumericValue(neutrophils);
+  const lymphocyteValue = markerNumericValue(lymphocytes);
+  const plateletValue = markerNumericValue(platelets);
+  const wbcValue = markerNumericValue(totalWbc);
+
+  if (ancValue && alcValue) {
+    addRatio(
+      "Neutrophil-Lymphocyte Ratio (NLR)",
+      ancValue / alcValue,
+      "Derived from absolute neutrophil and absolute lymphocyte counts."
+    );
+  } else if (
+    neutrophilValue &&
+    lymphocyteValue &&
+    rowLooksLikePercent(neutrophils) &&
+    rowLooksLikePercent(lymphocytes)
+  ) {
+    addRatio(
+      "Neutrophil-Lymphocyte Ratio (NLR)",
+      neutrophilValue / lymphocyteValue,
+      "Derived from neutrophil and lymphocyte percentages."
+    );
+  }
+
+  const effectiveAlc =
+    alcValue ||
+    (wbcValue && lymphocyteValue && rowLooksLikePercent(lymphocytes)
+      ? (wbcValue * lymphocyteValue) / 100
+      : lymphocyteValue && !rowLooksLikePercent(lymphocytes)
+      ? lymphocyteValue
+      : null);
+
+  if (plateletValue && effectiveAlc) {
+    addRatio(
+      "Platelet-Lymphocyte Ratio (PLR)",
+      plateletValue / effectiveAlc,
+      alcValue
+        ? "Derived from platelet count and absolute lymphocyte count."
+        : "Derived from platelet count, total WBC count, and lymphocyte percentage."
+    );
+  }
+
+  return derivedRows.length > 0 ? [...rows, ...derivedRows] : rows;
+};
+
 const enforceDifferentialLabelStrictness = (
   rows: ExtractedReportRow[],
   candidateRowTexts: string[]
@@ -1783,7 +1899,7 @@ const mergeAnalysisWithParsedRows = (
 ): BloodworkAnalysis => {
   const candidateRowTexts = diagnostics?.candidateRowTexts || [];
   const mergedRows = mergeWithCandidateDerivedRows(rows, candidateRowTexts);
-  const parsedRows = finalizeParsedRows(mergedRows);
+  const parsedRows = addDerivedRatioRows(finalizeParsedRows(mergedRows));
   const completeness = computeExtractionCompleteness(
     mergedRows,
     candidateRowTexts,
