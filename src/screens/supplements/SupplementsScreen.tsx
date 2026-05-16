@@ -18,7 +18,11 @@ import { SUPPLEMENT_DESCRIPTIONS } from "../../data/supplementDescriptions";
 import { persistentStorage } from "../../services/persistentStorage";
 import { useAuth } from "../../services/auth";
 import { fetchLatestBloodworkRecord } from "../../services/bloodworkApi";
-import { CUSTOM_BLEND_SERVING_GRAMS, getCustomBlendPlan } from "../../utils/customBlend";
+import {
+  CUSTOM_BLEND_SERVING_GRAMS,
+  getCustomBlendDisplayRecommendations,
+  getCustomBlendPlan
+} from "../../utils/customBlend";
 
 type DisplaySupplementContent = {
   benefits: string[];
@@ -204,12 +208,13 @@ const SupplementsScreen = () => {
   const servingsPerMonth = 28;
   const bottlesPerMonth = 2;
   const monthPrice = 85;
-  const blendPlan = getCustomBlendPlan(displayRecommendations);
+  const blendRecommendations = getCustomBlendDisplayRecommendations(displayRecommendations);
+  const blendPlan = getCustomBlendPlan(blendRecommendations);
 
   const generateSummary = () => {
     const supplementNames = blendPlan.activeRecommendations.length > 0
       ? blendPlan.activeRecommendations.map((recommendation) => recommendation.supplementName).join(", ")
-      : displayRecommendations.map((recommendation) => recommendation.supplementName).join(", ");
+      : blendRecommendations.map((recommendation) => recommendation.supplementName).join(", ");
     const proteinBase = `${blendPlan.proteinBase.supplementName} (${blendPlan.proteinBaseGrams} g)`;
     const oatBase = `${blendPlan.oatBase.supplementName} (${blendPlan.oatBaseGrams} g)`;
     const baseText = t("supplements.baseBlend", { protein: proteinBase, fiber: oatBase });
@@ -282,7 +287,7 @@ const SupplementsScreen = () => {
       </Card>
 
       <div style={styles.cardList}>
-        {displayRecommendations.map((recommendation, index) => {
+        {blendRecommendations.map((recommendation, index) => {
           const supplementDetails = getSupplementDetails(recommendation.supplementId);
           const content = translatedContent[recommendation.supplementId];
           const description = content?.description ?? SUPPLEMENT_DESCRIPTIONS[recommendation.supplementId];

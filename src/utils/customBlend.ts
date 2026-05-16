@@ -16,6 +16,18 @@ const DEFAULT_OAT_BASE = {
   supplementName: "Australian Instant Oats"
 };
 
+const createDefaultProteinBaseRecommendation = (): SupplementRecommendation => ({
+  ...DEFAULT_PROTEIN_BASE,
+  priority: "low",
+  reason: "Base blend protein for the custom serving."
+});
+
+const createDefaultOatBaseRecommendation = (): SupplementRecommendation => ({
+  ...DEFAULT_OAT_BASE,
+  priority: "low",
+  reason: "Base blend oats for the custom serving."
+});
+
 const roundGrams = (grams: number) => Number(grams.toFixed(2));
 
 export const isProteinBaseRecommendation = (recommendation: Pick<SupplementRecommendation, "supplementId">) =>
@@ -67,28 +79,18 @@ export const getCustomBlendPlan = (recommendations: SupplementRecommendation[]) 
 };
 
 export const ensureCustomBlendBaseRecommendations = (recommendations: SupplementRecommendation[]) => {
-  const hasProteinBase = recommendations.some(isProteinBaseRecommendation);
-  const hasOatBase = recommendations.some(isOatBaseRecommendation);
-  const baseRecommendations: SupplementRecommendation[] = [];
+  const activeRecommendations = recommendations.filter((recommendation) => !isBaseRecommendation(recommendation));
+  const proteinBase =
+    recommendations.find(isProteinBaseRecommendation) ||
+    createDefaultProteinBaseRecommendation();
+  const oatBase =
+    recommendations.find(isOatBaseRecommendation) ||
+    createDefaultOatBaseRecommendation();
 
-  if (!hasProteinBase) {
-    baseRecommendations.push({
-      ...DEFAULT_PROTEIN_BASE,
-      priority: "low",
-      reason: "Base blend protein for the custom serving."
-    });
-  }
-
-  if (!hasOatBase) {
-    baseRecommendations.push({
-      ...DEFAULT_OAT_BASE,
-      priority: "low",
-      reason: "Base blend oats for the custom serving."
-    });
-  }
-
-  return [...recommendations, ...baseRecommendations];
+  return [...activeRecommendations, proteinBase, oatBase];
 };
+
+export const getCustomBlendDisplayRecommendations = ensureCustomBlendBaseRecommendations;
 
 export const withCustomBlendDosages = (recommendations: SupplementRecommendation[]) => {
   const recommendationsWithBases = ensureCustomBlendBaseRecommendations(recommendations);
