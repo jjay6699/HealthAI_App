@@ -4,6 +4,7 @@ import Card from "../../components/Card";
 import SectionHeader from "../../components/SectionHeader";
 import Button from "../../components/Button";
 import Dialog from "../../components/Dialog";
+import SubscriptionUpgradeModal from "../../components/SubscriptionUpgradeModal";
 import { SHOW_LANGUAGE_SWITCHER } from "../../config/features";
 import { AppTheme, useTheme } from "../../theme";
 import { generateProfileSummary, translateDailyProfileSummary } from "../../services/openai";
@@ -208,6 +209,7 @@ const ProfileScreen = () => {
   const [subscriptionPayload, setSubscriptionPayload] = useState<SubscriptionPayload | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(true);
   const [subscriptionActionLoading, setSubscriptionActionLoading] = useState(false);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const hasHydratedShippingRef = React.useRef(false);
 
   const [editState, setEditState] = useState<null | {
@@ -1136,19 +1138,34 @@ const ProfileScreen = () => {
 
   const subscription = subscriptionPayload?.subscription;
   const subscriptionTier = subscription?.label || "Free";
+  const subscriptionLimit = subscription?.reportLimit ?? 1;
+  const subscriptionRemaining = subscription?.reportRemaining ?? 0;
+  const subscriptionUsed = Math.max(0, subscriptionLimit - subscriptionRemaining);
+  const subscriptionProgress = subscriptionLimit > 0 ? Math.min(100, (subscriptionUsed / subscriptionLimit) * 100) : 0;
+  const reportNoun = subscriptionRemaining === 1 ? "report credit" : "report credits";
   const subscriptionReportsText = subscriptionLoading
     ? "Loading report allowance..."
     : subscription
-    ? `${subscription.reportRemaining} of ${subscription.reportLimit} report analyses remaining${subscription.lifetimeLimit ? " lifetime" : " this billing cycle"}`
+    ? `${subscriptionRemaining} ${reportNoun} left ${subscription.lifetimeLimit ? "on your lifetime trial" : "this billing cycle"}`
     : "Unable to load report allowance.";
   const subscriptionRenewsText =
     subscription?.currentPeriodEnd && !subscription.lifetimeLimit
       ? `Renews ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`
-      : "AI chat is always included.";
+      : "Unlimited AI chat is included with every plan.";
 
   const handleManageSubscription = async () => {
     if (subscription?.tier === "free") {
-      navigate("/upload");
+      if (!subscriptionPayload) {
+        setSubscriptionLoading(true);
+        try {
+          setSubscriptionPayload(await fetchSubscriptionStatus());
+        } catch (error) {
+          console.error("Failed to load subscription status:", error);
+        } finally {
+          setSubscriptionLoading(false);
+        }
+      }
+      setShowSubscriptionModal(true);
       return;
     }
 
@@ -1196,9 +1213,9 @@ const ProfileScreen = () => {
       <Card style={styles.card}>
         <div style={styles.subscriptionHeader}>
           <div>
-            <span style={styles.subscriptionEyebrow}>Subscription</span>
+            <span style={styles.subscriptionEyebrow}>Plan & report credits</span>
             <div style={styles.subscriptionTitleRow}>
-              <h2 style={styles.subscriptionTitle}>{subscriptionTier}</h2>
+              <h2 style={styles.subscriptionTitle}>{subscriptionTier} plan</h2>
               <span style={styles.subscriptionBadge}>{subscription?.tier?.toUpperCase() || "FREE"}</span>
             </div>
           </div>
@@ -1214,6 +1231,9 @@ const ProfileScreen = () => {
               ? "View plans"
               : "Manage"}
           </button>
+        </div>
+        <div style={styles.subscriptionProgressTrack}>
+          <span style={{ ...styles.subscriptionProgressFill, width: `${subscriptionProgress}%` }} />
         </div>
         <p style={styles.subscriptionBody}>{subscriptionReportsText}</p>
         <p style={styles.subscriptionMeta}>{subscriptionRenewsText}</p>
@@ -1873,6 +1893,13 @@ const ProfileScreen = () => {
           </div>
         </Dialog>
       ) : null}
+
+      {showSubscriptionModal ? (
+        <SubscriptionUpgradeModal
+          payload={subscriptionPayload}
+          onClose={() => setShowSubscriptionModal(false)}
+        />
+      ) : null}
     </div>
   );
 };
@@ -2094,7 +2121,8 @@ const createStyles = (theme: AppTheme) => ({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: theme.spacing.md
+    gap: theme.spacing.md,
+    paddingBottom: theme.spacing.xs
   },
   subscriptionEyebrow: {
     fontSize: 12,
@@ -2117,7 +2145,7 @@ const createStyles = (theme: AppTheme) => ({
   },
   subscriptionBadge: {
     borderRadius: theme.radii.pill,
-    background: theme.colors.accentPeach,
+    background: `${theme.colors.primary}18`,
     color: theme.colors.primary,
     fontSize: 11,
     fontWeight: 800,
@@ -2125,7 +2153,7 @@ const createStyles = (theme: AppTheme) => ({
   },
   subscriptionButton: {
     border: `1px solid ${theme.colors.divider}`,
-    background: theme.colors.surface,
+    background: theme.colors.background,
     color: theme.colors.primary,
     borderRadius: theme.radii.md,
     padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
@@ -2134,6 +2162,19 @@ const createStyles = (theme: AppTheme) => ({
     cursor: "pointer",
     fontFamily: "inherit",
     whiteSpace: "nowrap" as const
+  },
+  subscriptionProgressTrack: {
+    width: "100%",
+    height: 8,
+    overflow: "hidden",
+    borderRadius: theme.radii.pill,
+    background: theme.colors.surfaceMuted
+  },
+  subscriptionProgressFill: {
+    display: "block",
+    height: "100%",
+    borderRadius: theme.radii.pill,
+    background: `linear-gradient(90deg, ${theme.colors.primary}, #E7B87C)`
   },
   subscriptionBody: {
     margin: 0,
