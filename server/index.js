@@ -3196,7 +3196,7 @@ app.post(
               }
             }
       ],
-      success_url: `${baseOrigin}/upload?subscription=success`,
+      success_url: `${baseOrigin}/upload?subscription=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseOrigin}/upload?subscription=cancelled`,
       metadata: {
         userId: user.id,
@@ -3241,6 +3241,49 @@ app.post(
     });
 
     return res.json({ url: session.url });
+  })
+);
+
+app.post(
+  "/api/subscription/confirm-checkout",
+  asyncHandler(async (req, res) => {
+    if (!stripe) {
+      return res.status(503).json({ error: "stripe_not_configured" });
+    }
+
+    const user = getAuthedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "auth_required" });
+    }
+
+    const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId.trim() : "";
+    if (!sessionId) {
+      return res.status(400).json({ error: "stripe_session_required" });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (!session || session.mode !== "subscription") {
+      return res.status(404).json({ error: "stripe_session_not_found" });
+    }
+    if (session.status !== "complete") {
+      return res.status(409).json({ error: "stripe_session_not_complete" });
+    }
+    if (session.client_reference_id && session.client_reference_id !== user.id) {
+      return res.status(403).json({ error: "stripe_session_forbidden" });
+    }
+    if (!session.subscription) {
+      return res.status(409).json({ error: "stripe_subscription_missing" });
+    }
+
+    const subscription = await stripe.subscriptions.retrieve(
+      typeof session.subscription === "string" ? session.subscription : session.subscription.id
+    );
+    upsertSubscriptionFromStripeSubscription(subscription);
+
+    return res.json({
+      subscription: getReportAllowanceStatus(user.id),
+      plans: getAvailableSubscriptionPlans()
+    });
   })
 );
 

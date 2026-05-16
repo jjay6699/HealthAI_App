@@ -62,6 +62,16 @@ export const createSubscriptionPortalSession = async () => {
   return parsePayload(response) as Promise<{ url: string }>;
 };
 
+export const confirmSubscriptionCheckout = async (sessionId: string): Promise<SubscriptionPayload> => {
+  const response = await fetch("/api/subscription/confirm-checkout", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sessionId })
+  });
+  return parsePayload(response) as Promise<SubscriptionPayload>;
+};
+
 export const reserveReportAnalysis = async () => {
   const response = await fetch("/api/report-analysis/reserve", {
     method: "POST",

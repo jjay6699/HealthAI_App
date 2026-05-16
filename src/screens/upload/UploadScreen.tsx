@@ -25,6 +25,7 @@ import {
 } from "../../services/bloodworkApi";
 import {
   SubscriptionPayload,
+  confirmSubscriptionCheckout,
   consumeReportAnalysis,
   fetchSubscriptionStatus,
   releaseReportAnalysis,
@@ -98,6 +99,19 @@ const UploadScreen = () => {
     let cancelled = false;
 
     const loadPastUploads = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const subscriptionSessionId = params.get("session_id");
+      if (params.get("subscription") === "success" && subscriptionSessionId) {
+        confirmSubscriptionCheckout(subscriptionSessionId)
+          .then((payload) => {
+            if (!cancelled) setSubscriptionPayload(payload);
+          })
+          .catch((error) => {
+            console.error("Failed to confirm subscription checkout:", error);
+          });
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+
       const raw = persistentStorage.getItem(scopedKey("bloodworkHistory"));
       let localHistory: PastUploadEntry[] = [];
       if (raw) {

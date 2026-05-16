@@ -13,6 +13,11 @@ import { Language, useI18n } from "../../i18n";
 import { fetchUserProfile, saveUserProfile } from "../../services/profileApi";
 import { fetchShippingAddresses, saveShippingAddresses, ShippingAddressRecord } from "../../services/shippingApi";
 import {
+  SubscriptionPayload,
+  createSubscriptionPortalSession,
+  fetchSubscriptionStatus
+} from "../../services/subscriptionApi";
+import {
   BloodPressureEntry,
   FastingGlucoseEntry,
   WeightEntry,
@@ -200,6 +205,9 @@ const ProfileScreen = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState("");
+  const [subscriptionPayload, setSubscriptionPayload] = useState<SubscriptionPayload | null>(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true);
+  const [subscriptionActionLoading, setSubscriptionActionLoading] = useState(false);
   const hasHydratedShippingRef = React.useRef(false);
 
   const [editState, setEditState] = useState<null | {
@@ -494,6 +502,32 @@ const ProfileScreen = () => {
     };
 
     void loadOrders();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSubscription = async () => {
+      setSubscriptionLoading(true);
+      try {
+        const payload = await fetchSubscriptionStatus();
+        if (!cancelled) {
+          setSubscriptionPayload(payload);
+        }
+      } catch (error) {
+        console.error("Failed to load subscription status:", error);
+      } finally {
+        if (!cancelled) {
+          setSubscriptionLoading(false);
+        }
+      }
+    };
+
+    void loadSubscription();
 
     return () => {
       cancelled = true;
@@ -1100,6 +1134,35 @@ const ProfileScreen = () => {
     fetchProfileSummary();
   }, [profileSummaryInput, language]);
 
+  const subscription = subscriptionPayload?.subscription;
+  const subscriptionTier = subscription?.label || "Free";
+  const subscriptionReportsText = subscriptionLoading
+    ? "Loading report allowance..."
+    : subscription
+    ? `${subscription.reportRemaining} of ${subscription.reportLimit} report analyses remaining${subscription.lifetimeLimit ? " lifetime" : " this billing cycle"}`
+    : "Unable to load report allowance.";
+  const subscriptionRenewsText =
+    subscription?.currentPeriodEnd && !subscription.lifetimeLimit
+      ? `Renews ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`
+      : "AI chat is always included.";
+
+  const handleManageSubscription = async () => {
+    if (subscription?.tier === "free") {
+      navigate("/upload");
+      return;
+    }
+
+    setSubscriptionActionLoading(true);
+    try {
+      const session = await createSubscriptionPortalSession();
+      window.location.assign(session.url);
+    } catch (error) {
+      console.error("Failed to open billing portal:", error);
+      alert("Unable to open subscription management right now.");
+      setSubscriptionActionLoading(false);
+    }
+  };
+
   return (
     <div style={styles.page}>
       <header style={styles.hero}>
@@ -1130,6 +1193,31 @@ const ProfileScreen = () => {
           </button>
         </div>
       </header>
+      <Card style={styles.card}>
+        <div style={styles.subscriptionHeader}>
+          <div>
+            <span style={styles.subscriptionEyebrow}>Subscription</span>
+            <div style={styles.subscriptionTitleRow}>
+              <h2 style={styles.subscriptionTitle}>{subscriptionTier}</h2>
+              <span style={styles.subscriptionBadge}>{subscription?.tier?.toUpperCase() || "FREE"}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            style={styles.subscriptionButton}
+            onClick={handleManageSubscription}
+            disabled={subscriptionActionLoading || subscriptionLoading}
+          >
+            {subscriptionActionLoading
+              ? "Opening..."
+              : subscription?.tier === "free" || !subscription
+              ? "View plans"
+              : "Manage"}
+          </button>
+        </div>
+        <p style={styles.subscriptionBody}>{subscriptionReportsText}</p>
+        <p style={styles.subscriptionMeta}>{subscriptionRenewsText}</p>
+      </Card>
       <Card style={styles.card}>
         <div style={styles.aiSummaryHeader}>
           <SectionHeader title={t("profile.dailyInsight")} />
@@ -2001,6 +2089,62 @@ const createStyles = (theme: AppTheme) => ({
     flexDirection: "column" as const,
     gap: theme.spacing.sm,
     width: "100%"
+  },
+  subscriptionHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.md
+  },
+  subscriptionEyebrow: {
+    fontSize: 12,
+    fontWeight: 800,
+    color: theme.colors.primary,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.8
+  },
+  subscriptionTitleRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs
+  },
+  subscriptionTitle: {
+    margin: 0,
+    fontSize: 22,
+    fontWeight: 800,
+    color: theme.colors.text
+  },
+  subscriptionBadge: {
+    borderRadius: theme.radii.pill,
+    background: theme.colors.accentPeach,
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: 800,
+    padding: "5px 9px"
+  },
+  subscriptionButton: {
+    border: `1px solid ${theme.colors.divider}`,
+    background: theme.colors.surface,
+    color: theme.colors.primary,
+    borderRadius: theme.radii.md,
+    padding: `${theme.spacing.sm}px ${theme.spacing.md}px`,
+    fontSize: 12,
+    fontWeight: 800,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    whiteSpace: "nowrap" as const
+  },
+  subscriptionBody: {
+    margin: 0,
+    fontSize: 14,
+    lineHeight: "22px",
+    color: theme.colors.text
+  },
+  subscriptionMeta: {
+    margin: 0,
+    fontSize: 13,
+    color: theme.colors.textSecondary
   },
   aiSummaryHeader: {
     display: "flex",
