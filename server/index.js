@@ -1226,7 +1226,7 @@ const buildOrderEmailHtml = ({ heading, intro, order, recommendations, deliveryA
       <p><strong>Status:</strong> ${order.status}</p>
       ${
         order.couponCode
-          ? `<p><strong>Referral / coupon code:</strong> ${order.couponCode}</p>`
+          ? `<p><strong>Discount coupon code:</strong> ${order.couponCode}</p>`
           : ""
       }
       <h3>Supplements</h3>
@@ -2289,28 +2289,36 @@ app.post(
 
     if (couponCode) {
       const normalizedCouponCode = normalizeCouponCode(couponCode);
-      if (normalizedCouponCode && normalizedCouponCode !== "__INVALID__") {
-        const discountCouponRecord = stmtGetDiscountCouponByCode.get(normalizedCouponCode);
-        if (discountCouponRecord) {
-          const discountCoupon = formatDiscountCouponForResponse(discountCouponRecord);
-          const discountResult = computeDiscountForSubtotal({ coupon: discountCoupon, subtotal: price });
-          if (discountResult.isValid) {
-            if (discountCoupon.perUserLimit != null) {
-              const usageByUser = stmtCountCouponRedemptionsByUser.get(discountCoupon.id, user.id);
-              const alreadyUsed = Number(usageByUser?.count || 0);
-              if (alreadyUsed < discountCoupon.perUserLimit) {
-                finalPrice = discountResult.total;
-                appliedDiscountCouponId = discountCoupon.id;
-                appliedDiscountAmount = discountResult.discountAmount;
-              }
-            } else {
-              finalPrice = discountResult.total;
-              appliedDiscountCouponId = discountCoupon.id;
-              appliedDiscountAmount = discountResult.discountAmount;
-            }
-          }
+      if (!normalizedCouponCode || normalizedCouponCode === "__INVALID__") {
+        return res.status(400).json({ error: "invalid_coupon_code" });
+      }
+
+      const discountCouponRecord = stmtGetDiscountCouponByCode.get(normalizedCouponCode);
+      if (!discountCouponRecord) {
+        return res.status(404).json({ error: "coupon_not_found" });
+      }
+
+      const discountCoupon = formatDiscountCouponForResponse(discountCouponRecord);
+      const discountResult = computeDiscountForSubtotal({ coupon: discountCoupon, subtotal: price });
+      if (!discountResult.isValid) {
+        return res.status(409).json({
+          error: "coupon_not_applicable",
+          reason: discountResult.reason,
+          ...(discountResult.minimumSubtotal != null ? { minimumSubtotal: discountResult.minimumSubtotal } : null)
+        });
+      }
+
+      if (discountCoupon.perUserLimit != null) {
+        const usageByUser = stmtCountCouponRedemptionsByUser.get(discountCoupon.id, user.id);
+        const alreadyUsed = Number(usageByUser?.count || 0);
+        if (alreadyUsed >= discountCoupon.perUserLimit) {
+          return res.status(409).json({ error: "coupon_not_applicable", reason: "per_user_limit_reached" });
         }
       }
+
+      finalPrice = discountResult.total;
+      appliedDiscountCouponId = discountCoupon.id;
+      appliedDiscountAmount = discountResult.discountAmount;
     }
 
     const normalizeOrigin = (value) => {
@@ -2618,10 +2626,11 @@ app.post(
     const price = Number(req.body?.price);
     const paymentMethod =
       typeof req.body?.paymentMethod === "string" ? req.body.paymentMethod.trim() : null;
-    const couponCode =
+    const couponCodeRaw =
       typeof req.body?.couponCode === "string" && req.body.couponCode.trim()
         ? req.body.couponCode.trim()
         : null;
+    let couponCode = couponCodeRaw;
     const recommendations = Array.isArray(req.body?.recommendations)
       ? req.body.recommendations
       : [];
@@ -2642,6 +2651,17 @@ app.post(
 
     if (!plan || !Number.isFinite(price) || price < 0) {
       return res.status(400).json({ error: "invalid_order_payload" });
+    }
+
+    if (couponCode) {
+      const normalizedCouponCode = normalizeCouponCode(couponCode);
+      if (!normalizedCouponCode || normalizedCouponCode === "__INVALID__") {
+        return res.status(400).json({ error: "invalid_coupon_code" });
+      }
+      if (!stmtGetDiscountCouponByCode.get(normalizedCouponCode)) {
+        return res.status(404).json({ error: "coupon_not_found" });
+      }
+      couponCode = normalizedCouponCode;
     }
 
     const orderRecord = createOrderRecord({

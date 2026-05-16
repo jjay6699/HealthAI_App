@@ -4,6 +4,8 @@ export type SubscriptionStatus = {
   tier: SubscriptionTier;
   label: string;
   status?: string | null;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
   currentPeriodStart?: number | null;
   currentPeriodEnd?: number | null;
   cancelAtPeriodEnd?: boolean;
