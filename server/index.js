@@ -196,6 +196,7 @@ db.exec(`
     phone TEXT NOT NULL,
     addressLine1 TEXT NOT NULL,
     addressLine2 TEXT,
+    country TEXT NOT NULL DEFAULT 'Malaysia',
     city TEXT NOT NULL,
     state TEXT NOT NULL,
     postcode TEXT NOT NULL,
@@ -228,6 +229,15 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_user_bloodwork_records_userId
     ON user_bloodwork_records(userId, createdAt DESC);
 `);
+
+const hasShippingAddressColumn = (columnName) =>
+  db
+    .prepare("SELECT 1 FROM pragma_table_info('user_shipping_addresses') WHERE name = ?")
+    .get(columnName);
+
+if (!hasShippingAddressColumn("country")) {
+  db.exec("ALTER TABLE user_shipping_addresses ADD COLUMN country TEXT NOT NULL DEFAULT 'Malaysia'");
+}
 
 const stmtGetAll = db.prepare(
   "SELECT key, value, updatedAt FROM kv WHERE clientId = ? ORDER BY key ASC"
@@ -288,6 +298,7 @@ const stmtListShippingAddressesByUser = db.prepare(`
     phone,
     addressLine1,
     addressLine2,
+    country,
     city,
     state,
     postcode,
@@ -310,6 +321,7 @@ const stmtInsertShippingAddress = db.prepare(`
     phone,
     addressLine1,
     addressLine2,
+    country,
     city,
     state,
     postcode,
@@ -317,7 +329,7 @@ const stmtInsertShippingAddress = db.prepare(`
     isDefault,
     createdAt,
     updatedAt
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const stmtGetUserHealthMetrics = db.prepare(
   "SELECT userId, dataJson, updatedAt FROM user_health_metrics WHERE userId = ?"
@@ -1012,7 +1024,8 @@ const buildOrderEmailHtml = ({ heading, intro, order, recommendations, deliveryA
         ${deliveryAddress.addressLine1 || ""}<br />
         ${deliveryAddress.addressLine2 ? `${deliveryAddress.addressLine2}<br />` : ""}
         ${deliveryAddress.postcode || ""} ${deliveryAddress.city || ""}<br />
-        ${deliveryAddress.state || ""}
+        ${deliveryAddress.state || ""}<br />
+        ${deliveryAddress.country || "Malaysia"}
       </p>`
     : "<p>No delivery address provided.</p>";
 
@@ -1175,6 +1188,28 @@ const normalizeProfilePayload = (value) => {
   return Object.fromEntries(entries);
 };
 
+const normalizeDeliveryCountry = (value) => {
+  if (value === "Singapore") return "Singapore";
+  return "Malaysia";
+};
+
+const getBottleCountForPlan = (plan) => {
+  switch (plan) {
+    case "one-bottle":
+      return 1;
+    case "three-months":
+      return 6;
+    case "one-month":
+    default:
+      return 2;
+  }
+};
+
+const calculateDeliveryFee = ({ country, plan }) => {
+  if (normalizeDeliveryCountry(country) !== "Singapore") return 0;
+  return getBottleCountForPlan(plan) <= 1 ? 25 : 50;
+};
+
 const normalizeShippingAddressList = (value) => {
   if (!Array.isArray(value)) return null;
 
@@ -1186,8 +1221,12 @@ const normalizeShippingAddressList = (value) => {
       const phone = typeof entry.phone === "string" ? entry.phone.trim() : "";
       const addressLine1 = typeof entry.addressLine1 === "string" ? entry.addressLine1.trim() : "";
       const addressLine2 = typeof entry.addressLine2 === "string" ? entry.addressLine2.trim() : "";
+      const country = normalizeDeliveryCountry(entry.country);
       const city = typeof entry.city === "string" ? entry.city.trim() : "";
-      const state = typeof entry.state === "string" ? entry.state.trim() : "";
+      const state =
+        country === "Singapore"
+          ? "Singapore"
+          : typeof entry.state === "string" ? entry.state.trim() : "";
       const postcode = typeof entry.postcode === "string" ? entry.postcode.trim() : "";
       const specialInstructions =
         typeof entry.specialInstructions === "string" ? entry.specialInstructions.trim() : "";
@@ -1205,6 +1244,7 @@ const normalizeShippingAddressList = (value) => {
         phone,
         addressLine1,
         addressLine2,
+        country,
         city,
         state,
         postcode,
@@ -1269,6 +1309,7 @@ const replaceShippingAddressesForUser = db.transaction((userId, addresses) => {
       address.phone,
       address.addressLine1,
       address.addressLine2 || null,
+      address.country || "Malaysia",
       address.city,
       address.state,
       address.postcode,
@@ -1908,6 +1949,15 @@ app.post(
       return res.status(400).json({ error: "invalid_order_payload" });
     }
 
+    const deliveryCountry = normalizeDeliveryCountry(deliveryAddress?.country);
+    const normalizedDeliveryAddress = deliveryAddress
+      ? {
+          ...deliveryAddress,
+          country: deliveryCountry,
+          state: deliveryCountry === "Singapore" ? "Singapore" : deliveryAddress.state
+        }
+      : null;
+    const shippingFee = calculateDeliveryFee({ country: deliveryCountry, plan });
     let finalPrice = price;
     let appliedDiscountCouponId = null;
     let appliedDiscountAmount = 0;
@@ -1983,6 +2033,34 @@ app.post(
 
     const successUrl = `${baseOrigin}/order-confirmation?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${baseOrigin}/payment?stripe_cancelled=1`;
+    const finalCheckoutPrice = finalPrice + shippingFee;
+    const lineItems = [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "myr",
+          unit_amount: Math.round(finalPrice * 100),
+          product_data: {
+            name: `RicHealth AI Custom Blend - ${planLabel || plan}`,
+            description: `${recommendations.length} nutrition item${recommendations.length === 1 ? "" : "s"}`
+          }
+        }
+      }
+    ];
+
+    if (shippingFee > 0) {
+      lineItems.push({
+        quantity: 1,
+        price_data: {
+          currency: "myr",
+          unit_amount: Math.round(shippingFee * 100),
+          product_data: {
+            name: `Delivery to ${deliveryCountry}`,
+            description: "Shipping fee"
+          }
+        }
+      });
+    }
 
     let session;
     try {
@@ -2000,27 +2078,15 @@ app.post(
         payment_method_types: ["card", "fpx", "grabpay"],
         // FPX eligibility note:
         // Stripe will only *display* FPX when the session is eligible (typically MYR
-        // and a Malaysia customer context). We help Stripe infer this by collecting
-        // a Malaysia shipping address on the hosted page.
-        shipping_address_collection: { allowed_countries: ["MY"] },
+        // and a Malaysia customer context). We collect Malaysia/Singapore addresses
+        // here because app checkout currently supports only those delivery countries.
+        shipping_address_collection: { allowed_countries: ["MY", "SG"] },
         phone_number_collection: { enabled: true },
         billing_address_collection: "required",
         customer_email: user.email || undefined,
         client_reference_id: user.id,
         customer_creation: "always",
-        line_items: [
-          {
-            quantity: 1,
-            price_data: {
-              currency: "myr",
-              unit_amount: Math.round(finalPrice * 100),
-              product_data: {
-                name: `RicHealth AI Custom Blend - ${planLabel || plan}`,
-                description: `${recommendations.length} nutrition item${recommendations.length === 1 ? "" : "s"}`
-              }
-            }
-          }
-        ],
+        line_items: lineItems,
         success_url: successUrl,
         cancel_url: cancelUrl,
         metadata: {
@@ -2029,7 +2095,9 @@ app.post(
           planLabel: planLabel || "",
           couponCode: couponCode || "",
           discountCouponId: appliedDiscountCouponId || "",
-          discountAmount: appliedDiscountAmount ? String(appliedDiscountAmount) : ""
+          discountAmount: appliedDiscountAmount ? String(appliedDiscountAmount) : "",
+          shippingFee: shippingFee ? String(shippingFee) : "",
+          deliveryCountry
         }
       });
     } catch (error) {
@@ -2072,15 +2140,16 @@ app.post(
       JSON.stringify({
         plan,
         planLabel,
-        price: finalPrice,
+        price: finalCheckoutPrice,
         // Note: the final payment method is resolved during confirm-stripe
         // (based on the PaymentIntent / Charge details).
         paymentMethod: "stripe",
         couponCode,
         discountCouponId: appliedDiscountCouponId,
         discountAmount: appliedDiscountAmount,
+        shippingFee,
         recommendations,
-        deliveryAddress
+        deliveryAddress: normalizedDeliveryAddress
       }),
       Date.now()
     );
@@ -2457,6 +2526,7 @@ app.get(
       phone: address.phone,
       addressLine1: address.addressLine1,
       addressLine2: address.addressLine2 || "",
+      country: address.country || "Malaysia",
       city: address.city,
       state: address.state,
       postcode: address.postcode,

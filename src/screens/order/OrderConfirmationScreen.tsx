@@ -6,6 +6,7 @@ import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
 import { useAuth } from "../../services/auth";
+import { calculateDeliveryFee } from "../../utils/shipping";
 
 interface LastOrder {
   orderNumber: string;
@@ -14,6 +15,7 @@ interface LastOrder {
   planLabel?: string;
   price: number;
   recommendations: any[];
+  deliveryAddress?: { country?: string } | null;
   status?: string;
 }
 
@@ -118,6 +120,8 @@ const OrderConfirmationScreen = () => {
 
   const estimatedDelivery = new Date();
   estimatedDelivery.setDate(estimatedDelivery.getDate() + 5);
+  const shippingFee = calculateDeliveryFee(order.deliveryAddress?.country, order.plan);
+  const blendSubtotal = Math.max(order.price - shippingFee, 0);
 
   return (
     <div style={styles.page}>
@@ -152,11 +156,13 @@ const OrderConfirmationScreen = () => {
         <h3 style={styles.cardTitle}>{t("order.confirm.summary")}</h3>
         <div style={styles.summaryRow}>
           <span style={styles.summaryLabel}>{t("order.confirm.customBlend", { plan: order.planLabel || order.plan })}</span>
-          <span style={styles.summaryValue}>RM{order.price.toFixed(2)}</span>
+          <span style={styles.summaryValue}>RM{blendSubtotal.toFixed(2)}</span>
         </div>
         <div style={styles.summaryRow}>
           <span style={styles.summaryLabel}>{t("order.confirm.shipping")}</span>
-          <span style={styles.summaryValueFree}>{t("order.confirm.free")}</span>
+          <span style={shippingFee > 0 ? styles.summaryValue : styles.summaryValueFree}>
+            {shippingFee > 0 ? `RM${shippingFee.toFixed(2)}` : t("order.confirm.free")}
+          </span>
         </div>
         <div style={styles.divider} />
         <div style={styles.summaryRow}>

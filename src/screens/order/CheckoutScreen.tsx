@@ -7,12 +7,14 @@ import { useI18n } from "../../i18n";
 import { AppTheme, useTheme } from "../../theme";
 import { persistentStorage } from "../../services/persistentStorage";
 import { fetchShippingAddresses, saveShippingAddresses, ShippingAddressRecord } from "../../services/shippingApi";
+import { DELIVERY_COUNTRIES, calculateDeliveryFee } from "../../utils/shipping";
 
 interface OrderDetails {
   plan: string;
   planLabel?: string;
   price: number;
   recommendations: any[];
+  shippingFee?: number;
   couponCode?: string | null;
   couponPreview?: {
     subtotal: number;
@@ -33,6 +35,7 @@ const CheckoutScreen = () => {
     phone: "",
     addressLine1: "",
     addressLine2: "",
+    country: "Malaysia",
     city: "",
     postcode: "",
     state: "",
@@ -88,23 +91,47 @@ const CheckoutScreen = () => {
   }, []);
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+      ...(field === "country" ? { state: value === "Singapore" ? "Singapore" : "" } : {})
+    }));
   };
 
   const handleContinue = async () => {
-    if (!formData.fullName || !formData.phone || !formData.addressLine1 || !formData.city || !formData.postcode || !formData.state) {
+    const requiresState = formData.country === "Malaysia";
+    if (
+      !formData.fullName ||
+      !formData.phone ||
+      !formData.addressLine1 ||
+      !formData.country ||
+      !formData.city ||
+      !formData.postcode ||
+      (requiresState && !formData.state)
+    ) {
       alert(t("order.checkout.requiredFields"));
       return;
     }
 
-    persistentStorage.setItem("deliveryAddress", JSON.stringify(formData));
+    const deliveryAddress = {
+      ...formData,
+      state: formData.country === "Singapore" ? "Singapore" : formData.state
+    };
+
+    persistentStorage.setItem("deliveryAddress", JSON.stringify(deliveryAddress));
+    persistentStorage.setItem("orderDetails", JSON.stringify({
+      ...(orderDetails || {}),
+      shippingFee,
+      total: orderTotal
+    }));
 
     const addressExists = shippingAddresses.some(
       (address) =>
+        (address.country || "Malaysia") === deliveryAddress.country &&
         address.addressLine1 === formData.addressLine1 &&
         address.postcode === formData.postcode &&
         address.city === formData.city &&
-        address.state === formData.state
+        address.state === deliveryAddress.state
     );
 
     if (!addressExists) {
@@ -112,7 +139,7 @@ const CheckoutScreen = () => {
         ...shippingAddresses,
         {
           id: `addr_${Date.now()}`,
-          ...formData,
+          ...deliveryAddress,
           isDefault: shippingAddresses.length === 0
         }
       ];
@@ -144,6 +171,14 @@ const CheckoutScreen = () => {
     "Johor", "Kedah", "Kelantan", "Kuala Lumpur", "Labuan", "Malacca", "Negeri Sembilan",
     "Pahang", "Penang", "Perak", "Perlis", "Putrajaya", "Sabah", "Sarawak", "Selangor", "Terengganu"
   ];
+  const selectedCountry = formData.country || "Malaysia";
+  const getCountryLabel = (country: string) =>
+    country === "Singapore"
+      ? t("order.checkout.country.singapore")
+      : t("order.checkout.country.malaysia");
+  const shippingFee = calculateDeliveryFee(selectedCountry, orderDetails.plan);
+  const discountedSubtotal = orderDetails.couponPreview?.total ?? orderDetails.price;
+  const orderTotal = discountedSubtotal + shippingFee;
 
   return (
     <div style={styles.page}>
@@ -227,18 +262,34 @@ const CheckoutScreen = () => {
         </div>
 
         <div style={styles.formGroup}>
-          <label style={styles.label}>{t("order.checkout.state")}</label>
+          <label style={styles.label}>{t("order.checkout.country")}</label>
           <select
-            value={formData.state}
-            onChange={(event) => handleInputChange("state", event.target.value)}
+            value={selectedCountry}
+            onChange={(event) => handleInputChange("country", event.target.value)}
             style={styles.select}
           >
-            <option value="">{t("order.checkout.selectState")}</option>
-            {malaysianStates.map((state) => (
-              <option key={state} value={state}>{state}</option>
+            <option value="">{t("order.checkout.selectCountry")}</option>
+            {DELIVERY_COUNTRIES.map((country) => (
+              <option key={country} value={country}>{getCountryLabel(country)}</option>
             ))}
           </select>
         </div>
+
+        {selectedCountry === "Malaysia" ? (
+          <div style={styles.formGroup}>
+            <label style={styles.label}>{t("order.checkout.state")}</label>
+            <select
+              value={formData.state}
+              onChange={(event) => handleInputChange("state", event.target.value)}
+              style={styles.select}
+            >
+              <option value="">{t("order.checkout.selectState")}</option>
+              {malaysianStates.map((state) => (
+                <option key={state} value={state}>{state}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
 
         <div style={styles.formGroup}>
           <label style={styles.label}>{t("order.checkout.instructions")}</label>
@@ -271,14 +322,14 @@ const CheckoutScreen = () => {
         ) : null}
         <div style={styles.summaryRow}>
           <span style={styles.summaryLabel}>{t("order.checkout.shipping")}</span>
-          <span style={styles.summaryValueFree}>{t("order.checkout.free")}</span>
+          <span style={shippingFee > 0 ? styles.summaryValue : styles.summaryValueFree}>
+            {shippingFee > 0 ? `RM${shippingFee.toFixed(2)}` : t("order.checkout.free")}
+          </span>
         </div>
         <div style={styles.divider} />
         <div style={styles.summaryRow}>
           <span style={styles.summaryLabelTotal}>{t("order.checkout.total")}</span>
-          <span style={styles.summaryValueTotal}>
-            RM{(orderDetails.couponPreview?.total ?? orderDetails.price).toFixed(2)}
-          </span>
+          <span style={styles.summaryValueTotal}>RM{orderTotal.toFixed(2)}</span>
         </div>
       </Card>
 

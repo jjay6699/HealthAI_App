@@ -4,6 +4,7 @@ export type ShippingAddressRecord = {
   phone: string;
   addressLine1: string;
   addressLine2?: string;
+  country?: string;
   city: string;
   state: string;
   postcode: string;

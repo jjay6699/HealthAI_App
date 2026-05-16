@@ -12,6 +12,8 @@ interface OrderDetails {
   plan: string;
   planLabel?: string;
   price: number;
+  shippingFee?: number;
+  total?: number;
   recommendations: any[];
   couponCode?: string | null;
   couponPreview?: {
@@ -58,6 +60,7 @@ const PaymentScreen = () => {
           plan: orderDetails?.plan,
           planLabel: orderDetails?.planLabel,
           price: orderDetails?.price,
+          shippingFee: orderDetails?.shippingFee || 0,
           recommendations: orderDetails?.recommendations || [],
           couponCode: orderDetails?.couponCode || null,
           deliveryAddress
@@ -93,6 +96,9 @@ const PaymentScreen = () => {
       </div>
     );
   }
+  const shippingFee = orderDetails.shippingFee || 0;
+  const discountedSubtotal = orderDetails.couponPreview?.total ?? orderDetails.price;
+  const orderTotal = orderDetails.total ?? discountedSubtotal + shippingFee;
 
   return (
     <div style={styles.page}>
@@ -120,13 +126,15 @@ const PaymentScreen = () => {
         ) : null}
         <div style={styles.summaryRow}>
           <span style={styles.summaryLabel}>{t("order.payment.shipping")}</span>
-          <span style={styles.summaryValueFree}>{t("order.payment.free")}</span>
+          <span style={shippingFee > 0 ? styles.summaryValue : styles.summaryValueFree}>
+            {shippingFee > 0 ? `RM${shippingFee.toFixed(2)}` : t("order.payment.free")}
+          </span>
         </div>
         <div style={styles.divider} />
         <div style={styles.summaryRow}>
           <span style={styles.summaryLabelTotal}>{t("order.payment.total")}</span>
           <span style={styles.summaryValueTotal}>
-            RM{(orderDetails.couponPreview?.total ?? orderDetails.price).toFixed(2)}
+            RM{orderTotal.toFixed(2)}
           </span>
         </div>
       </Card>
@@ -158,7 +166,7 @@ const PaymentScreen = () => {
             title={
               isProcessing
                 ? t("order.payment.processing")
-                : t("order.payment.complete", { price: orderDetails.couponPreview?.total ?? orderDetails.price })
+                : t("order.payment.complete", { price: orderTotal })
             }
             onClick={handleCompleteOrder}
             loading={isProcessing}
