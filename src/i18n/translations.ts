@@ -89,7 +89,7 @@ const baseTranslations = {
     "upload.doctors.title": "Connect with our doctors and pharmacists (coming soon)",
     "upload.doctors.description":
       "Chat with trusted medical professionals for tailored advice, treatment insights, and support-right when you need it.",
-    "upload.watch.title": "Connect with your smartwatch",
+    "upload.watch.title": "Connect with your smartwatch (coming soon)",
     "upload.watch.description":
       "Sync wearable data to enrich your timeline and personalize recommendations.",
     "upload.pastUploads": "Past uploads",
@@ -716,7 +716,7 @@ const baseTranslations = {
     "upload.file.description": "支持 PDF、JPG、PNG、WEBP。可上传报告或拍摄清晰照片。",
     "upload.doctors.title": "连接医生与药剂师（即将推出）",
     "upload.doctors.description": "与值得信赖的医疗专业人士交流，获取个性化建议、治疗洞察和支持。",
-    "upload.watch.title": "连接你的智能手表",
+    "upload.watch.title": "连接你的智能手表（即将推出）",
     "upload.watch.description": "同步可穿戴设备数据，丰富你的时间线并提升个性化建议。",
     "upload.pastUploads": "历史上传",
     "upload.emptyTitle": "还没有化验记录？",

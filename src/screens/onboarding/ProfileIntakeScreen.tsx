@@ -315,7 +315,12 @@ const ProfileIntakeScreen = () => {
   const requiredRules: RequiredRule[] = [
     { key: "firstName", label: "First name", validate: (value) => Boolean(String(value || "").trim()) },
     { key: "gender", label: "Gender", validate: (value) => Boolean(String(value || "").trim()) },
-    { key: "dob", label: "Date of birth", validate: (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) }
+    { key: "dob", label: "Date of birth", validate: (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) },
+    {
+      key: "dataProcessingConsent",
+      label: "Data processing consent",
+      validate: (value) => Boolean(String(value || "").trim())
+    }
   ];
 
   const requiredMap = new Map(requiredRules.map((rule) => [rule.key, rule]));

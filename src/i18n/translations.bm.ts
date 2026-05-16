@@ -73,7 +73,7 @@ export const bmTranslations: Record<TranslationKey, string> = {
   "upload.file.description": "Menyokong PDF, JPG, PNG, WEBP. Muat naik laporan anda atau ambil gambar yang jelas.",
   "upload.doctors.title": "Berhubung dengan doktor dan ahli farmasi kami (akan datang)",
   "upload.doctors.description": "Berbual dengan profesional perubatan yang dipercayai untuk nasihat tersuai, pandangan rawatan, dan sokongan apabila anda memerlukannya.",
-  "upload.watch.title": "Sambungkan jam pintar anda",
+  "upload.watch.title": "Sambungkan jam pintar anda (akan datang)",
   "upload.watch.description": "Segerakkan data peranti boleh pakai untuk memperkayakan garis masa anda dan memperibadikan cadangan.",
   "upload.pastUploads": "Muat naik terdahulu",
   "upload.emptyTitle": "Belum ada rekod makmal?",

@@ -529,12 +529,12 @@ const UploadScreen = () => {
           type="button"
           style={{
             ...styles.optionButton,
-            ...(showDeviceConnect ? styles.optionButtonActive : {})
+            ...styles.disabled
           }}
-          onClick={() => setShowDeviceConnect(true)}
+          disabled
         >
-          <span style={styles.optionTitle}>{t("upload.watch.title")}</span>
-          <span style={styles.optionDescription}>
+          <span style={{ ...styles.optionTitle, ...styles.disabledText }}>{t("upload.watch.title")}</span>
+          <span style={{ ...styles.optionDescription, ...styles.disabledText }}>
             {t("upload.watch.description")}
           </span>
         </button>
