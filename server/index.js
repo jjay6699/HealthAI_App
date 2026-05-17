@@ -154,6 +154,7 @@ db.exec(`
     code TEXT NOT NULL UNIQUE,
     name TEXT,
     email TEXT,
+    phone TEXT,
     createdAt INTEGER NOT NULL,
     updatedAt INTEGER NOT NULL
   );
@@ -320,6 +321,15 @@ const hasShippingAddressColumn = (columnName) =>
 
 if (!hasShippingAddressColumn("country")) {
   db.exec("ALTER TABLE user_shipping_addresses ADD COLUMN country TEXT NOT NULL DEFAULT 'Malaysia'");
+}
+
+const hasReferralAgentColumn = (columnName) =>
+  db
+    .prepare("SELECT 1 FROM pragma_table_info('referral_agents') WHERE name = ?")
+    .get(columnName);
+
+if (!hasReferralAgentColumn("phone")) {
+  db.exec("ALTER TABLE referral_agents ADD COLUMN phone TEXT");
 }
 
 const stmtGetAll = db.prepare(
@@ -674,6 +684,7 @@ const stmtListReferralAgents = db.prepare(`
     agent.code,
     agent.name,
     agent.email,
+    agent.phone,
     agent.createdAt,
     agent.updatedAt,
     COUNT(redemption.id) AS redemptionCount,
@@ -692,10 +703,10 @@ const stmtAdminPaidOrderStats = db.prepare(
   "SELECT COUNT(*) AS count, COALESCE(SUM(price), 0) AS revenue, MAX(createdAt) AS latestCreatedAt FROM orders WHERE lower(status) IN ('paid', 'completed', 'succeeded')"
 );
 const stmtGetReferralAgentByCode = db.prepare(
-  "SELECT id, code, name, email, createdAt, updatedAt FROM referral_agents WHERE code = ?"
+  "SELECT id, code, name, email, phone, createdAt, updatedAt FROM referral_agents WHERE code = ?"
 );
 const stmtInsertReferralAgent = db.prepare(
-  "INSERT INTO referral_agents (id, code, name, email, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)"
+  "INSERT INTO referral_agents (id, code, name, email, phone, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)"
 );
 const stmtDeleteReferralAgentById = db.prepare("DELETE FROM referral_agents WHERE id = ?");
 const stmtGetAgentCodeRedemptionByUser = db.prepare(
@@ -2769,6 +2780,7 @@ app.post(
 
     const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
     if (email && !isValidEmail(email)) {
       return res.status(400).json({ error: "invalid_email" });
     }
@@ -2778,13 +2790,12 @@ app.post(
       return res.status(200).json({ agent: existingAgent });
     }
 
-    const existingUser = stmtGetUserByReferralCode.get(code);
-
     const now = Date.now();
     const agentId = crypto.randomUUID();
-    const resolvedName = name || existingUser?.name || null;
-    const resolvedEmail = email || existingUser?.email || null;
-    stmtInsertReferralAgent.run(agentId, code, resolvedName, resolvedEmail, now, now);
+    const resolvedName = name || null;
+    const resolvedEmail = email || null;
+    const resolvedPhone = phone || null;
+    stmtInsertReferralAgent.run(agentId, code, resolvedName, resolvedEmail, resolvedPhone, now, now);
 
     return res.status(201).json({
       agent: {
@@ -2792,6 +2803,7 @@ app.post(
         code,
         name: resolvedName,
         email: resolvedEmail,
+        phone: resolvedPhone,
         createdAt: now,
         updatedAt: now
       }
