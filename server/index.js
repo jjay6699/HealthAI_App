@@ -295,6 +295,38 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_user_subscriptions_stripeCustomerId
     ON user_subscriptions(stripeCustomerId);
 
+  CREATE TABLE IF NOT EXISTS subscription_billing_events (
+    id TEXT PRIMARY KEY,
+    eventKey TEXT NOT NULL UNIQUE,
+    userId TEXT NOT NULL,
+    agentId TEXT,
+    agentCode TEXT,
+    stripeCustomerId TEXT,
+    stripeSubscriptionId TEXT,
+    stripeInvoiceId TEXT,
+    eventType TEXT NOT NULL,
+    tier TEXT NOT NULL DEFAULT 'free',
+    status TEXT,
+    amount REAL,
+    currency TEXT,
+    billingPeriodStart INTEGER,
+    billingPeriodEnd INTEGER,
+    occurredAt INTEGER NOT NULL,
+    createdAt INTEGER NOT NULL,
+    metadataJson TEXT,
+    FOREIGN KEY(userId) REFERENCES users(id),
+    FOREIGN KEY(agentId) REFERENCES referral_agents(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_subscription_billing_events_userId
+    ON subscription_billing_events(userId, occurredAt DESC);
+  CREATE INDEX IF NOT EXISTS idx_subscription_billing_events_agentId
+    ON subscription_billing_events(agentId, occurredAt DESC);
+  CREATE INDEX IF NOT EXISTS idx_subscription_billing_events_subscriptionId
+    ON subscription_billing_events(stripeSubscriptionId);
+  CREATE INDEX IF NOT EXISTS idx_subscription_billing_events_invoiceId
+    ON subscription_billing_events(stripeInvoiceId);
+
   CREATE TABLE IF NOT EXISTS report_analysis_usage (
     id TEXT PRIMARY KEY,
     userId TEXT NOT NULL,
@@ -468,6 +500,9 @@ const stmtGetSubscriptionByStripeSubscriptionId = db.prepare(
 const stmtGetSubscriptionByStripeCustomerId = db.prepare(
   "SELECT userId, tier, stripeCustomerId, stripeSubscriptionId, stripePriceId, status, currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd, createdAt, updatedAt FROM user_subscriptions WHERE stripeCustomerId = ?"
 );
+const stmtListAdminSubscriptions = db.prepare(
+  "SELECT userId, tier, stripeCustomerId, stripeSubscriptionId, stripePriceId, status, currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd, createdAt, updatedAt FROM user_subscriptions ORDER BY updatedAt DESC"
+);
 const stmtUpsertSubscription = db.prepare(`
   INSERT INTO user_subscriptions (
     userId,
@@ -535,6 +570,91 @@ const stmtCountPeriodReportUsage = db.prepare(`
       status = 'consumed'
       OR (status = 'reserved' AND expiresAt > ?)
     )
+`);
+const stmtInsertSubscriptionBillingEvent = db.prepare(`
+  INSERT OR IGNORE INTO subscription_billing_events (
+    id,
+    eventKey,
+    userId,
+    agentId,
+    agentCode,
+    stripeCustomerId,
+    stripeSubscriptionId,
+    stripeInvoiceId,
+    eventType,
+    tier,
+    status,
+    amount,
+    currency,
+    billingPeriodStart,
+    billingPeriodEnd,
+    occurredAt,
+    createdAt,
+    metadataJson
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const stmtListAdminAgentRedemptions = db.prepare(`
+  SELECT
+    redemption.id,
+    redemption.agentId,
+    redemption.code,
+    redemption.userId,
+    redemption.redeemedAt,
+    redemption.periodStart,
+    redemption.periodEnd
+  FROM agent_code_redemptions redemption
+  ORDER BY redemption.redeemedAt DESC
+`);
+const stmtListAdminAttributedOrders = db.prepare(`
+  SELECT
+    redemption.agentId,
+    redemption.code AS agentCode,
+    orders.id,
+    orders.orderNumber,
+    orders.userId,
+    orders.userEmail,
+    orders.customerName,
+    orders.plan,
+    orders.planLabel,
+    orders.price,
+    orders.currency,
+    orders.paymentMethod,
+    orders.status,
+    orders.couponCode,
+    orders.recommendationsJson,
+    orders.deliveryAddressJson,
+    orders.stripeSessionId,
+    orders.stripePaymentIntentId,
+    orders.source,
+    orders.createdAt,
+    orders.updatedAt
+  FROM orders
+  INNER JOIN agent_code_redemptions redemption
+    ON redemption.userId = orders.userId
+  ORDER BY orders.createdAt DESC
+`);
+const stmtListAdminSubscriptionBillingEvents = db.prepare(`
+  SELECT
+    id,
+    eventKey,
+    userId,
+    agentId,
+    agentCode,
+    stripeCustomerId,
+    stripeSubscriptionId,
+    stripeInvoiceId,
+    eventType,
+    tier,
+    status,
+    amount,
+    currency,
+    billingPeriodStart,
+    billingPeriodEnd,
+    occurredAt,
+    createdAt,
+    metadataJson
+  FROM subscription_billing_events
+  ORDER BY occurredAt DESC
 `);
 
 const stmtInsertSession = db.prepare(
@@ -1483,6 +1603,128 @@ const getAvailableSubscriptionPlans = () =>
     isConfigured: true
   }));
 
+const getAttributedAgentForUser = (userId) => {
+  if (!userId) return null;
+  return stmtGetAgentCodeRedemptionByUser.get(userId) || null;
+};
+
+const resolveUserIdForSubscriptionEvent = ({ userId, stripeCustomerId, stripeSubscriptionId }) => {
+  if (userId) return userId;
+  if (stripeSubscriptionId) {
+    const bySubscription = stmtGetSubscriptionByStripeSubscriptionId.get(stripeSubscriptionId);
+    if (bySubscription?.userId) return bySubscription.userId;
+  }
+  if (stripeCustomerId) {
+    const byCustomer = stmtGetSubscriptionByStripeCustomerId.get(stripeCustomerId);
+    if (byCustomer?.userId) return byCustomer.userId;
+  }
+  return null;
+};
+
+const recordSubscriptionBillingEvent = ({
+  eventKey,
+  userId,
+  stripeCustomerId = null,
+  stripeSubscriptionId = null,
+  stripeInvoiceId = null,
+  eventType,
+  tier = "free",
+  status = null,
+  amount = null,
+  currency = null,
+  billingPeriodStart = null,
+  billingPeriodEnd = null,
+  occurredAt = Date.now(),
+  metadata = null,
+  agentId = undefined,
+  agentCode = undefined
+}) => {
+  const resolvedUserId = resolveUserIdForSubscriptionEvent({
+    userId,
+    stripeCustomerId,
+    stripeSubscriptionId
+  });
+  if (!resolvedUserId || !eventKey || !eventType) return null;
+
+  const attributedAgent =
+    agentId !== undefined || agentCode !== undefined ? null : getAttributedAgentForUser(resolvedUserId);
+  const now = Date.now();
+  stmtInsertSubscriptionBillingEvent.run(
+    crypto.randomUUID(),
+    eventKey,
+    resolvedUserId,
+    agentId !== undefined ? agentId : attributedAgent?.agentId || null,
+    agentCode !== undefined ? agentCode : attributedAgent?.code || null,
+    stripeCustomerId,
+    stripeSubscriptionId,
+    stripeInvoiceId,
+    eventType,
+    normalizeSubscriptionTier(tier),
+    status,
+    amount,
+    currency ? String(currency).toUpperCase() : null,
+    billingPeriodStart,
+    billingPeriodEnd,
+    occurredAt,
+    now,
+    metadata ? JSON.stringify(metadata) : null
+  );
+
+  return true;
+};
+
+const recordInvoiceBillingEvent = (invoice, eventType) => {
+  if (!invoice?.id) return null;
+
+  const stripeCustomerId =
+    typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id || null;
+  const stripeSubscriptionId =
+    typeof invoice.subscription === "string"
+      ? invoice.subscription
+      : invoice.subscription?.id || null;
+  const subscriptionLine =
+    invoice.lines?.data?.find((line) => line.type === "subscription") || invoice.lines?.data?.[0] || null;
+  const priceId = subscriptionLine?.price?.id || null;
+  const inferredTier =
+    normalizeSubscriptionTier(subscriptionLine?.metadata?.tier) !== "free"
+      ? subscriptionLine?.metadata?.tier
+      : getTierForStripePriceId(priceId) ||
+        stmtGetSubscriptionByStripeSubscriptionId.get(stripeSubscriptionId || "")?.tier ||
+        stmtGetSubscriptionByStripeCustomerId.get(stripeCustomerId || "")?.tier ||
+        "free";
+  const amountCents =
+    eventType === "invoice_paid"
+      ? Number(invoice.amount_paid ?? invoice.amount_due ?? 0)
+      : Number(invoice.amount_due ?? invoice.amount_remaining ?? invoice.amount_paid ?? 0);
+  const periodStart = subscriptionLine?.period?.start ? subscriptionLine.period.start * 1000 : null;
+  const periodEnd = subscriptionLine?.period?.end ? subscriptionLine.period.end * 1000 : null;
+  const occurredAt =
+    (eventType === "invoice_paid"
+      ? invoice.status_transitions?.paid_at
+      : invoice.status_transitions?.finalized_at || invoice.created) * 1000;
+
+  return recordSubscriptionBillingEvent({
+    eventKey: `${eventType}:${invoice.id}`,
+    userId: null,
+    stripeCustomerId,
+    stripeSubscriptionId,
+    stripeInvoiceId: invoice.id,
+    eventType,
+    tier: inferredTier,
+    status: invoice.status || null,
+    amount: Number.isFinite(amountCents) ? amountCents / 100 : null,
+    currency: invoice.currency || null,
+    billingPeriodStart: periodStart,
+    billingPeriodEnd: periodEnd,
+    occurredAt,
+    metadata: {
+      invoiceNumber: invoice.number || null,
+      amountDue: Number(invoice.amount_due ?? 0) / 100,
+      amountPaid: Number(invoice.amount_paid ?? 0) / 100
+    }
+  });
+};
+
 const upsertSubscriptionFromStripeSubscription = (subscription) => {
   const stripeCustomerId =
     typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id;
@@ -1543,6 +1785,21 @@ const grantPlusTrialForAgentCode = ({ userId, code, agentId }) => {
     now,
     periodEnd
   );
+  recordSubscriptionBillingEvent({
+    eventKey: `trial_granted:${userId}:${code}`,
+    userId,
+    eventType: "trial_granted",
+    tier: "plus",
+    status: "active",
+    amount: 0,
+    currency: "MYR",
+    billingPeriodStart: now,
+    billingPeriodEnd: periodEnd,
+    occurredAt: now,
+    metadata: { source: "agent_code" },
+    agentId: agentId || null,
+    agentCode: code
+  });
   return stmtGetSubscriptionByUser.get(userId);
 };
 
@@ -2718,6 +2975,17 @@ app.get(
       recommendations: order.recommendationsJson ? JSON.parse(order.recommendationsJson) : [],
       deliveryAddress: order.deliveryAddressJson ? JSON.parse(order.deliveryAddressJson) : null
     }));
+    const agentRedemptions = stmtListAdminAgentRedemptions.all();
+    const subscriptions = stmtListAdminSubscriptions.all();
+    const attributedOrders = stmtListAdminAttributedOrders.all().map((order) => ({
+      ...order,
+      recommendations: order.recommendationsJson ? JSON.parse(order.recommendationsJson) : [],
+      deliveryAddress: order.deliveryAddressJson ? JSON.parse(order.deliveryAddressJson) : null
+    }));
+    const subscriptionBillingEvents = stmtListAdminSubscriptionBillingEvents.all().map((event) => ({
+      ...event,
+      metadata: event.metadataJson ? JSON.parse(event.metadataJson) : null
+    }));
 
     res.json({
       stats: {
@@ -2731,7 +2999,11 @@ app.get(
       },
       users,
       orders,
-      referralAgents
+      referralAgents,
+      agentRedemptions,
+      subscriptions,
+      attributedOrders,
+      subscriptionBillingEvents
     });
   })
 );
@@ -3536,12 +3808,76 @@ app.post(
       }
     }
 
-    if (
-      event.type === "customer.subscription.created" ||
-      event.type === "customer.subscription.updated" ||
-      event.type === "customer.subscription.deleted"
-    ) {
-      upsertSubscriptionFromStripeSubscription(event.data.object);
+    if (event.type === "customer.subscription.created") {
+      const subscription = event.data.object;
+      const record = upsertSubscriptionFromStripeSubscription(subscription);
+      recordSubscriptionBillingEvent({
+        eventKey: `subscription_started:${subscription.id}`,
+        userId: record?.userId || null,
+        stripeCustomerId:
+          typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id || null,
+        stripeSubscriptionId: subscription.id,
+        eventType: "subscription_started",
+        tier: record?.tier || subscription.metadata?.tier || getTierForStripePriceId(subscription.items?.data?.[0]?.price?.id || null),
+        status: subscription.status || null,
+        amount: null,
+        currency: subscription.currency || "MYR",
+        billingPeriodStart: subscription.current_period_start ? subscription.current_period_start * 1000 : null,
+        billingPeriodEnd: subscription.current_period_end ? subscription.current_period_end * 1000 : null,
+        occurredAt: subscription.created ? subscription.created * 1000 : Date.now()
+      });
+    }
+
+    if (event.type === "customer.subscription.updated") {
+      const subscription = event.data.object;
+      const previous = event.data.previous_attributes || {};
+      const record = upsertSubscriptionFromStripeSubscription(subscription);
+      if (subscription.cancel_at_period_end && !previous.cancel_at_period_end) {
+        recordSubscriptionBillingEvent({
+          eventKey: `subscription_cancel_scheduled:${subscription.id}:${subscription.current_period_end || subscription.created}`,
+          userId: record?.userId || null,
+          stripeCustomerId:
+            typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id || null,
+          stripeSubscriptionId: subscription.id,
+          eventType: "subscription_cancel_scheduled",
+          tier: record?.tier || subscription.metadata?.tier || getTierForStripePriceId(subscription.items?.data?.[0]?.price?.id || null),
+          status: subscription.status || null,
+          amount: null,
+          currency: subscription.currency || "MYR",
+          billingPeriodStart: subscription.current_period_start ? subscription.current_period_start * 1000 : null,
+          billingPeriodEnd: subscription.current_period_end ? subscription.current_period_end * 1000 : null,
+          occurredAt: Date.now()
+        });
+      }
+    }
+
+    if (event.type === "customer.subscription.deleted") {
+      const subscription = event.data.object;
+      const record = upsertSubscriptionFromStripeSubscription(subscription);
+      recordSubscriptionBillingEvent({
+        eventKey: `subscription_cancelled:${subscription.id}:${subscription.canceled_at || subscription.ended_at || subscription.current_period_end || Date.now()}`,
+        userId: record?.userId || null,
+        stripeCustomerId:
+          typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id || null,
+        stripeSubscriptionId: subscription.id,
+        eventType: "subscription_cancelled",
+        tier: record?.tier || subscription.metadata?.tier || getTierForStripePriceId(subscription.items?.data?.[0]?.price?.id || null),
+        status: subscription.status || null,
+        amount: null,
+        currency: subscription.currency || "MYR",
+        billingPeriodStart: subscription.current_period_start ? subscription.current_period_start * 1000 : null,
+        billingPeriodEnd: subscription.current_period_end ? subscription.current_period_end * 1000 : null,
+        occurredAt:
+          (subscription.canceled_at || subscription.ended_at || subscription.current_period_end || Math.floor(Date.now() / 1000)) * 1000
+      });
+    }
+
+    if (event.type === "invoice.paid") {
+      recordInvoiceBillingEvent(event.data.object, "invoice_paid");
+    }
+
+    if (event.type === "invoice.payment_failed") {
+      recordInvoiceBillingEvent(event.data.object, "invoice_failed");
     }
 
     return res.json({ received: true });
